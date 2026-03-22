@@ -1,4 +1,8 @@
 import { type TabId } from '@/lib/data';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { LogOut, CreditCard, User } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'gear', label: 'Gear Locker' },
@@ -14,6 +18,24 @@ interface Props {
 }
 
 export function AppHeader({ activeTab, onTabChange }: Props) {
+  const { user, profile, signOut } = useAuth();
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/login');
+  };
+
   return (
     <header className="sticky top-0 z-50 border-b border-border/50 backdrop-blur-xl bg-background/60 px-6 lg:px-10 py-4 flex items-center justify-between gap-4 flex-wrap">
       <div className="flex items-center gap-3">
@@ -30,6 +52,7 @@ export function AppHeader({ activeTab, onTabChange }: Props) {
           </span>
         </div>
       </div>
+
       <nav className="flex gap-1 overflow-x-auto">
         {TABS.map(tab => (
           <button
@@ -48,6 +71,28 @@ export function AppHeader({ activeTab, onTabChange }: Props) {
           </button>
         ))}
       </nav>
+
+      {user && (
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/50 border border-border/30 text-sm text-snow hover:bg-secondary/70 transition-colors"
+          >
+            <User size={14} className="text-granite" />
+            <span className="max-w-[120px] truncate">{profile?.display_name || user.email?.split('@')[0]}</span>
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-ridge border border-border/50 rounded-xl shadow-xl overflow-hidden z-50">
+              <button onClick={() => { navigate('/pricing'); setMenuOpen(false); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-snow/80 hover:bg-secondary/50 transition-colors">
+                <CreditCard size={14} /> Plans & Pricing
+              </button>
+              <button onClick={handleSignOut} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-danger hover:bg-secondary/50 transition-colors">
+                <LogOut size={14} /> Sign Out
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </header>
   );
 }
