@@ -52,7 +52,7 @@ export function TrailDatabase() {
   const inputClass = "w-full bg-card/70 border border-border/40 text-snow font-body text-[0.85rem] py-2.5 px-3 rounded-lg outline-none transition-colors focus:border-primary/50 placeholder:text-granite/50";
 
   return (
-    <div className="animate-fade-up">
+    <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
           <h2 className="text-[1.8rem] font-bold tracking-tight">Trail Database</h2>

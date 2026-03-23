@@ -45,7 +45,7 @@ export function GearLocker({ gear, unit, onUnitChange, onAdd, onEdit, onDelete }
   const units: WeightUnit[] = ['oz', 'g', 'lb'];
 
   return (
-    <div className="animate-fade-up">
+    <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div>
           <h2 className="text-[1.8rem] font-bold tracking-tight">Gear Locker</h2>
