@@ -82,8 +82,8 @@ export function GearModal({ open, onClose, onSave, editItem }: Props) {
   const labelClass = "block text-[0.7rem] font-semibold text-granite uppercase tracking-[0.1em] mb-1";
 
   return (
-    <div className={`fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-lg transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose}>
-      <div className="bg-[hsl(210,25%,15%)] border border-[hsl(210,20%,30%)] rounded-2xl p-8 w-[90%] max-w-[520px] max-h-[85vh] overflow-y-auto transform transition-transform duration-300 shadow-[0_25px_60px_rgba(0,0,0,0.5)]" onClick={e => e.stopPropagation()}>
+    <div className={`fixed inset-0 z-[300] flex items-start sm:items-center justify-center bg-background/80 backdrop-blur-md px-4 py-8 transition-opacity duration-300 ${open ? 'opacity-100' : 'opacity-0 pointer-events-none'}`} onClick={onClose}>
+      <div className="w-full max-w-[560px] max-h-[85vh] overflow-y-auto rounded-2xl border border-border/70 bg-card/95 text-card-foreground p-8 shadow-2xl" onClick={e => e.stopPropagation()}>
         <h3 className="text-[1.3rem] mb-6">{editItem ? 'Edit Gear' : 'Add New Gear'}</h3>
         <div className="mb-4">
           <label className={labelClass}>Item Name</label>
