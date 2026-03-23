@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ShopItem } from '@/lib/data';
-import { INITIAL_SHOP } from '@/lib/data';
 
 const mapShop = (s: any): ShopItem => ({
   id: s.id, name: s.name, price: Number(s.price),
@@ -17,16 +16,7 @@ export function useShoppingItems() {
   const fetchItems = useCallback(async () => {
     if (!user) { setLoading(false); return; }
     const { data } = await (supabase as any).from('shopping_items').select('*').eq('user_id', user.id).order('created_at');
-    if (data && data.length > 0) {
-      setItems(data.map(mapShop));
-    } else if (data && data.length === 0) {
-      const seeds = INITIAL_SHOP.map(s => ({
-        user_id: user.id, name: s.name, price: s.price,
-        store: s.store, priority: s.priority, purchased: s.purchased,
-      }));
-      const { data: seeded } = await (supabase as any).from('shopping_items').insert(seeds).select();
-      if (seeded) setItems(seeded.map(mapShop));
-    }
+    if (data) setItems(data.map(mapShop));
     setLoading(false);
   }, [user]);
 

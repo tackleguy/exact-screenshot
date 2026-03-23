@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { GearItem, GearCategory, GearType } from '@/lib/data';
-import { INITIAL_GEAR } from '@/lib/data';
 
 const mapGear = (g: any): GearItem => ({
   id: g.id, name: g.name, category: g.category as GearCategory,
@@ -18,16 +17,7 @@ export function useGear() {
   const fetchGear = useCallback(async () => {
     if (!user) { setLoading(false); return; }
     const { data } = await (supabase as any).from('gear_items').select('*').eq('user_id', user.id).order('created_at');
-    if (data && data.length > 0) {
-      setGear(data.map(mapGear));
-    } else if (data && data.length === 0) {
-      const seeds = INITIAL_GEAR.map(g => ({
-        user_id: user.id, name: g.name, category: g.category,
-        type: g.type, qty: g.qty, weight: g.weight, price: g.price, link: g.link,
-      }));
-      const { data: seeded } = await (supabase as any).from('gear_items').insert(seeds).select();
-      if (seeded) setGear(seeded.map(mapGear));
-    }
+    if (data) setGear(data.map(mapGear));
     setLoading(false);
   }, [user]);
 
