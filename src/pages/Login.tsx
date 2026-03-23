@@ -1,19 +1,36 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, Navigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { lovable } from '@/integrations/lovable';
 import { AuthLayout } from '@/components/auth/AuthLayout';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // Redirect authenticated users to dashboard
+  if (!authLoading && user) return <Navigate to="/dashboard" replace />;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+
+    // If "Remember me" is unchecked, we clear session on tab/browser close
+    // by removing the persisted session after sign-in completes.
+    // Supabase always persists to localStorage; the best we can do is
+    // move the session to sessionStorage when rememberMe is off.
+    if (!rememberMe) {
+      // Signal to clear localStorage session after auth completes
+      sessionStorage.setItem('trailpack_session_only', 'true');
+    } else {
+      sessionStorage.removeItem('trailpack_session_only');
+    }
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) {
@@ -23,28 +40,21 @@ const Login = () => {
     }
   };
 
-  const handleGoogle = async () => {
-    setLoading(true);
-    const result = await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin + '/dashboard',
-    });
-    if (result?.error) {
-      toast.error('Google sign-in failed');
-      setLoading(false);
-    }
-  };
+  const inputClass =
+    'w-full bg-peak/60 border border-border/40 text-snow font-body text-sm py-2.5 px-3 rounded-lg outline-none transition-colors focus:border-moss/60 focus:ring-1 focus:ring-moss/30 placeholder:text-granite/50';
 
   return (
     <AuthLayout>
+      <h2 className="font-display text-xl font-bold text-center mb-6">Welcome back</h2>
       <form onSubmit={handleLogin} className="space-y-4">
         <div>
           <label className="block text-sm font-body text-snow/80 mb-1.5">Email</label>
           <input
             type="email"
             value={email}
-            onChange={e => setEmail(e.target.value)}
+            onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full bg-peak/60 border border-border/40 text-snow font-body text-sm py-2.5 px-3 rounded-lg outline-none transition-colors focus:border-moss/60 focus:ring-1 focus:ring-moss/30 placeholder:text-granite/50"
+            className={inputClass}
             placeholder="you@example.com"
           />
         </div>
@@ -53,13 +63,22 @@ const Login = () => {
           <input
             type="password"
             value={password}
-            onChange={e => setPassword(e.target.value)}
+            onChange={(e) => setPassword(e.target.value)}
             required
-            className="w-full bg-peak/60 border border-border/40 text-snow font-body text-sm py-2.5 px-3 rounded-lg outline-none transition-colors focus:border-moss/60 focus:ring-1 focus:ring-moss/30 placeholder:text-granite/50"
+            className={inputClass}
             placeholder="••••••••"
           />
         </div>
-        <div className="text-right">
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-4 h-4 rounded border-border/40 bg-peak/60 text-moss accent-moss focus:ring-moss/30"
+            />
+            <span className="text-sm text-snow/70">Remember me</span>
+          </label>
           <Link to="/forgot-password" className="text-xs text-moss hover:text-moss-glow transition-colors">
             Forgot password?
           </Link>
@@ -73,23 +92,11 @@ const Login = () => {
         </button>
       </form>
 
-      <div className="relative my-6">
-        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-border/30" /></div>
-        <div className="relative flex justify-center"><span className="bg-ridge/60 px-3 text-xs text-granite">or</span></div>
-      </div>
-
-      <button
-        onClick={handleGoogle}
-        disabled={loading}
-        className="w-full flex items-center justify-center gap-2 bg-snow/5 border border-border/40 text-snow font-body text-sm py-2.5 rounded-lg transition-all hover:bg-snow/10 active:scale-[0.98] disabled:opacity-50"
-      >
-        <svg className="w-4 h-4" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-        Sign in with Google
-      </button>
-
       <p className="text-center text-sm text-granite mt-6">
         Don't have an account?{' '}
-        <Link to="/signup" className="text-moss hover:text-moss-glow transition-colors font-medium">Sign up</Link>
+        <Link to="/signup" className="text-moss hover:text-moss-glow transition-colors font-medium">
+          Sign up
+        </Link>
       </p>
     </AuthLayout>
   );
