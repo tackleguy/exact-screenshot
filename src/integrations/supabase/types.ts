@@ -14,6 +14,210 @@ export type Database = {
   }
   public: {
     Tables: {
+      comments: {
+        Row: {
+          author_name: string | null
+          body: string
+          created_at: string
+          id: string
+          parent_comment_id: string | null
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          author_name?: string | null
+          body: string
+          created_at?: string
+          id?: string
+          parent_comment_id?: string | null
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          author_name?: string | null
+          body?: string
+          created_at?: string
+          id?: string
+          parent_comment_id?: string | null
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_parent_comment_id_fkey"
+            columns: ["parent_comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comments_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "community_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      community_posts: {
+        Row: {
+          author_name: string | null
+          author_tier: string | null
+          base_weight_oz: number
+          clone_count: number
+          created_at: string
+          description: string | null
+          gear_data: Json
+          id: string
+          is_featured: boolean
+          item_count: number
+          packing_list_id: string | null
+          title: string
+          total_cost: number
+          total_weight_oz: number
+          trail_name: string | null
+          trip_type: string | null
+          user_id: string
+        }
+        Insert: {
+          author_name?: string | null
+          author_tier?: string | null
+          base_weight_oz?: number
+          clone_count?: number
+          created_at?: string
+          description?: string | null
+          gear_data?: Json
+          id?: string
+          is_featured?: boolean
+          item_count?: number
+          packing_list_id?: string | null
+          title: string
+          total_cost?: number
+          total_weight_oz?: number
+          trail_name?: string | null
+          trip_type?: string | null
+          user_id: string
+        }
+        Update: {
+          author_name?: string | null
+          author_tier?: string | null
+          base_weight_oz?: number
+          clone_count?: number
+          created_at?: string
+          description?: string | null
+          gear_data?: Json
+          id?: string
+          is_featured?: boolean
+          item_count?: number
+          packing_list_id?: string | null
+          title?: string
+          total_cost?: number
+          total_weight_oz?: number
+          trail_name?: string | null
+          trip_type?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      gear_items: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          link: string | null
+          name: string
+          price: number
+          qty: number
+          type: string
+          user_id: string
+          weight: number
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          link?: string | null
+          name: string
+          price?: number
+          qty?: number
+          type?: string
+          user_id: string
+          weight?: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          link?: string | null
+          name?: string
+          price?: number
+          qty?: number
+          type?: string
+          user_id?: string
+          weight?: number
+        }
+        Relationships: []
+      }
+      packing_list_items: {
+        Row: {
+          created_at: string
+          gear_item_id: string
+          id: string
+          packed: boolean
+          packing_list_id: string
+        }
+        Insert: {
+          created_at?: string
+          gear_item_id: string
+          id?: string
+          packed?: boolean
+          packing_list_id: string
+        }
+        Update: {
+          created_at?: string
+          gear_item_id?: string
+          id?: string
+          packed?: boolean
+          packing_list_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "packing_list_items_gear_item_id_fkey"
+            columns: ["gear_item_id"]
+            isOneToOne: false
+            referencedRelation: "gear_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "packing_list_items_packing_list_id_fkey"
+            columns: ["packing_list_id"]
+            isOneToOne: false
+            referencedRelation: "packing_lists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      packing_lists: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -40,6 +244,196 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      shopping_items: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          price: number
+          priority: string
+          purchased: boolean
+          store: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          price?: number
+          priority?: string
+          purchased?: boolean
+          store?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          price?: number
+          priority?: string
+          purchased?: boolean
+          store?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      trip_journal: {
+        Row: {
+          avg_day_temp_f: number | null
+          avg_night_temp_f: number | null
+          bug_level: string | null
+          companions: string | null
+          created_at: string
+          difficulty_rating: number | null
+          distance_miles: number | null
+          elevation_gain_ft: number | null
+          elevation_loss_ft: number | null
+          end_date: string | null
+          gear_notes: string | null
+          hero_photo_url: string | null
+          highest_point_ft: number | null
+          hiking_time_hours: number | null
+          id: string
+          is_public: boolean
+          packing_list_id: string | null
+          snow_ice: string | null
+          start_date: string | null
+          trail_condition: string | null
+          trail_name: string | null
+          trip_name: string
+          trip_notes: string | null
+          user_id: string
+          water_sources: string | null
+          weather_conditions: string[] | null
+        }
+        Insert: {
+          avg_day_temp_f?: number | null
+          avg_night_temp_f?: number | null
+          bug_level?: string | null
+          companions?: string | null
+          created_at?: string
+          difficulty_rating?: number | null
+          distance_miles?: number | null
+          elevation_gain_ft?: number | null
+          elevation_loss_ft?: number | null
+          end_date?: string | null
+          gear_notes?: string | null
+          hero_photo_url?: string | null
+          highest_point_ft?: number | null
+          hiking_time_hours?: number | null
+          id?: string
+          is_public?: boolean
+          packing_list_id?: string | null
+          snow_ice?: string | null
+          start_date?: string | null
+          trail_condition?: string | null
+          trail_name?: string | null
+          trip_name: string
+          trip_notes?: string | null
+          user_id: string
+          water_sources?: string | null
+          weather_conditions?: string[] | null
+        }
+        Update: {
+          avg_day_temp_f?: number | null
+          avg_night_temp_f?: number | null
+          bug_level?: string | null
+          companions?: string | null
+          created_at?: string
+          difficulty_rating?: number | null
+          distance_miles?: number | null
+          elevation_gain_ft?: number | null
+          elevation_loss_ft?: number | null
+          end_date?: string | null
+          gear_notes?: string | null
+          hero_photo_url?: string | null
+          highest_point_ft?: number | null
+          hiking_time_hours?: number | null
+          id?: string
+          is_public?: boolean
+          packing_list_id?: string | null
+          snow_ice?: string | null
+          start_date?: string | null
+          trail_condition?: string | null
+          trail_name?: string | null
+          trip_name?: string
+          trip_notes?: string | null
+          user_id?: string
+          water_sources?: string | null
+          weather_conditions?: string[] | null
+        }
+        Relationships: []
+      }
+      trip_journal_days: {
+        Row: {
+          camp_location: string | null
+          day_number: number
+          id: string
+          journal_id: string
+          miles: number | null
+          notes: string | null
+        }
+        Insert: {
+          camp_location?: string | null
+          day_number: number
+          id?: string
+          journal_id: string
+          miles?: number | null
+          notes?: string | null
+        }
+        Update: {
+          camp_location?: string | null
+          day_number?: number
+          id?: string
+          journal_id?: string
+          miles?: number | null
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_journal_days_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: false
+            referencedRelation: "trip_journal"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trip_journal_photos: {
+        Row: {
+          caption: string | null
+          created_at: string
+          id: string
+          journal_id: string
+          photo_url: string
+          sort_order: number
+        }
+        Insert: {
+          caption?: string | null
+          created_at?: string
+          id?: string
+          journal_id: string
+          photo_url: string
+          sort_order?: number
+        }
+        Update: {
+          caption?: string | null
+          created_at?: string
+          id?: string
+          journal_id?: string
+          photo_url?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trip_journal_photos_journal_id_fkey"
+            columns: ["journal_id"]
+            isOneToOne: false
+            referencedRelation: "trip_journal"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

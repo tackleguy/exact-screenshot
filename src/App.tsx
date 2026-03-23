@@ -13,6 +13,11 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Pricing from "./pages/Pricing";
 import Dashboard from "./pages/Index";
+import Community from "./pages/Community";
+import CommunityPost from "./pages/CommunityPost";
+import Journal from "./pages/Journal";
+import JournalForm from "./pages/JournalForm";
+import JournalEntry from "./pages/JournalEntry";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +37,12 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/pricing" element={<Pricing />} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/community" element={<ProtectedRoute><Community /></ProtectedRoute>} />
+            <Route path="/community/:id" element={<ProtectedRoute><CommunityPost /></ProtectedRoute>} />
+            <Route path="/journal" element={<ProtectedRoute><Journal /></ProtectedRoute>} />
+            <Route path="/journal/new" element={<ProtectedRoute><JournalForm /></ProtectedRoute>} />
+            <Route path="/journal/:id" element={<ProtectedRoute><JournalEntry /></ProtectedRoute>} />
+            <Route path="/journal/:id/edit" element={<ProtectedRoute><JournalForm /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

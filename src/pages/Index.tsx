@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { type TabId, type WeightUnit, type GearItem, type ShopItem, INITIAL_GEAR, INITIAL_SHOP } from '@/lib/data';
+import { type TabId, type WeightUnit } from '@/lib/data';
 import { MountainBackground } from '@/components/layout/MountainBackground';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { GearLocker } from '@/components/gear/GearLocker';
@@ -7,22 +7,22 @@ import { WeightAnalysis } from '@/components/weight/WeightAnalysis';
 import { PackingList } from '@/components/packing/PackingList';
 import { ShoppingList } from '@/components/shopping/ShoppingList';
 import { TrailDatabase } from '@/components/trails/TrailDatabase';
-
-let nextId = 100;
+import { useGear } from '@/hooks/useGear';
+import { useShoppingItems } from '@/hooks/useShoppingItems';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState<TabId>('gear');
   const [unit, setUnit] = useState<WeightUnit>('oz');
-  const [gear, setGear] = useState<GearItem[]>(INITIAL_GEAR);
-  const [shopItems, setShopItems] = useState<ShopItem[]>(INITIAL_SHOP);
+  const { gear, loading: gearLoading, addGear, editGear, deleteGear } = useGear();
+  const { items: shopItems, loading: shopLoading, addItem: addShop, toggleItem: toggleShop, deleteItem: deleteShop } = useShoppingItems();
 
-  const addGear = (item: Omit<GearItem, 'id'>) => setGear(prev => [...prev, { ...item, id: String(++nextId) }]);
-  const editGear = (id: string, item: Omit<GearItem, 'id'>) => setGear(prev => prev.map(g => g.id === id ? { ...item, id } : g));
-  const deleteGear = (id: string) => setGear(prev => prev.filter(g => g.id !== id));
-
-  const toggleShop = (id: string) => setShopItems(prev => prev.map(s => s.id === id ? { ...s, purchased: !s.purchased } : s));
-  const deleteShop = (id: string) => setShopItems(prev => prev.filter(s => s.id !== id));
-  const addShop = (item: Omit<ShopItem, 'id'>) => setShopItems(prev => [...prev, { ...item, id: String(++nextId) }]);
+  if (gearLoading || shopLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-6 h-6 border-2 border-moss border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
