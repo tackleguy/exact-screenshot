@@ -435,6 +435,48 @@ export type Database = {
           },
         ]
       }
+      user_trails: {
+        Row: {
+          created_at: string
+          days: string
+          difficulty: string
+          distance: number
+          elevation: number
+          id: string
+          location: string
+          name: string
+          season: string
+          tags: string[]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          days?: string
+          difficulty?: string
+          distance?: number
+          elevation?: number
+          id?: string
+          location?: string
+          name: string
+          season?: string
+          tags?: string[]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          days?: string
+          difficulty?: string
+          distance?: number
+          elevation?: number
+          id?: string
+          location?: string
+          name?: string
+          season?: string
+          tags?: string[]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
