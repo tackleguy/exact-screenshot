@@ -116,8 +116,8 @@ export function TrailDatabase() {
 
       {/* Add Trail Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-lg" onClick={() => setShowModal(false)}>
-          <div className="bg-[hsl(210,25%,15%)] border border-[hsl(210,20%,30%)] rounded-2xl p-6 w-full max-w-md shadow-[0_25px_60px_rgba(0,0,0,0.5)]" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[300] flex items-start sm:items-center justify-center bg-background/80 backdrop-blur-md px-4 py-8" onClick={() => setShowModal(false)}>
+          <div className="w-full max-w-lg rounded-2xl border border-border/70 bg-card/95 text-card-foreground p-6 shadow-2xl" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <h3 className="font-display text-lg font-bold text-snow">Add Custom Trail</h3>
               <button onClick={() => setShowModal(false)} className="text-granite hover:text-snow transition-colors"><X size={18} /></button>
