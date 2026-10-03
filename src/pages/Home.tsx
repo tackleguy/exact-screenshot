@@ -26,7 +26,7 @@ const tiers = [
     price: 'Free',
     period: 'forever',
     highlight: null,
-    features: ['30 gear items', '1 packing list', 'Basic weight stats', 'Trail database (view-only)'],
+    features: ['Community access', 'Browse shared lists', 'Trail database (view-only)', 'Basic weight stats'],
   },
   {
     name: 'Summit',
@@ -34,14 +34,14 @@ const tiers = [
     period: '/mo',
     highlight: 'moss',
     badge: 'Most Popular',
-    features: ['Unlimited gear & lists', 'Full weight charts', 'Trail favorites & notes', 'CSV export'],
+    features: ['5 packing lists/mo', '3 AI shopping lists/mo', 'Full weight charts', 'Unlimited gear items'],
   },
   {
     name: 'Thru-Hiker',
     price: '$12.99',
     period: '/mo',
     highlight: 'amber',
-    features: ['Everything in Summit', 'AI Pack Optimizer', 'Community shared lists', 'Advanced analytics'],
+    features: ['Unlimited everything', 'Unlimited AI shopping lists', 'CSV & PDF export', 'AI Pack Optimizer'],
   },
 ];
 

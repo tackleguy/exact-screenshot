@@ -2,7 +2,10 @@ import { useState, useMemo } from 'react';
 import { type GearItem, type WeightUnit, CATEGORY_ORDER, CATEGORY_COLORS, convertWeight, calcStats } from '@/lib/data';
 import { StatCard } from '@/components/shared/StatCard';
 import { GearModal } from './GearModal';
-import { Search, Pencil, Trash2 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { getTierLimits } from '@/lib/tierGating';
+import { Search, Pencil, Trash2, Lock } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface Props {
   gear: GearItem[];
@@ -14,6 +17,8 @@ interface Props {
 }
 
 export function GearLocker({ gear, unit, onUnitChange, onAdd, onEdit, onDelete }: Props) {
+  const { profile } = useAuth();
+  const limits = getTierLimits(profile?.tier);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<'category' | 'weight' | 'name'>('category');
   const [modalOpen, setModalOpen] = useState(false);
@@ -60,8 +65,9 @@ export function GearLocker({ gear, unit, onUnitChange, onAdd, onEdit, onDelete }
               </button>
             ))}
           </div>
-          <button className="px-4 py-2 rounded-lg border border-border/40 bg-card/70 text-snow text-[0.8rem] font-semibold transition-all hover:border-border/60 active:scale-[0.97]">
-            ⬇ Export CSV
+          <button onClick={() => { if (!limits.canDownload) toast.error('CSV export is a Thru-Hiker feature. Upgrade to download.'); }}
+            className={`px-4 py-2 rounded-lg border text-[0.8rem] font-semibold transition-all active:scale-[0.97] ${limits.canDownload ? 'border-border/40 bg-card/70 text-snow hover:border-border/60' : 'border-border/30 bg-card/40 text-granite/50 cursor-not-allowed'}`}>
+            {limits.canDownload ? '⬇' : ''}{!limits.canDownload && <Lock size={12} className="inline mr-1" />} Export CSV
           </button>
           <button onClick={() => { setEditItem(null); setModalOpen(true); }}
             className="px-4 py-2 rounded-lg bg-gradient-to-br from-moss to-moss-glow text-primary-foreground text-[0.8rem] font-semibold shadow-[0_4px_15px_hsla(140,35%,38%,0.25)] transition-all hover:shadow-[0_6px_20px_hsla(140,35%,38%,0.4)] hover:-translate-y-px active:scale-[0.97]">

@@ -4,7 +4,8 @@ import { usePackingLists, type PackingListItem } from '@/hooks/usePackingLists';
 import { useCommunity } from '@/hooks/useCommunity';
 import { useAuth } from '@/contexts/AuthContext';
 import { downloadCSV, downloadPDF } from '@/lib/downloads';
-import { Check, Plus, Trash2, Share2, Download, FileText } from 'lucide-react';
+import { getTierLimits, getCurrentMonthStart } from '@/lib/tierGating';
+import { Check, Plus, Trash2, Share2, Download, FileText, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Props {
@@ -16,6 +17,11 @@ export function PackingList({ gear, unit }: Props) {
   const { user, profile } = useAuth();
   const { lists, createList, deleteList, getListItems, addItemToList, removeItemFromList, togglePacked, addAllGearToList } = usePackingLists();
   const { createPost } = useCommunity();
+  const limits = getTierLimits(profile?.tier);
+
+  const monthStart = getCurrentMonthStart();
+  const listsCreatedThisMonth = lists.filter(l => l.created_at >= monthStart).length;
+  const canCreateList = listsCreatedThisMonth < limits.packingListsPerMonth;
 
   const [selectedListId, setSelectedListId] = useState<string | null>(null);
   const [listItems, setListItems] = useState<PackingListItem[]>([]);
@@ -58,6 +64,10 @@ export function PackingList({ gear, unit }: Props) {
 
   const handleCreateList = async () => {
     if (!newListName.trim()) return;
+    if (!canCreateList) {
+      toast.error(`You've reached your ${limits.packingListsPerMonth} packing lists limit this month. Upgrade to Thru-Hiker for unlimited lists.`);
+      return;
+    }
     const list = await createList(newListName.trim());
     if (list) { setSelectedListId(list.id); setNewListName(''); setShowCreate(false); }
   };
@@ -133,10 +143,14 @@ export function PackingList({ gear, unit }: Props) {
           <h2 className="text-[1.8rem] font-bold tracking-tight">Packing Lists</h2>
           <p className="text-[0.8rem] text-granite mt-1">Build trip-specific checklists from your gear locker</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <button onClick={() => setShowCreate(true)} className="px-4 py-2 rounded-lg bg-gradient-to-br from-moss to-moss-glow text-primary-foreground text-[0.8rem] font-semibold shadow-[0_4px_15px_hsla(140,35%,38%,0.25)] transition-all hover:shadow-[0_6px_20px_hsla(140,35%,38%,0.4)] hover:-translate-y-px active:scale-[0.97]">
+        <div className="flex gap-2 flex-wrap items-center">
+          <button onClick={() => { if (canCreateList) setShowCreate(true); else toast.error(`Limit reached (${limits.packingListsPerMonth}/mo). Upgrade to Thru-Hiker for unlimited.`); }}
+            className={`px-4 py-2 rounded-lg text-[0.8rem] font-semibold transition-all active:scale-[0.97] ${canCreateList ? 'bg-gradient-to-br from-moss to-moss-glow text-primary-foreground shadow-[0_4px_15px_hsla(140,35%,38%,0.25)] hover:shadow-[0_6px_20px_hsla(140,35%,38%,0.4)] hover:-translate-y-px' : 'bg-secondary text-granite cursor-not-allowed'}`}>
             <Plus size={14} className="inline mr-1" /> New List
           </button>
+          {limits.packingListsPerMonth !== Infinity && (
+            <span className="text-[0.7rem] text-granite">{listsCreatedThisMonth}/{limits.packingListsPerMonth} this month</span>
+          )}
         </div>
       </div>
 
@@ -175,13 +189,13 @@ export function PackingList({ gear, unit }: Props) {
             <button onClick={handleAddAllGear} className="px-3 py-1.5 rounded-lg border border-border/40 bg-card/70 text-snow text-[0.75rem] font-semibold hover:border-border/60 active:scale-[0.97]">
               Add All Gear
             </button>
-            <button onClick={() => downloadPDF(gearInList, unit, selectedList.name, profile?.display_name || '')}
-              className="px-3 py-1.5 rounded-lg border border-border/40 bg-card/70 text-snow text-[0.75rem] font-semibold hover:border-border/60 active:scale-[0.97]">
-              <FileText size={12} className="inline mr-1" /> PDF
+            <button onClick={() => { if (limits.canDownload) downloadPDF(gearInList, unit, selectedList.name, profile?.display_name || ''); else toast.error('PDF export is a Thru-Hiker feature. Upgrade to download.'); }}
+              className={`px-3 py-1.5 rounded-lg border text-[0.75rem] font-semibold active:scale-[0.97] ${limits.canDownload ? 'border-border/40 bg-card/70 text-snow hover:border-border/60' : 'border-border/30 bg-card/40 text-granite/50 cursor-not-allowed'}`}>
+              {limits.canDownload ? <FileText size={12} className="inline mr-1" /> : <Lock size={12} className="inline mr-1" />} PDF
             </button>
-            <button onClick={() => downloadCSV(gearInList, unit, selectedList.name)}
-              className="px-3 py-1.5 rounded-lg border border-border/40 bg-card/70 text-snow text-[0.75rem] font-semibold hover:border-border/60 active:scale-[0.97]">
-              <Download size={12} className="inline mr-1" /> CSV
+            <button onClick={() => { if (limits.canDownload) downloadCSV(gearInList, unit, selectedList.name); else toast.error('CSV export is a Thru-Hiker feature. Upgrade to download.'); }}
+              className={`px-3 py-1.5 rounded-lg border text-[0.75rem] font-semibold active:scale-[0.97] ${limits.canDownload ? 'border-border/40 bg-card/70 text-snow hover:border-border/60' : 'border-border/30 bg-card/40 text-granite/50 cursor-not-allowed'}`}>
+              {limits.canDownload ? <Download size={12} className="inline mr-1" /> : <Lock size={12} className="inline mr-1" />} CSV
             </button>
             <button onClick={() => { setShareTitle(selectedList.name); setShowShare(true); }}
               className="px-3 py-1.5 rounded-lg border border-moss/40 bg-moss/10 text-moss-glow text-[0.75rem] font-semibold hover:bg-moss/20 active:scale-[0.97]">
