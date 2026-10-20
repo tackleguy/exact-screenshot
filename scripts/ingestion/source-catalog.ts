@@ -12,7 +12,8 @@ import { auditCatalog } from "../../src/lib/trail-catalog/audit";
 import { QUALITY_RULES, isPlaceholderName } from "../../src/lib/trail-catalog/quality";
 import { PisteIndex, matchSkiRun, type SkiRunCache } from "../../src/lib/trail-catalog/ski-runs";
 import { TrailheadIndex, trailEnds, type TrailheadCache } from "../../src/lib/trail-catalog/access";
-import { BLM_LAYERS, DUPLICATE_SHARE, blmUses, LineIndex, NPS_WHERE, USFS_HIKING_WHERE, USFS_NO_HIKING_WHERE, classifyTerrain, pointsAlong, surroundingPoints } from "../../src/lib/trail-catalog/additions";
+import { BLM_LAYERS, DUPLICATE_SHARE, blmUses, LineIndex, NPS_WHERE, USFS_HIKING_WHERE, USFS_NO_HIKING_WHERE, classifyTerrain, pointsAlong } from "../../src/lib/trail-catalog/additions";
+import { namesAgree } from "../../src/lib/trail-catalog/verify";
 import { confidenceFor, normalizeSeason, sourceTypeFor, titleCaseName, trailStatusFor, trailTypeFor, usfsUses, type SourceRef, type SourceType } from "../../src/lib/trail-catalog/agencies";
 
 const root = process.cwd();
@@ -84,7 +85,7 @@ async function fetchPage(url: string, key: string): Promise<ResponseData> {
   if (!refresh) { try { return JSON.parse(gunzipSync(await readFile(filename)).toString()); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; } }
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
-      const response = await fetch(url, { headers: { "User-Agent": "HikeSync/1.0 (https://github.com/tackleguy/health)" }, signal: AbortSignal.timeout(90_000) });
+      const response = await fetch(url, { headers: { "User-Agent": "Hyked/1.0 (https://github.com/tackleguy/health)" }, signal: AbortSignal.timeout(90_000) });
       if (!response.ok) {
         if (response.status === 429) {
           const retry = response.headers.get("retry-after");
@@ -327,6 +328,48 @@ async function main() {
     }
     console.log(`Agencies: ${agencyOnly.length} new trails made only of agency lines; ${trails.filter(t => t.row.sources?.length).length} existing trails confirmed by an agency dataset`);
   }
+  // Pieces of one official Forest Service trail (same TRAIL_CN) are one trail, even across a mapping gap:
+  // the agency's own record says they belong together. Names must still agree.
+  let usfsJoined = 0;
+  {
+    const cnOf = (id: string) => id.replace(/-[0-9.]+$/, "");
+    const parent = trails.map((_, i) => i);
+    const find = (i: number): number => { while (parent[i] !== i) { parent[i] = parent[parent[i]]; i = parent[i]; } return i; };
+    const firstForCn = new Map<string, number>();
+    trails.forEach((trail, i) => {
+      if (trail.row.kind === "route") return;
+      const cns = new Set((trail.row.sources ?? []).filter(r => r.type === "USFS_OFFICIAL").map(r => cnOf(r.id)));
+      if (trail.row.source === "usfs") cns.add(cnOf(trail.row.sourceId));
+      for (const cn of cns) {
+        const j = firstForCn.get(cn);
+        if (j === undefined) { firstForCn.set(cn, i); continue; }
+        if (namesAgree(trails[j].row.name, trail.row.name)) { const a = find(i), b = find(j); if (a !== b) parent[a] = b; }
+      }
+    });
+    const groups = new Map<number, number[]>();
+    trails.forEach((_, i) => { const r = find(i); (groups.get(r) ?? groups.set(r, []).get(r)!).push(i); });
+    const drop = new Set<number>();
+    for (const members of groups.values()) {
+      if (members.length < 2) continue;
+      members.sort((a, b) => (trails[b].row.miles ?? 0) - (trails[a].row.miles ?? 0));
+      const host = trails[members[0]];
+      for (const i of members.slice(1)) {
+        const other = trails[i];
+        host.lines.push(...other.lines);
+        host.sectionIds.push(...other.sectionIds);
+        host.row.miles = Math.round(((host.row.miles ?? 0) + (other.row.miles ?? 0)) * 1000) / 1000;
+        host.row.distanceBasis = "geometry";
+        host.row.sectionCount = (host.row.sectionCount ?? 1) + (other.row.sectionCount ?? 1);
+        host.row.sources = [...new Map([...(host.row.sources ?? []), ...(other.row.sources ?? [])].map(r => [`${r.type}:${r.id}`, r])).values()];
+        host.row.officialTrailId ??= other.row.officialTrailId;
+        host.row.forest ??= other.row.forest;
+        drop.add(i);
+        usfsJoined++;
+      }
+    }
+    for (let i = trails.length - 1; i >= 0; i--) if (drop.has(i)) trails.splice(i, 1);
+    console.log(`USFS: joined ${usfsJoined} trail pieces into their official trail`);
+  }
   trails.sort((a, b) => a.row.name.localeCompare(b.row.name) || a.row.id.localeCompare(b.row.id));
   // Records whose line follows OpenSkiMap pistes are ski runs, not hiking trails (npm run source:ski).
   let skiSource: CatalogManifest["sources"][number] | null = null;
@@ -404,7 +447,7 @@ async function main() {
   sources.forEach((source,i)=>{ source.count = trails.reduce((sum, t) => sum+t.sectionIds.filter(id => sourceOf.get(id) === sourcesToImport[i].key).length, 0); });
   if (skiSource) sources.push(skiSource);
   if (trailheadSource) sources.push(trailheadSource);
-  const manifest: CatalogManifest = { coverage, confidence: confidenceCounts, version:2, generatedAt:new Date().toISOString(), total:selected.length, sectionTotal, countries, sources, regions:[...regionCounts.values()].sort((a,b)=>a.name.localeCompare(b.name)), indexSha256:hash(index), excluded, notes:[`Each record is a whole named trail: ${sectionTotal.toLocaleString("en-US")} source sections were merged where sections with the same name connect (within ${JOIN_METERS} m). Same-named trails that do not connect stay separate, except named through-hikes (Appalachian, Pacific Crest, …), which are one trail even across mapping gaps. Unnamed sections are never merged.`, "Trail length is the sum of its sections with overlapping stretches counted once. U.S. sections use USGS-reported miles when they agree with the mapped line (within 0.67–1.5×); otherwise, and for all Canadian sections, length is measured from the generalized geometry.", "Generalized source geometry is for discovery, not navigation. Map pins are points on the trail's longest mapped line, not verified trailheads.", "State/province is inferred from the map pin and Natural Earth public-domain boundaries; long trails can extend outside it.", "Seasonal access, overnight camping, water, difficulty and elevation are not inferred. Source data may be older than the retrieval date.", "U.S. eligibility is named USGS sections plus unnamed sections tagged hikerpedestrian=Y; unnamed sections are labeled Unnamed trail.", `Standalone trails shorter than ${minimumTrailMiles} mi are mapping fragments and are excluded.`, `Official agency trails come from the NPS Public Trails layer (existing, official, open or temporarily closed; not unofficial, unmaintained, sidewalk, water or snow trails), U.S. Forest Service National Forest System Trails (land trails where hiking is an allowed use or has a managed season) and BLM transportation data (routes managed for non-motorized or non-mechanized public use). A line already in the catalog within 25 m for ≥60% of its length confirms that trail and is recorded as a source; only new lines become trails. Catalog lines on Forest Service trails that do not allow hiking are rejected. Trails only an agency maps show a sampled elevation range (Copernicus DEM via Open-Meteo).`, `Every trail is checked by config/trail-quality.json rules: ${audit.byStatus.ok.toLocaleString("en-US")} passed, ${audit.byStatus.short.toLocaleString("en-US")} are short trails, ${audit.byStatus.review.toLocaleString("en-US")} need review and ${audit.byStatus.fragment.toLocaleString("en-US")} are partial, unnamed or connector segments kept out of default results. No elevation is available from these sources.`, ...(skiSource ? [`${winterCounts.downhill.toLocaleString("en-US")} records follow downhill ski pistes mapped in OpenSkiMap and are listed as ski runs, not hiking trails; ${winterCounts.nordic.toLocaleString("en-US")} follow Nordic ski tracks and stay hikeable.`] : [])] };
+  const manifest: CatalogManifest = { coverage, confidence: confidenceCounts, version:2, generatedAt:new Date().toISOString(), total:selected.length, sectionTotal, countries, sources, regions:[...regionCounts.values()].sort((a,b)=>a.name.localeCompare(b.name)), indexSha256:hash(index), excluded, notes:[`Each record is a whole named trail: ${sectionTotal.toLocaleString("en-US")} source sections were merged where sections with the same name connect (within ${JOIN_METERS} m). Same-named trails that do not connect stay separate, except named through-hikes (Appalachian, Pacific Crest, …), which are one trail even across mapping gaps. Unnamed sections are never merged.`, "Trail length is the sum of its sections with overlapping stretches counted once. U.S. sections use USGS-reported miles when they agree with the mapped line (within 0.67–1.5×); otherwise, and for all Canadian sections, length is measured from the generalized geometry.", "Generalized source geometry is for discovery, not navigation. Map pins are points on the trail's longest mapped line, not verified trailheads.", "State/province is inferred from the map pin and Natural Earth public-domain boundaries; long trails can extend outside it.", "Seasonal access, overnight camping, water, difficulty and elevation are not inferred. Source data may be older than the retrieval date.", "U.S. eligibility is named USGS sections plus unnamed sections tagged hikerpedestrian=Y; unnamed sections are labeled Unnamed trail.", `Standalone trails shorter than ${minimumTrailMiles} mi are mapping fragments and are excluded.`, `Pieces that the Forest Service records as one official trail (same TRAIL_CN) are joined into it even across mapping gaps; old links redirect. Official agency trails come from the NPS Public Trails layer (existing, official, open or temporarily closed; not unofficial, unmaintained, sidewalk, water or snow trails), U.S. Forest Service National Forest System Trails (land trails where hiking is an allowed use or has a managed season) and BLM transportation data (routes managed for non-motorized or non-mechanized public use). A line already in the catalog within 25 m for ≥60% of its length confirms that trail and is recorded as a source; only new lines become trails. Catalog lines on Forest Service trails that do not allow hiking are rejected. Trails only an agency maps show a sampled elevation range (Copernicus DEM via Open-Meteo).`, `Every trail is checked by config/trail-quality.json rules: ${audit.byStatus.ok.toLocaleString("en-US")} passed, ${audit.byStatus.short.toLocaleString("en-US")} are short trails, ${audit.byStatus.review.toLocaleString("en-US")} need review and ${audit.byStatus.fragment.toLocaleString("en-US")} are partial, unnamed or connector segments kept out of default results. No elevation is available from these sources.`, ...(skiSource ? [`${winterCounts.downhill.toLocaleString("en-US")} records follow downhill ski pistes mapped in OpenSkiMap and are listed as ski runs, not hiking trails; ${winterCounts.nordic.toLocaleString("en-US")} follow Nordic ski tracks and stay hikeable.`] : [])] };
   const stage = path.join(output, `snapshot-${Date.now()}`); await mkdir(stage);
   const shards: Record<string, Record<string, Point[][]>> = {}, aliases: Record<string, Record<string, string>> = {};
   for (const trail of trails) {

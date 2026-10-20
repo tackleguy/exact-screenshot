@@ -1,12 +1,14 @@
-# HikeSync
+# Hyked
 
-Next.js app at the **repository root** — standard layout for Vercel.
+Hyked helps hikers find real trails, plan multi-day trips (water, resupply towns, gear) and take the plan with them. This repository is the **Hyked backend and reference web app**: a Next.js app whose `/api/*` routes are a public JSON API. The new Hyked frontend is built in Lovable on top of that API and the same Supabase project.
 
-The app includes a searchable catalog of **143,174 whole trails** assembled from 495,521 public trail-section records from USGS, Parks Canada, and Ontario sources. Connected sections that share a name are joined into one trail, and trail lengths count overlapping sections once. Browse `/explore/trails`, inspect source links, map geometry and a 7-day weather forecast, or find regional discovery links in `/plan`.
+- **API reference:** [docs/API.md](docs/API.md) — trails, maps, elevation, water sources, towns and services, town-day resupply plans, downloads (GPX, CSV, printable trip packet), directions, weather.
+- **Lovable prompt:** [docs/LOVABLE_PROMPT.md](docs/LOVABLE_PROMPT.md) — paste into Lovable to build the frontend; it also explains how to pull later API changes.
+- **Trail catalog:** about 146,000 whole trails from USGS, the National Park Service, U.S. Forest Service, BLM, Parks Canada, the Ontario Trail Network and ski resorts' official pages, each with its source, confidence and quality checks. See [catalog sources, licenses and refresh instructions](data/trail-catalog/README.md).
 
-The catalog and guest trip planner work without Supabase setup. See [catalog sources, licenses, coverage and refresh instructions](data/trail-catalog/README.md). Account features still require the configuration below.
+The catalog, API and guest planner work without Supabase. Accounts, gear, saved trips and activities need the configuration below. Set `CORS_ORIGINS` to restrict which sites may call the API (default: any), and `ROUTING_API_URL` to your own OSRM server for production driving directions.
 
-Trail data platform (Phase 1): PostGIS geometry, ingestion pipeline, spatial APIs, admin dashboard.  
+Trail data platform (Phase 1): PostGIS geometry, ingestion pipeline, spatial APIs, admin dashboard.
 **Full documentation:** [docs/TRAIL_PLATFORM.md](docs/TRAIL_PLATFORM.md)
 
 ## Local dev

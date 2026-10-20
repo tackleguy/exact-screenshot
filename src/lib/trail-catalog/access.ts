@@ -9,6 +9,12 @@ export interface AccessPoint {
   /** Straight-line distance from this point to the trail's nearest end, in meters. */
   toTrailMeters: number;
   osmUrl?: string;
+  /** Official agency record for the trailhead (USFS). */
+  officialUrl?: string;
+  source?: "osm" | "usfs";
+  /** Agency note on water at the trailhead, e.g. "No water is available". */
+  water?: string;
+  closestTowns?: string;
 }
 
 const COMPASS = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
@@ -115,7 +121,7 @@ export function stepInstruction(step: RouteStep) {
 }
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? "st" : n % 10 === 2 && n % 100 !== 12 ? "nd" : n % 10 === 3 && n % 100 !== 13 ? "rd" : "th"}`;
 
-export interface CachedTrailhead { osm: string; name: string | null; latitude: number; longitude: number }
+export interface CachedTrailhead { osm: string; name: string | null; latitude: number; longitude: number; source?: "osm" | "usfs"; url?: string; water?: string | null; closestTowns?: string | null }
 export interface TrailheadCache { retrievedAt: string; dataTimestamp: string | null; trailheads: CachedTrailhead[] }
 
 /** A trailhead within this distance of a trail end is that trail's start. */
@@ -144,8 +150,15 @@ export class TrailheadIndex {
         for (const t of this.cells.get(`${x}:${y}`) ?? []) {
           const meters = metersBetween(end, [t.longitude, t.latitude]);
           if (meters > TRAILHEAD_METERS) continue;
-          const s = meters + (t.name ? 0 : 150);
-          if (s < score) { score = s; best = { kind: "trailhead", name: t.name, latitude: t.latitude, longitude: t.longitude, toTrailMeters: Math.round(meters), osmUrl: `https://www.openstreetmap.org/${t.osm}` }; }
+          // Official (USFS) trailheads and named ones win over unnamed map points at similar distances.
+          const s = meters + (t.name ? 0 : 150) - (t.source === "usfs" ? 200 : 0);
+          if (s < score) {
+            score = s;
+            best = {
+              kind: "trailhead", name: t.name, latitude: t.latitude, longitude: t.longitude, toTrailMeters: Math.round(meters),
+              ...(t.source === "usfs" ? { source: "usfs" as const, ...(t.url ? { officialUrl: t.url } : {}), ...(t.water ? { water: t.water } : {}), ...(t.closestTowns ? { closestTowns: t.closestTowns } : {}) } : { source: "osm" as const, osmUrl: `https://www.openstreetmap.org/${t.osm}` }),
+            };
+          }
         }
       }
     }

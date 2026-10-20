@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
+import { useRouter } from "next/navigation";
 import "leaflet/dist/leaflet.css";
 import type { CatalogTrail } from "@/lib/trail-catalog/types";
 
@@ -37,6 +38,7 @@ export function CatalogMapView({
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     if (!container.current) return;
@@ -116,7 +118,7 @@ export function CatalogMapView({
       });
       marker.bindTooltip(t.name, { direction: "top" });
       marker.on("click", () => {
-        window.location.href = `/explore/trails/${t.id}`;
+        router.push(`/explore/trails/${encodeURIComponent(t.id)}`);
       });
       marker.addTo(map);
       markers.push(marker);
@@ -134,7 +136,7 @@ export function CatalogMapView({
       markers.forEach((m) => m.remove());
       map.remove();
     };
-  }, [trails, lines, route, pins]);
+  }, [trails, lines, route, pins, router]);
 
   return (
     <div>

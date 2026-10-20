@@ -5,7 +5,7 @@ import { MapPageClient } from "@/components/map/MapPageClient";
 import type { MapMarker } from "@/lib/types";
 import type { CatalogMapResult } from "@/lib/trail-catalog/types";
 
-export const metadata: Metadata = { title: "Adventure map — HikeSync", description: "Map of hiking trails across Canada and the United States." };
+export const metadata: Metadata = { title: "Adventure map — Hyked", description: "Map of hiking trails across Canada and the United States." };
 
 export default async function MapPage() {
   let markers: MapMarker[] = [];

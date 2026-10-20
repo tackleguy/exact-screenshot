@@ -18,6 +18,8 @@ test("estimateDifficulty uses distance and climb when source is blank", () => {
   assert.equal(estimateDifficulty({ miles: 1.2, elevationFt: 80, name: "Nature boardwalk" }), "easy");
   assert.equal(estimateDifficulty({ miles: 12, elevationFt: 3200, name: "Alpine summit ridge" }), "expert");
   assert.equal(estimateDifficulty({ miles: 5, elevationFt: 900, name: "Forest loop" }), "moderate");
+  assert.equal(estimateDifficulty({ miles: 0.4, name: "Lakeshore Trail" }), "easy", "a short trail with no climb data is easy");
+  assert.equal(estimateDifficulty({ miles: 0.6, elevationFt: 700, name: "Summit Trail" }), "hard", "a short steep summit trail is not");
 });
 
 test("resolveDifficulty prefers community average once five ratings exist", () => {

@@ -1,12 +1,16 @@
 import Link from "next/link";
 import { catalogAudit } from "@/lib/trail-catalog/server";
+import { reviewDecisions } from "@/lib/trail-catalog/reviews";
+import { TrailReviewControls } from "@/components/admin/TrailReviewControls";
+import { CatalogMapView } from "@/components/trails/CatalogMapView";
+import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { recommendedAction } from "@/lib/trail-catalog/audit";
 import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, formatDistance, type QualityFlag, type QualityStatus } from "@/lib/trail-catalog/quality";
 
 const PAGE_SIZE = 100;
 const STATUSES: QualityStatus[] = ["review", "fragment", "short"];
 
-export const metadata = { title: "Trail data quality — HikeSync admin", robots: { index: false, follow: false } };
+export const metadata = { title: "Trail data quality — Hyked admin", robots: { index: false, follow: false } };
 
 export default async function TrailQualityPage({
   searchParams,
@@ -41,6 +45,11 @@ export default async function TrailQualityPage({
   const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
   const page = Math.min(pages, Math.max(1, Number(params.page) || 1));
   const shown = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const reviews = await reviewDecisions();
+  // Audit entries carry a point on each trail ([9] latitude, [10] longitude) in snapshots built since then.
+  const pins = shown
+    .filter((e) => Number.isFinite(e[9]) && Number.isFinite(e[10]))
+    .map((e) => ({ id: e[0], name: e[1], latitude: e[9], longitude: e[10] }) as unknown as CatalogTrail);
   const link = (patch: Record<string, string | null>) => {
     const next = new URLSearchParams({ admin_secret: params.admin_secret!, status, ...(flag ? { flag } : {}) });
     for (const [k, v] of Object.entries(patch)) if (v === null) next.delete(k); else next.set(k, v);
@@ -106,6 +115,12 @@ export default async function TrailQualityPage({
         {rows.length.toLocaleString("en-US")} records{flag ? ` flagged ${flag}` : ""}. Page {page} of {pages}.
       </p>
 
+      {pins.length > 0 && (
+        <div className="mt-4">
+          <CatalogMapView trails={pins} />
+          <p className="mt-1 text-xs text-stone-500">Pins mark the trails on this page. Select one to open it.</p>
+        </div>
+      )}
       <div className="mt-3 overflow-x-auto">
         <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="text-stone-500">
@@ -116,7 +131,7 @@ export default async function TrailQualityPage({
               <th className="py-2 pr-3 font-medium">Flags</th>
               <th className="py-2 pr-3 font-medium">Source</th>
               <th className="py-2 pr-3 font-medium">Recommended action</th>
-              <th className="py-2 font-medium">Repair status</th>
+              <th className="py-2 font-medium">Review</th>
             </tr>
           </thead>
           <tbody>
@@ -136,7 +151,7 @@ export default async function TrailQualityPage({
                 <td className="py-2 pr-3">{flags.join(", ")}</td>
                 <td className="py-2 pr-3">{source}</td>
                 <td className="py-2 pr-3">{recommendedAction(s, flags)}</td>
-                <td className="py-2">{s === "short" ? "Kept" : "Flagged, not modified"}</td>
+                <td className="py-2">{s === "short" && !reviews.has(id) ? "Kept" : <TrailReviewControls trailId={id} secret={params.admin_secret!} initial={reviews.get(id) ?? null} />}</td>
               </tr>
             ))}
           </tbody>

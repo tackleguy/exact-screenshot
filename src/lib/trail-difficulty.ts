@@ -70,7 +70,9 @@ export function estimateDifficulty(input: DifficultyInput): TrailDifficulty {
   const elev = Number.isFinite(input.elevationFt) ? Math.max(0, Number(input.elevationFt)) : null;
 
   if (miles != null) {
-    if (miles < 3) score -= 0.45;
+    // Short trails are easy unless the climb or the name says otherwise.
+    if (miles < 1) score -= 0.8;
+    else if (miles < 3) score -= 0.55;
     else if (miles < 6) score -= 0.1;
     else if (miles < 10) score += 0.25;
     else if (miles < 16) score += 0.7;

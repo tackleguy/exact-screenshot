@@ -9,7 +9,7 @@ import { TrailsExploreMap } from "@/components/trails/TrailsExploreMap";
 import { GpxRouteUpload } from "@/components/trails/GpxRouteUpload";
 import { CatalogBrowser } from "@/components/trails/CatalogBrowser";
 
-export const metadata = { title: "Explore trails — HikeSync" };
+export const metadata = { title: "Explore trails — Hyked" };
 
 export default async function ExploreTrailsPage({
   searchParams,

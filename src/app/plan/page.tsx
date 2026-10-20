@@ -1,6 +1,6 @@
 import { TripPlanner } from "@/components/assistant/TripPlanner";
 import { getPlannerContext } from "@/lib/assistant/context";
-export const metadata = { title: "Plan a trip — HikeSync", description: "Find a trail, prepare your gear, and build a pack with local AI and your own trip history." };
+export const metadata = { title: "Plan a trip — Hyked", description: "Find a trail, prepare your gear, and build a pack with local AI and your own trip history." };
 export const dynamic = "force-dynamic";
 export default async function PlanPage({ searchParams }: { searchParams:Promise<{ region?:string; prompt?:string }> }) {
   const context = await getPlannerContext();

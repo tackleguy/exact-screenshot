@@ -40,7 +40,7 @@ export function parseCommonsPhoto(page: CommonsPage, distanceMeters: number): Ca
 const COMMONS_API = "https://commons.wikimedia.org/w/api.php";
 async function commons(params: Record<string, string>) {
   const response = await fetch(`${COMMONS_API}?${new URLSearchParams({ action: "query", format: "json", ...params })}`, {
-    headers: { "User-Agent": "HikeSync/1.0 (https://github.com/tackleguy/health)" },
+    headers: { "User-Agent": "Hyked/1.0 (https://github.com/tackleguy/health)" },
     signal: AbortSignal.timeout(8000), next: { revalidate: 86400 },
   });
   if (!response.ok) throw new Error("Photo source unavailable");

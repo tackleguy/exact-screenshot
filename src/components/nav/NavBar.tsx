@@ -212,7 +212,8 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
     const supabase = createClient();
     if (!supabase) return;
     await supabase.auth.signOut();
-    window.location.href = "/";
+    router.push("/");
+    router.refresh();
   }
 
   return (
@@ -220,7 +221,7 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
       <header className="fieldbook-mobile-header">
         <Link href="/explore/trails" className="fieldbook-brand">
           <NavIcon name="mountain" />
-          HikeSync
+          Hyked
         </Link>
         <MoreTools />
       </header>
@@ -242,11 +243,11 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
           <Link
             href="/explore/trails"
             className="fieldbook-brand"
-            aria-label="HikeSync"
-            title={collapsed ? "HikeSync" : undefined}
+            aria-label="Hyked"
+            title={collapsed ? "Hyked" : undefined}
           >
             <NavIcon name="mountain" />
-            <span className="fieldbook-nav-label">HikeSync</span>
+            <span className="fieldbook-nav-label">Hyked</span>
           </Link>
           <nav className="fieldbook-destinations" aria-label="Main destinations">
             {navLinks.map((link) => {

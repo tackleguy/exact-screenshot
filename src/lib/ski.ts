@@ -240,7 +240,7 @@ async function reverseGeocodeRegion(lat: number, lng: number): Promise<string> {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
       {
-        headers: { "User-Agent": "HikeSync/1.0 (health app)" },
+        headers: { "User-Agent": "Hyked/1.0 (health app)" },
         next: { revalidate: 86400 },
       },
     );

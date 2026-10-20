@@ -200,3 +200,18 @@
 .catalog-directions-steps li span { color: var(--sage); font-size: .85rem; margin-left: 6px; font-variant-numeric: tabular-nums; }
 .catalog-directions select, .catalog-directions input { min-height: 40px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; }
 @media (max-width: 720px) { .catalog-directions-grid { grid-template-columns: 1fr; } }
+.catalog-trip-tools { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--border-strong); }
+.catalog-trip-tools > h2 { font-size: 1.35rem; }
+.catalog-trip-block { margin-top: 20px; }
+.catalog-trip-block h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 6px; }
+.catalog-trip-list { margin: 8px 0 0; padding-left: 0; list-style: none; max-height: 360px; overflow-y: auto; }
+.catalog-trip-list li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.catalog-trip-list small { color: var(--sage); }
+.catalog-trip-mile { display: inline-block; min-width: 64px; font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
+.catalog-trip-form { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin: 10px 0; }
+.catalog-trip-form label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--sage); }
+.catalog-trip-form input { min-height: 40px; padding: 6px 10px; border: 1px solid var(--border-strong); border-radius: 6px; background: transparent; color: inherit; width: 150px; }
+.catalog-trip-stop { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin: 10px 0; }
+.catalog-trip-stop h4 { font-weight: 600; }
+.catalog-trip-stop ul { margin: 6px 0 0; padding-left: 18px; list-style: disc; }
+.catalog-trip-warn { color: #9a5b13; margin-top: 6px; }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CatalogPhotos } from "./CatalogPhotos";
 import { CatalogMapView } from "./CatalogMapView";
 import { TrailMapAndDirections } from "./TrailMapAndDirections";
+import { TripTools } from "./TripTools";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { TrailWeatherForecast } from "./TrailWeatherForecast";
 import type { CatalogManifest, CatalogTrail } from "@/lib/trail-catalog/types";
@@ -207,13 +208,14 @@ export function CatalogTrailDetail({
           locationLabel={isRoute && !hasLines ? "approximate trailhead" : "map pin"}
         />
       )}
+      <TripTools trailId={t.id} hasLine={hasLines} miles={t.miles} />
       {!isRoute && <CatalogPhotos trailId={t.id} />}
       <div className="catalog-detail-grid">
         <section>
           <h2>Plan around the whole route.</h2>
           <p>
             Confirm the full hike and its distance with the land manager, then build your gear list
-            and packing plan in HikeSync.
+            and packing plan in Hyked.
           </p>
           <Link
             className="catalog-button"

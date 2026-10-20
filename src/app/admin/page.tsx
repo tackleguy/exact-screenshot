@@ -3,7 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { AdminImportPanel } from "@/components/admin/AdminImportPanel";
 
-export const metadata: Metadata = { title: "Admin — HikeSync", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Admin — Hyked", robots: { index: false, follow: false } };
 
 export default async function AdminPage({
   searchParams,

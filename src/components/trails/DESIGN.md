@@ -1,5 +1,5 @@
 ---
-name: "HikeSync Fieldbook catalog"
+name: "Hyked Fieldbook catalog"
 description: "Source-attributed trail discovery in the approved light Fieldbook workspace."
 colors:
   background: "#f6f7f4"
@@ -86,7 +86,7 @@ components:
     padding: "24px 0"
 ---
 
-# Design System: HikeSync Fieldbook catalog
+# Design System: Hyked Fieldbook catalog
 
 ## Overview
 

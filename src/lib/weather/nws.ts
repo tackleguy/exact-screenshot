@@ -6,7 +6,7 @@ import type { WeatherForecast, WeatherPeriod } from "./types";
 export type { WeatherForecast, WeatherPeriod } from "./types";
 
 const NWS_BASE = "https://api.weather.gov";
-const USER_AGENT = "HikeSync-TrailPlatform/1.0 (https://github.com/tackleguy/health)";
+const USER_AGENT = "Hyked-TrailPlatform/1.0 (https://github.com/tackleguy/health)";
 const HEADERS = { Accept: "application/geo+json", "User-Agent": USER_AGENT };
 
 interface NwsPointsResponse {

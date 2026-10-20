@@ -1,5 +1,5 @@
 {
-  "name": "hikesync",
+  "name": "hyked",
   "private": true,
   "engines": {
     "node": ">=20.9.0"
@@ -20,10 +20,12 @@
     "source:trailheads": "tsx scripts/ingestion/trailheads.ts",
     "verify:trails": "tsx scripts/ingestion/verify-osm.ts",
     "source:resorts": "tsx scripts/ingestion/resort-trails.ts",
+    "source:towns": "tsx scripts/ingestion/towns.ts",
     "bootstrap": "tsx scripts/bootstrap-and-ingest.ts",
-    "test": "tsx --test src/lib/ingestion/parsers/gpx.test.ts src/lib/assistant/*.test.ts src/lib/trail-catalog/*.test.ts src/lib/ingestion/*.test.ts src/lib/opentrailmap.test.ts"
+    "test": "tsx --test src/lib/ingestion/parsers/gpx.test.ts src/lib/assistant/*.test.ts src/lib/trail-catalog/*.test.ts src/lib/ingestion/*.test.ts src/lib/opentrailmap.test.ts src/lib/trip/*.test.ts src/lib/trail-difficulty.test.ts"
   },
   "dependencies": {
+    "@mapbox/vector-tile": "^3.0.0",
     "@mlc-ai/web-llm": "^0.2.85",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
@@ -31,6 +33,8 @@
     "leaflet": "^1.9.4",
     "maplibre-gl": "^6.10.0",
     "next": "^16.3.5",
+    "pbf": "^4.0.2",
+    "pngjs": "^7.0.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -39,6 +43,7 @@
     "@types/leaflet": "^1.9.22",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
+    "@types/pngjs": "^6.0.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "axe-core": "^4.12.1",

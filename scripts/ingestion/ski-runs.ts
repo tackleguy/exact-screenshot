@@ -20,7 +20,7 @@ const round = (n: number) => Math.round(n * 1e5) / 1e5;
 async function download(name: string) {
   const target = path.join(cache, name);
   if (!refresh) { try { await stat(target); return target; } catch { /* fetch below */ } }
-  const response = await fetch(`https://tiles.openskimap.org/geojson/${name}`, { headers: { "User-Agent": "HikeSync/1.0 (https://github.com/tackleguy/health)" } });
+  const response = await fetch(`https://tiles.openskimap.org/geojson/${name}`, { headers: { "User-Agent": "Hyked/1.0 (https://github.com/tackleguy/health)" } });
   if (!response.ok || !response.body) throw new Error(`OpenSkiMap ${name}: HTTP ${response.status}`);
   await pipeline(Readable.fromWeb(response.body as never), createWriteStream(`${target}.tmp`));
   await rename(`${target}.tmp`, target);

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ACTIVITY_LABELS, type ActivityType } from "@/lib/types";
 import { NavIcon } from "@/components/nav/NavIcon";
 
-export const metadata: Metadata = { title: "Record an activity — HikeSync", description: "Record a hike, run, ride or ski day with GPS, or log it manually." };
+export const metadata: Metadata = { title: "Record an activity — Hyked", description: "Record a hike, run, ride or ski day with GPS, or log it manually." };
 
 const types: { type: ActivityType; description: string }[] = [
   { type: "hike", description: "Follow your distance, elevation and time on the trail." },

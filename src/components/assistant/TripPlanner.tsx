@@ -145,7 +145,7 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
   }
   function downloadChecklist() {
     const url = URL.createObjectURL(new Blob([tripChecklist(request, route, selected, packed, units), "\n", shoppingText(shoppingForTrip(request, inventory, shopping))], { type: "text/plain;charset=utf-8" }));
-    const link = document.createElement("a"); link.href = url; link.download = "hikesync-checklist.txt"; link.click();
+    const link = document.createElement("a"); link.href = url; link.download = "hyked-checklist.txt"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setNotice("Checklist prepared for download. Save this trip to keep your progress in this browser too.");
   }

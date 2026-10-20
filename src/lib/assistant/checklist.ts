@@ -5,7 +5,7 @@ import type { PlannerGear, RouteCandidate, TripRequest } from "./types";
 export function tripChecklist(request: TripRequest, route: RouteCandidate | null, gear: PlannerGear[], packed: string[], units: PackUnits = "imperial") {
   const report = packReport(gear, request, null);
   const lines = [
-    `HikeSync — ${route?.name || request.region || "My trip"}`,
+    `Hyked — ${route?.name || request.region || "My trip"}`,
     `${route?.distanceMiles ?? request.distanceMiles ?? "—"} mi · ${request.days ?? "—"} ${request.days === 1 ? "day" : "days"}`,
     request.startDate || "Dates to decide",
     `${report.complete ? "Calculated starting pack" : "Known weight so far (incomplete)"}: ${formatPackWeight(report.loadedLb * 16, units)}`,

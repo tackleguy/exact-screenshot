@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   lastRequest = Date.now();
   try {
     const url = `${ROUTER}/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?${new URLSearchParams({ overview: "full", geometries: "geojson", steps: "true" })}`;
-    const response = await fetch(url, { headers: { "User-Agent": "HikeSync/1.0 (https://github.com/tackleguy/health)" }, signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(url, { headers: { "User-Agent": "Hyked/1.0 (https://github.com/tackleguy/health)" }, signal: AbortSignal.timeout(15_000) });
     const data = (await response.json()) as {
       code: string;
       routes?: { distance: number; duration: number; geometry: { coordinates: [number, number][] }; legs: { steps: RouteStep[] }[] }[];

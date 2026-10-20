@@ -44,7 +44,7 @@ export default function ManualRecordPage() {
     setSaving(false);
 
     if (!res) {
-      setError("Couldn’t reach HikeSync. Check your connection and try again.");
+      setError("Couldn’t reach Hyked. Check your connection and try again.");
       return;
     }
     if (!res.ok) {

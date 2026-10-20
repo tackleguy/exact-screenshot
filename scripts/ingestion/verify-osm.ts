@@ -39,7 +39,7 @@ async function overpass(query: string, worker = 0): Promise<{ elements: { type: 
   for (let attempt = 0; attempt < 3; attempt++) {
     for (const endpoint of [...ENDPOINTS.slice(worker % ENDPOINTS.length), ...ENDPOINTS.slice(0, worker % ENDPOINTS.length)]) {
       try {
-        const response = await fetch(endpoint, { method: "POST", body: new URLSearchParams({ data: query }), headers: { "User-Agent": "HikeSync/1.0 trail verification (https://github.com/tackleguy/health)" }, signal: AbortSignal.timeout(180_000) });
+        const response = await fetch(endpoint, { method: "POST", body: new URLSearchParams({ data: query }), headers: { "User-Agent": "Hyked/1.0 trail verification (https://github.com/tackleguy/health)" }, signal: AbortSignal.timeout(180_000) });
         if (!response.ok) continue;
         const text = await response.text();
         if (!text.startsWith("{")) continue;

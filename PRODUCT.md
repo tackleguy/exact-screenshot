@@ -1,4 +1,4 @@
-# HikeSync
+# Hyked
 
 <!-- impeccable:product-schema 1 -->
 
@@ -8,7 +8,7 @@ web
 
 ## Product Purpose
 
-Unify trail discovery, maps, GPS activity recording, gear management, and packing preparation under HikeSync. The user requested a new, modern, simplified interface that makes the combined apps work together.
+Unify trail discovery, maps, GPS activity recording, gear management, and packing preparation under Hyked. The user requested a new, modern, simplified interface that makes the combined apps work together.
 
 ## Users
 
@@ -16,15 +16,15 @@ Inferred from the existing apps: hikers and backpackers preparing trips, managin
 
 ## Capabilities and Constraints
 
-The active app is the Next.js application at the repository root. Preserve existing Supabase authentication, user gear, custom trails, activity recording, trail data, and map routes. The sibling TrailPack app is reference material, not the build target. A local checkout has no configured Supabase credentials; public curated route information is already available in src/lib/gear.ts. Never fabricate activity totals, weather, route maps, ratings, or personal trips. Local-only planning must be visibly identified as saved on this device; cloud persistence must not be implied.
+The active app is the Next.js application at the repository root. Preserve existing Supabase authentication, user gear, custom trails, activity recording, trail data, and map routes. The sibling Hyked app is reference material, not the build target. A local checkout has no configured Supabase credentials; public curated route information is already available in src/lib/gear.ts. Never fabricate activity totals, weather, route maps, ratings, or personal trips. Local-only planning must be visibly identified as saved on this device; cloud persistence must not be implied.
 
 ## Brand Commitments
 
-HikeSync is the confirmed app name (renamed from TrailPack at the user’s request). The user selected the Fieldbook visual mockup and requested trail coverage for Canada and the United States. The user explicitly requests modern and simple; no binding color or typography choice was supplied.
+Hyked is the confirmed app name (renamed from Hyked at the user’s request). The user selected the Fieldbook visual mockup and requested trail coverage for Canada and the United States. The user explicitly requests modern and simple; no binding color or typography choice was supplied.
 
 ## Evidence on Hand
 
-Existing curated routes in src/lib/gear.ts, local landscape image at public/images/splash-image.jpg, live data APIs, and prior TrailPack gear and packing flows in ../exact-screenshot. Curated route figures are existing planning references, not current travel conditions.
+Existing curated routes in src/lib/gear.ts, local landscape image at public/images/splash-image.jpg, live data APIs, and prior Hyked gear and packing flows in ../exact-screenshot. Curated route figures are existing planning references, not current travel conditions.
 
 ## Product Principles
 

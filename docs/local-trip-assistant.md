@@ -1,6 +1,6 @@
 # Browser trip assistant
 
-Open `/plan`. Describe a trip, select a route, prepare equipment, and use the packing checklist. The module extends the existing TrailPack Fieldbook UI.
+Open `/plan`. Describe a trip, select a route, prepare equipment, and use the packing checklist. The module extends the existing Hyked Fieldbook UI.
 
 ## Local model
 

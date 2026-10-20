@@ -8,6 +8,7 @@ import { filterCatalog, matchingCatalogRows, searchableText } from "./search";
 import { buildThroughHikeOverlay } from "./through-hikes";
 import { buildResortOverlay, type ResortTrailSource } from "./resorts";
 import { normalizeSeason, titleCaseName, trailStatusFor } from "./agencies";
+import { reviewDecisions } from "./reviews";
 import { buildCatalogMap } from "./map";
 
 const unzip = promisify(gunzip);
@@ -91,13 +92,13 @@ function load() {
 }
 
 export async function searchCatalog(filters: CatalogFilters = {}) {
-  const data = await load();
-  return { ...filterCatalog(data.rows, filters, data.texts), manifest: data.manifest };
+  const [data, reviews] = await Promise.all([load(), reviewDecisions()]);
+  return { ...filterCatalog(data.rows, filters, data.texts, reviews), manifest: data.manifest };
 }
 
 export async function searchCatalogMap(filters: CatalogFilters = {}) {
-  const data = await load();
-  return buildCatalogMap(matchingCatalogRows(data.rows, filters, data.texts));
+  const [data, reviews] = await Promise.all([load(), reviewDecisions()]);
+  return buildCatalogMap(matchingCatalogRows(data.rows, filters, data.texts, reviews));
 }
 
 async function readShard(directory: string, kind: "geometry" | "aliases", shard: string) {
@@ -157,7 +158,10 @@ export async function catalogAudit() {
 /** Ids of trails shown publicly (not rejected fragments, sidewalks, motorized routes or ski runs). */
 export async function publicCatalogIds() {
   const data = await load();
-  return data.rows.filter((row) => row.confidence !== "REJECTED" && row.quality !== "fragment").map((row) => row.id);
+  const reviews = await reviewDecisions();
+  return data.rows
+    .filter((row) => reviews.get(row.id) !== "reject" && (reviews.get(row.id) === "approve" || (row.confidence !== "REJECTED" && row.quality !== "fragment")))
+    .map((row) => row.id);
 }
 
 export async function catalogDownload() {

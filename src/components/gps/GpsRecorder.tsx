@@ -80,6 +80,8 @@ export function GpsRecorder({
     }
 
     save();
+    // Runs once per state change: saving must not repeat when other values re-render the recorder.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gps.state]);
 
   function handleFinish() {

@@ -45,10 +45,10 @@ export async function generateMetadata({
     const record = await getCatalogTrail(id);
     const isRoute = record?.trail.kind === "route";
     return {
-      title: record ? `${record.trail.name} — HikeSync` : "Trail not found",
+      title: record ? `${record.trail.name} — Hyked` : "Trail not found",
       description: isRoute
-        ? "Through-hike guide from the HikeSync trail catalog."
-        : "Source-linked trail from the HikeSync catalog, with map and weather forecast.",
+        ? "Through-hike guide from the Hyked trail catalog."
+        : "Source-linked trail from the Hyked catalog, with map and weather forecast.",
     };
   }
   const trail = await getTrail(id);

@@ -1,5 +1,5 @@
 ---
-name: "HikeSync Fieldbook planner"
+name: "Hyked Fieldbook planner"
 description: "The implemented light trip planner, pack checklist, and guest equipment patterns."
 colors:
   background: "#f6f7f4"
@@ -97,7 +97,7 @@ components:
     size: "32px"
 ---
 
-# Design System: HikeSync Fieldbook planner
+# Design System: Hyked Fieldbook planner
 
 ## Overview
 

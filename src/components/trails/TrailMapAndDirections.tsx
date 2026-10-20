@@ -121,7 +121,10 @@ export function TrailMapAndDirections({ name, miles, lines, trailhead }: { name:
               <p className="catalog-muted">
                 {start.latitude.toFixed(5)}, {start.longitude.toFixed(5)}
                 {start.osmUrl && <> · <a href={start.osmUrl} target="_blank" rel="noopener noreferrer">OpenStreetMap record</a></>}
+                {start.officialUrl && <> · <a href={start.officialUrl} target="_blank" rel="noopener noreferrer">Forest Service page</a></>}
               </p>
+              {start.water && <p className="catalog-muted">Water at the trailhead (Forest Service): {start.water}</p>}
+              {start.closestTowns && <p className="catalog-muted">Closest towns (Forest Service): {start.closestTowns}</p>}
               {!trailhead && (
                 <p className="catalog-muted">No trailhead is mapped in OpenStreetMap within 800 m, so the trail’s mapped ends are shown. Check road access and parking before you go.</p>
               )}

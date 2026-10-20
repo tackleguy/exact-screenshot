@@ -1,4 +1,4 @@
-# HikeSync AI validation — September 24, 2026
+# Hyked AI validation — September 24, 2026
 
 ## Scope and results
 

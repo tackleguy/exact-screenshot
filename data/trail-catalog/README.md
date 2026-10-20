@@ -1,4 +1,4 @@
-# TrailPack public trail catalog
+# Hyked public trail catalog
 
 This directory ships a local, server-readable snapshot. The browser receives paginated results, never the complete index of 146,355 trails. No account, database connection, or API key is required.
 
@@ -13,7 +13,7 @@ This directory ships a local, server-readable snapshot. The browser receives pag
 - [Ontario Trail Network](https://data.ontario.ca/en/dataset/ontario-trail-network): named trail segments. Contains information licensed under the [Open Government Licence – Ontario](https://www.ontario.ca/page/open-government-licence-ontario). Stable OGF IDs identify records. This expands the Canadian selection; it does not provide every Canadian province or territory.
 - [Natural Earth](https://www.naturalearthdata.com/about/terms-of-use/): public-domain 1:50m state/province boundaries used for approximate region labels. `regions.geojson` contains only Canada and the United States, from [the author's source repository](https://github.com/nvkelso/natural-earth-vector/blob/master/geojson/ne_50m_admin_1_states_provinces.geojson). Generalized coastline boundaries can leave some locations unassigned. Ontario records use their known source jurisdiction.
 
-Source agencies do not endorse TrailPack. Source data can predate retrieval. Access, closures, water, camping permission, elevation and missing difficulty are not invented. Geometry is simplified by the source service to approximately 0.0001 degrees, then stored to five decimal places. It is suitable for discovery, not navigation. USGS distances are source-reported; Ontario kilometers are converted to miles; Parks Canada section lengths are estimated from the generalized geometry.
+Source agencies do not endorse Hyked. Source data can predate retrieval. Access, closures, water, camping permission, elevation and missing difficulty are not invented. Geometry is simplified by the source service to approximately 0.0001 degrees, then stored to five decimal places. It is suitable for discovery, not navigation. USGS distances are source-reported; Ontario kilometers are converted to miles; Parks Canada section lengths are estimated from the generalized geometry.
 
 ## Reproduce or refresh
 

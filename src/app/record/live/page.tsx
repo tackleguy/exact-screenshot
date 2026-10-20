@@ -8,7 +8,7 @@ import { GpsRecorder } from "@/components/gps/GpsRecorder";
 import type { ActivityType } from "@/lib/types";
 import { getAuthUser } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Recording — HikeSync" };
+export const metadata: Metadata = { title: "Recording — Hyked" };
 
 const VALID_TYPES: ActivityType[] = ["run", "hike", "bike", "ski"];
 

@@ -8,7 +8,7 @@ import { ACTIVITY_ICONS, ACTIVITY_LABELS, type ActivityType } from "@/lib/types"
 import { ActivityListRow } from "@/components/activities/ActivityListRow";
 import { getAuthUser } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Your profile — HikeSync" };
+export const metadata: Metadata = { title: "Your profile — Hyked" };
 
 const allTypes: ActivityType[] = ["run", "hike", "bike", "ski"];
 

@@ -28,7 +28,7 @@ export function distanceKm(a: number, b: number, c: number, d: number) {
   return 6371 * 2 * Math.asin(Math.sqrt(Math.min(1, h)));
 }
 
-export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilters, texts?: string[]) {
+export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilters, texts?: string[], reviews?: Map<string, "approve" | "reject">) {
   const terms = normalize((filters.q ?? "").slice(0, 180))
     .split(/\s+/)
     .filter(Boolean);
@@ -37,14 +37,18 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
   return rows.filter((r, i) => {
     if (!includeWinter && isWinterActivityTrail(r)) return false;
     if (activity !== "all" && !matchesCatalogActivity(r, activity)) return false;
+    // An admin decision overrides the automated checks: rejected trails are hidden, approved ones shown.
+    const review = reviews?.get(r.id);
+    if (review === "reject" && !filters.includeFragments) return false;
+    const approved = review === "approve";
     // Pieces of longer trails, unnamed stubs, connectors and closed trails are not presented as hikes unless asked for.
-    if (!filters.includeFragments && (r.quality === "fragment" || r.flags?.includes("closed"))) return false;
+    if (!approved && !filters.includeFragments && (r.quality === "fragment" || r.flags?.includes("closed"))) return false;
     // Sidewalks and road sidepaths are not hikes; they stay listed for biking.
-    if (!filters.includeFragments && activity !== "bike" && activity !== "all" && r.flags?.includes("sidewalk")) return false;
+    if (!approved && !filters.includeFragments && activity !== "bike" && activity !== "all" && r.flags?.includes("sidewalk")) return false;
     // Motorized routes are not hikes, runs or bike rides; they show only with every activity or partial segments.
-    if (!filters.includeFragments && activity !== "all" && r.flags?.includes("motorized")) return false;
+    if (!approved && !filters.includeFragments && activity !== "all" && r.flags?.includes("motorized")) return false;
     // The managing agency says hiking isn't an allowed use here.
-    if (!filters.includeFragments && (activity === "hike" || activity === "backpack" || activity === "run") && r.flags?.includes("no-hiking")) return false;
+    if (!approved && !filters.includeFragments && (activity === "hike" || activity === "backpack" || activity === "run") && r.flags?.includes("no-hiking")) return false;
     if (filters.resort && normalize(r.skiResort ?? "") !== normalize(filters.resort)) return false;
     if (filters.sourceType && r.sourceType !== filters.sourceType) return false;
     if (filters.kind && r.kind !== filters.kind) return false;
@@ -71,8 +75,8 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
   });
 }
 
-export function filterCatalog(rows: CatalogTrail[], filters: CatalogFilters, texts?: string[]) {
-  let matches = matchingCatalogRows(rows, filters, texts);
+export function filterCatalog(rows: CatalogTrail[], filters: CatalogFilters, texts?: string[], reviews?: Map<string, "approve" | "reject">) {
+  let matches = matchingCatalogRows(rows, filters, texts, reviews);
   if (filters.uniqueNames) matches = dedupeSectionsByName(matches);
   if (filters.targetMiles !== undefined && Number.isFinite(filters.targetMiles) && filters.targetMiles > 0) {
     matches.sort(
