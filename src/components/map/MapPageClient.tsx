@@ -153,7 +153,7 @@ export function MapPageClient({
   } | null>(null);
   const [trailLabel, setTrailLabel] = useState<string | null>(
     initialCatalog
-      ? `${initialCatalog.total.toLocaleString()} hiking sections across Canada & the U.S.`
+      ? `${initialCatalog.total.toLocaleString()} hiking trails across Canada & the U.S.`
       : null,
   );
   const [nearbyLabel, setNearbyLabel] = useState<string | null>(null);
@@ -168,7 +168,9 @@ export function MapPageClient({
     north: number;
   } | null>(null);
   const filtersRef = useRef(filters);
-  filtersRef.current = filters;
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
 
   const resolvedFocus = useMemo(
     () =>
@@ -223,8 +225,8 @@ export function MapPageClient({
           setCatalog(data);
           setTrailLabel(
             data.total > 0
-              ? `${data.total.toLocaleString()} hiking sections in this view`
-              : "No hiking sections in this view — pan, zoom, or clear filters",
+              ? `${data.total.toLocaleString()} hiking trails in this view`
+              : "No hiking trails in this view — pan, zoom, or clear filters",
           );
         })
         .catch((error: unknown) => {
@@ -254,7 +256,7 @@ export function MapPageClient({
       .then((data: CatalogMapResult) => {
         setCatalog(data);
         setTrailLabel(
-          `${data.total.toLocaleString()} hiking sections across Canada & the U.S.`,
+          `${data.total.toLocaleString()} hiking trails across Canada & the U.S.`,
         );
       })
       .catch(() => undefined);

@@ -6,7 +6,7 @@ import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, formatDistance, type QualityFlag,
 const PAGE_SIZE = 100;
 const STATUSES: QualityStatus[] = ["review", "fragment", "short"];
 
-export const metadata = { title: "Trail data quality — HikeSync admin" };
+export const metadata = { title: "Trail data quality — HikeSync admin", robots: { index: false, follow: false } };
 
 export default async function TrailQualityPage({
   searchParams,

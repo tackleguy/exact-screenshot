@@ -26,6 +26,12 @@ export interface ResortTrailSource {
   }[];
 }
 
+/** "2025 summer (hiking map dated 2025-07)" → "2025 summer listing"; undated pages say so. */
+export function resortSeasonLabel(season: string) {
+  const year = season.match(/\b(20\d\d)\b/)?.[1];
+  return year ? `${year} summer listing` : "undated page";
+}
+
 /** A mapped catalog trail with the same name this close to the resort base is the same trail. */
 const SAME_TRAIL_METERS = 10_000;
 const slug = (value: string) => value.normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -77,11 +83,11 @@ export function buildResortOverlay(sources: ResortTrailSource[], mapped: Catalog
         trailType: "resort-hiking",
         trailStatus: "SEASONAL",
         surface: null,
-        season: `Summer (listed for ${source.season})`,
+        season: `Summer (${resortSeasonLabel(source.season)})`,
+        routeType: trail.lengthBasis === "loop" ? "loop" : trail.lengthBasis === "one-way" ? "point-to-point" : undefined,
         geometryShard: "none",
-        quality: "ok",
         tags: ["resort trail", "ski resort", "summer", ...(trail.use === "hike+bike" ? ["multi-use", "bike"] : [])],
-        note: `Listed on ${source.resort}’s official summer trail information (${source.season}). The length is the resort’s own figure (${BASIS[trail.lengthBasis]}). The resort doesn’t publish coordinates, so the route isn’t drawn; the pin marks the resort base area.`,
+        note: `Listed on ${source.resort}’s official summer trail information (${resortSeasonLabel(source.season)}). The length is the resort’s own figure (${BASIS[trail.lengthBasis]}). The resort doesn’t publish coordinates, so the route isn’t drawn; the pin marks the resort base area.`,
       });
     }
   }

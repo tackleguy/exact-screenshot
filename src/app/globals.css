@@ -281,3 +281,10 @@ html { scroll-padding-block:20px 100px; }
   width: 100%;
   height: 100%;
 }
+
+/* Leaflet gives its panes and controls z-index 400–1000. Contain each map in its own stacking context so
+   its zoom buttons can't sit on top of the app's bottom navigation or dialogs. */
+.leaflet-container {
+  isolation: isolate;
+  z-index: 0;
+}

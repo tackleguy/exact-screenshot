@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { searchCatalog, searchCatalogMap } from "@/lib/trail-catalog/server";
 import { parseCatalogFilters } from "@/lib/trail-catalog/search";
-import { countryName, displayMiles, sourceName } from "@/lib/trail-catalog/types";
+import { countryName, displayMiles, trailPlace } from "@/lib/trail-catalog/types";
 import { QUALITY_STATUS_LABELS } from "@/lib/trail-catalog/quality";
 import { CatalogMap } from "./CatalogMap";
 import { NavIcon } from "@/components/nav/NavIcon";
@@ -61,7 +61,7 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
       <header className="catalog-heading">
         <h1>Find your next trail.</h1>
         <p>
-          {manifest.total.toLocaleString("en-US")} trails — whole mapped trails across the United
+          {(manifest.publicTotal ?? manifest.total).toLocaleString("en-US")} trails — whole mapped trails across the United
           States and Canada, plus curated through-hikes worldwide.
         </p>
         <div className="catalog-quick-links">
@@ -252,7 +252,7 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
                           )}
                         </h2>
                         <p>
-                          {t.region ?? countryName(t.country)} · {sourceName(t.source)}
+                          {t.region ?? countryName(t.country)} · {trailPlace(t)}
                           {t.difficulty ? ` · ${t.difficulty}` : ""}
                           {t.sectionCount && t.sectionCount > 1 ? ` · ${t.sectionCount.toLocaleString("en-US")} sections joined` : ""}
                         </p>
@@ -358,7 +358,7 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
           overlapping sections once. Distances and access still need a check with the land manager.
         </p>
         <details className="catalog-sources">
-          <summary>USGS · Parks Canada · Ontario · curated guides — View sources & coverage</summary>
+          <summary>USGS · National Park Service · U.S. Forest Service · BLM · Parks Canada · Ontario · ski resorts · curated guides — View sources & coverage</summary>
           <p>
             {(manifest.countries.CA ?? 0).toLocaleString("en-US")} Canadian and{" "}
             {(manifest.countries.US ?? 0).toLocaleString("en-US")} U.S. records
@@ -384,7 +384,9 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
           </ul>
           <p>
             Canadian coverage comes from Parks Canada locations and the Ontario Trail Network. U.S.
-            coverage is every named USGS trail plus unnamed trails marked for hiking. National Scenic
+            coverage is every named USGS trail plus unnamed trails marked for hiking, checked against and
+            extended with official National Park Service, U.S. Forest Service and BLM trail data. Ski resort
+            summer trails are listed by name and stated length from each resort’s own site. National Scenic
             and long trails are joined end to end. International through-hikes are curated guides (not GPS tracks). State
             and province labels use approximate{" "}
             <a

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ACTIVITY_LABELS, type ActivityType } from "@/lib/types";
@@ -16,6 +17,7 @@ export default function ManualRecordPage() {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [needsSignIn, setNeedsSignIn] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,13 +39,24 @@ export default function ManualRecordPage() {
         ended_at: now.toISOString(),
         notes: notes || null,
       }),
-    });
+    }).catch(() => null);
 
     setSaving(false);
 
+    if (!res) {
+      setError("Couldn’t reach HikeSync. Check your connection and try again.");
+      return;
+    }
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      setError(data.error ?? "Failed to save");
+      setError(
+        res.status === 401
+          ? "Sign in to save activities to your log."
+          : res.status === 503
+            ? "Saving isn’t available right now. Try again later."
+            : data.error ?? "Couldn’t save this activity. Try again.",
+      );
+      setNeedsSignIn(res.status === 401);
       return;
     }
 
@@ -58,8 +71,9 @@ export default function ManualRecordPage() {
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
         <div>
-          <label className="block text-sm font-medium text-stone-700">Activity type</label>
+          <label htmlFor="log-type" className="block text-sm font-medium text-stone-700">Activity type</label>
           <select
+            id="log-type"
             value={activityType}
             onChange={(e) => setActivityType(e.target.value as ActivityType)}
             className="mt-1 w-full rounded-xl border border-stone-200 px-4 py-3 text-sm"
@@ -73,8 +87,9 @@ export default function ManualRecordPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-stone-700">Title</label>
+          <label htmlFor="log-title" className="block text-sm font-medium text-stone-700">Title</label>
           <input
+            id="log-title"
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -85,10 +100,12 @@ export default function ManualRecordPage() {
 
         <div className="grid grid-cols-3 gap-3">
           <div>
-            <label className="block text-sm font-medium text-stone-700">Distance (mi)</label>
+            <label htmlFor="log-distance" className="block text-sm font-medium text-stone-700">Distance (mi)</label>
             <input
+            id="log-distance"
               type="number"
-              step="0.1"
+              step="any"
+              min="0.01"
               required
               value={distanceMi}
               onChange={(e) => setDistanceMi(e.target.value)}
@@ -96,8 +113,9 @@ export default function ManualRecordPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-stone-700">Time (min)</label>
+            <label htmlFor="log-time" className="block text-sm font-medium text-stone-700">Time (min)</label>
             <input
+            id="log-time"
               type="number"
               required
               value={durationMin}
@@ -106,8 +124,9 @@ export default function ManualRecordPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-stone-700">Elev (ft)</label>
+            <label htmlFor="log-elevation" className="block text-sm font-medium text-stone-700">Elev (ft)</label>
             <input
+            id="log-elevation"
               type="number"
               value={elevationFt}
               onChange={(e) => setElevationFt(e.target.value)}
@@ -117,8 +136,9 @@ export default function ManualRecordPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-stone-700">Notes</label>
+          <label htmlFor="log-notes" className="block text-sm font-medium text-stone-700">Notes</label>
           <textarea
+            id="log-notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={3}
@@ -126,7 +146,16 @@ export default function ManualRecordPage() {
           />
         </div>
 
-        {error && <p className="text-sm text-red-600">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-red-600">
+            {error}{" "}
+            {needsSignIn && (
+              <Link href="/login?next=/record/manual" className="font-medium underline">
+                Sign in
+              </Link>
+            )}
+          </p>
+        )}
 
         <button
           type="submit"

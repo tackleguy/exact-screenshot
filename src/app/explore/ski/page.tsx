@@ -1,5 +1,8 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { SkiMapClient } from "@/components/ski/SkiMapClient";
+
+export const metadata: Metadata = { title: "Nordic ski trails — HikeSync", description: "Find cross-country ski trails and ski areas on the map." };
 
 export default function ExploreSkiPage() {
   return (

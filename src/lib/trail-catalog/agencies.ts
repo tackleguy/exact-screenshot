@@ -135,8 +135,18 @@ export function confidenceFor(row: Pick<CatalogTrail, "quality" | "flags" | "win
   return row.sources?.length ? "OFFICIAL_GEOMETRY_VERIFIED" : "VERIFIED";
 }
 
+/**
+ * Season text worth showing. USGS "seasonopen" is Yes (seasonal) / No (not seasonal) / Unknown, so only
+ * "Yes" and real descriptions ("Open March 1 to November 30") survive; "No" and "Unknown" mean none.
+ */
+export function normalizeSeason(season: string | null | undefined) {
+  const value = season?.trim();
+  if (!value || /^(no|n|unknown|null|n\/a|none|-)$/i.test(value)) return null;
+  if (/^(yes|y)$/i.test(value)) return "Seasonal";
+  return value;
+}
+
 export function trailStatusFor(row: Pick<CatalogTrail, "flags" | "season">, closed = false): TrailStatus {
   if (closed || row.flags?.includes("closed")) return "CLOSED";
-  if (row.season && !/^(yes|year|all|open|null|n\/a)/i.test(row.season)) return "SEASONAL";
-  return "UNKNOWN";
+  return normalizeSeason(row.season) ? "SEASONAL" : "UNKNOWN";
 }

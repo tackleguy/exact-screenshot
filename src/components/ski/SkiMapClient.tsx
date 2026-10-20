@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { SkiArea, SkiFeatureSummary } from "@/lib/ski";
@@ -108,12 +109,12 @@ export function SkiMapClient() {
         <p className="mt-1 text-xs text-mist">
           Zoom in for OpenStreetMap nordic ski trails. Search a resort to fly
           there, or{" "}
-          <a
+          <Link
             href="/explore/trails?activity=ski&includeWinter=true"
             className="font-semibold text-accent"
           >
-            browse catalog ski sections
-          </a>
+            browse catalog ski trails
+          </Link>
           .
         </p>
         <div className="mt-3 flex gap-2">

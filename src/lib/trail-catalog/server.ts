@@ -7,6 +7,7 @@ import type { CatalogFilters, CatalogManifest, CatalogTrail } from "./types";
 import { filterCatalog, matchingCatalogRows, searchableText } from "./search";
 import { buildThroughHikeOverlay } from "./through-hikes";
 import { buildResortOverlay, type ResortTrailSource } from "./resorts";
+import { normalizeSeason, titleCaseName, trailStatusFor } from "./agencies";
 import { buildCatalogMap } from "./map";
 
 const unzip = promisify(gunzip);
@@ -41,6 +42,13 @@ function load() {
       throw new Error("Catalog checksum mismatch");
     }
     const sections = JSON.parse((await unzip(raw)).toString()) as CatalogTrail[];
+    // Many source names are all capitals ("HALF DOME CRAG"); show them in title case.
+    for (const row of sections) {
+      row.name = titleCaseName(row.name);
+      // Older snapshots stored raw season codes ("No", "Unknown") and called those trails seasonal.
+      row.season = normalizeSeason(row.season);
+      if (row.trailStatus === "SEASONAL" || row.trailStatus === "UNKNOWN") row.trailStatus = trailStatusFor(row);
+    }
     if (sections.length !== baseManifest.total || new Set(sections.map((r) => r.id)).size !== sections.length) {
       throw new Error("Catalog count mismatch");
     }
@@ -60,6 +68,7 @@ function load() {
     const manifest: CatalogManifest = {
       ...baseManifest,
       total: rows.length,
+      publicTotal: rows.filter((row) => row.confidence !== "REJECTED" && row.quality !== "fragment").length,
       countries: recountCountries(rows),
       notes: [
         ...baseManifest.notes,
@@ -143,6 +152,12 @@ export async function catalogAudit() {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
+}
+
+/** Ids of trails shown publicly (not rejected fragments, sidewalks, motorized routes or ski runs). */
+export async function publicCatalogIds() {
+  const data = await load();
+  return data.rows.filter((row) => row.confidence !== "REJECTED" && row.quality !== "fragment").map((row) => row.id);
 }
 
 export async function catalogDownload() {

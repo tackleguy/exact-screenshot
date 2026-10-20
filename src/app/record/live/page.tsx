@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import {
   defaultActivityTitle,
@@ -6,6 +7,8 @@ import {
 import { GpsRecorder } from "@/components/gps/GpsRecorder";
 import type { ActivityType } from "@/lib/types";
 import { getAuthUser } from "@/lib/supabase/server";
+
+export const metadata: Metadata = { title: "Recording — HikeSync" };
 
 const VALID_TYPES: ActivityType[] = ["run", "hike", "bike", "ski"];
 

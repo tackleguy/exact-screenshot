@@ -5,7 +5,7 @@ import { TrailMapAndDirections } from "./TrailMapAndDirections";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { TrailWeatherForecast } from "./TrailWeatherForecast";
 import type { CatalogManifest, CatalogTrail } from "@/lib/trail-catalog/types";
-import { countryName, sourceName } from "@/lib/trail-catalog/types";
+import { countryName, sourceName, trailPlace } from "@/lib/trail-catalog/types";
 import { CONFIDENCE_LABELS, SOURCE_TYPE_LABELS, TRAIL_TYPE_LABELS } from "@/lib/trail-catalog/agencies";
 import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, ROUTE_TYPE_LABELS, formatDistance } from "@/lib/trail-catalog/quality";
 import { resolveDifficulty } from "@/lib/trail-difficulty";
@@ -52,7 +52,7 @@ export function CatalogTrailDetail({
           {isRoute && <span className="catalog-badge">Through-hike</span>}
         </h1>
         <p>
-          {[t.region, countryName(t.country)].filter(Boolean).join(", ")} · {sourceName(t.source)}
+          {[t.region, countryName(t.country)].filter(Boolean).join(", ")} · {trailPlace(t)}
         </p>
       </header>
       {t.winterUse && (
@@ -138,8 +138,8 @@ export function CatalogTrailDetail({
           <div>
             <dt>Route type</dt>
             <dd>
-              {t.routeType ? ROUTE_TYPE_LABELS[t.routeType] : isRoute ? "Long-distance route" : "Not determined"}
-              <small>From the mapped line’s shape</small>
+              {t.routeType ? ROUTE_TYPE_LABELS[t.routeType] : isRoute ? "Long-distance route" : "Not stated"}
+              <small>{t.source === "resort" ? "As the resort lists it" : "From the mapped line’s shape"}</small>
             </dd>
           </div>
         )}
@@ -358,7 +358,9 @@ export function CatalogTrailDetail({
           <p className="catalog-muted">
             {isRoute
               ? `Guide ID: ${t.sourceId}.`
-              : `State or province is estimated from a point on the trail; long trails may cross boundaries. Source ID${sections > 1 ? " of the longest section" : ""}: ${t.sourceId}.`}
+              : t.source === "resort"
+                ? `Listed by ${t.skiResort ?? t.manager}; pinned at the resort base area. Entry ID: ${t.sourceId}.`
+                : `State or province is estimated from a point on the trail; long trails may cross boundaries. Source ID${sections > 1 ? " of the longest section" : ""}: ${t.sourceId}.`}
           </p>
           {t.country === "CA" && !isRoute && (
             <p className="catalog-muted">

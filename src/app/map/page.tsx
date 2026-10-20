@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { getParks } from "@/lib/data";
 import { searchCatalogMap } from "@/lib/trail-catalog/server";
 import { MapPageClient } from "@/components/map/MapPageClient";
 import type { MapMarker } from "@/lib/types";
 import type { CatalogMapResult } from "@/lib/trail-catalog/types";
+
+export const metadata: Metadata = { title: "Adventure map — HikeSync", description: "Map of hiking trails across Canada and the United States." };
 
 export default async function MapPage() {
   let markers: MapMarker[] = [];

@@ -327,3 +327,21 @@ test("ATV, OHV, motorcycle and 4x4 routes leave hiking results; 'No OHV' trails 
   assert.equal(filterCatalog([atv.row], {}).total, 0);
   assert.equal(filterCatalog([atv.row], { activity: "all" }).total, 1);
 });
+
+import { normalizeSeason, trailStatusFor } from "./agencies";
+test("USGS season codes: No and Unknown mean no season; Yes and descriptions mean seasonal", () => {
+  assert.equal(normalizeSeason("No"), null);
+  assert.equal(normalizeSeason("Unknown"), null);
+  assert.equal(normalizeSeason("Yes"), "Seasonal");
+  assert.equal(normalizeSeason("Open March 1 to November 30"), "Open March 1 to November 30");
+  assert.equal(trailStatusFor({ season: "No", flags: [] }), "UNKNOWN");
+  assert.equal(trailStatusFor({ season: "Closed 12/15-7/15", flags: [] }), "SEASONAL");
+  assert.equal(trailStatusFor({ season: null, flags: ["closed"] }), "CLOSED");
+});
+
+import { resortSeasonLabel } from "./resorts";
+test("resort season notes become short labels", () => {
+  assert.equal(resortSeasonLabel("2025 summer (hiking map dated 2025-07)"), "2025 summer listing");
+  assert.equal(resortSeasonLabel("current (fetched 2026)"), "2026 summer listing");
+  assert.equal(resortSeasonLabel("current summer (page undated)"), "undated page");
+});

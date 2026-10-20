@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getActivities, getWeeklyStats } from "@/lib/activities";
@@ -6,6 +7,8 @@ import { NAV_SHORTCUTS } from "@/lib/nav-shortcuts";
 import { ACTIVITY_ICONS, ACTIVITY_LABELS, type ActivityType } from "@/lib/types";
 import { ActivityListRow } from "@/components/activities/ActivityListRow";
 import { getAuthUser } from "@/lib/supabase/server";
+
+export const metadata: Metadata = { title: "Your profile — HikeSync" };
 
 const allTypes: ActivityType[] = ["run", "hike", "bike", "ski"];
 

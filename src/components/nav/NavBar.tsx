@@ -36,7 +36,7 @@ const tools = [
   { href: "/map", label: "Adventure map", hint: "G then M" },
   { href: "/", label: "Activity log", hint: "G then A" },
   { href: "/pack-trails", label: "Route guides" },
-  { href: "/trails", label: "Custom trails" },
+  { href: "/explore/trails?collection=community", label: "Community & GPX trails" },
   { href: "/explore/ski", label: "Ski trails" },
 ];
 

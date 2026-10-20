@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { displayMiles, sourceName, countryName, type CatalogTrail } from "@/lib/trail-catalog/types";
+import { displayMiles, sourceName, trailPlace, countryName, type CatalogTrail } from "@/lib/trail-catalog/types";
 import { distanceKm } from "@/lib/trail-catalog/search";
 import { expandRegion } from "@/lib/assistant/regions";
 import type { RouteCandidate, TripRequest } from "@/lib/assistant/types";
@@ -37,13 +37,13 @@ export function CatalogSuggestions({ request, onSelect }: { request: TripRequest
   const current = result?.key === key ? result : null;
   return <section className="planner-catalog" aria-label="Select a mapped trail">
     <div className="planner-section-heading"><h3>{near ? "Trails near your place" : `Trails in ${request.region}`}</h3>{near && <label>Order by<select value={sort} onChange={e => { setSort(e.target.value); setPage(1); }}><option value="near">Nearest first</option><option value="length">Closest to trip mileage</option></select></label>}</div>
-    <p className="planner-help">Select a mapped trail to start your plan. Catalog distances describe trail sections; check the map and official source to establish a complete itinerary and camping permissions.</p>
-    <p role="status" className="planner-help">{!current ? "Finding mapped trails…" : current.error ? "Trails could not be loaded. Retry below." : `${current.total.toLocaleString()} trail sections${near ? ` within ${request.radiusKm ?? 50} km of ${place!.name}` : " found"}.`}</p>
+    <p className="planner-help">Select a mapped trail to start your plan. Distances are for the mapped trail; check the map and official source to plan a complete itinerary and camping permissions.</p>
+    <p role="status" className="planner-help">{!current ? "Finding mapped trails…" : current.error ? "Trails could not be loaded. Retry below." : `${current.total.toLocaleString()} trails${near ? ` within ${request.radiusKm ?? 50} km of ${place!.name}` : " found"}.`}</p>
     {current?.error && <button className="planner-button secondary" onClick={() => { setResult(null); setRetry(n => n + 1); }}>Retry trails</button>}
     {current && !current.error && current.total === 0 && <p className="planner-empty">No mapped trails in this search. {near ? "Choose a larger radius or another location above. The radius has not been widened automatically." : "Try a state or province, or choose Near a place for a town or landmark."}</p>}
     <ul className="planner-sources">{current?.trails.map(trail => <li key={trail.id}>
       <h4><Link href={`/explore/trails/${trail.id}`} target="_blank" rel="noopener noreferrer" prefetch={false}>{trail.name}</Link></h4>
-      <p>{trail.region ?? countryName(trail.country)} · {displayMiles(trail.miles)} section · {sourceName(trail.source)}{trail.distanceBasis === "geometry" ? " · Map-estimated length" : ""}</p>
+      <p>{trail.region ?? countryName(trail.country)} · {displayMiles(trail.miles)} · {trailPlace(trail)}{trail.distanceBasis === "geometry" ? " · Measured from the map" : ""}</p>
       {near && place && <p>{distanceKm(place.latitude, place.longitude, trail.latitude, trail.longitude).toFixed(1)} km from your chosen place</p>}
       <div className="planner-actions"><Link href={`/explore/trails/${trail.id}`} target="_blank" rel="noopener noreferrer" prefetch={false}>Map & trail details</Link><button className="planner-button secondary" onClick={() => setChoosing(trail)}>Select {trail.name}</button></div>
       {choosing?.id === trail.id && <form className="planner-trail-confirm" onSubmit={e => {

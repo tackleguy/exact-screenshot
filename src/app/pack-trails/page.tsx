@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/supabase/server";
 import { TrailDatabase } from "@/components/pack-trails/TrailDatabase";
+
+export const metadata: Metadata = { title: "My trips — HikeSync" };
 
 export default async function PackTrailsPage() {
   const { user } = await getAuthUser();

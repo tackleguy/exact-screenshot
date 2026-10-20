@@ -78,6 +78,8 @@ export interface CatalogManifest {
   /** Per-agency discovery and import counts from the last scan. */
   coverage?: Record<string, { areasDiscovered: number; areasProcessed: number; linesDiscovered: number; newLinesImported: number; trailsAdded: number; existingTrailsConfirmed: number; needsReview: number; rejected: number; lastScan: string }>;
   confidence?: Record<string, number>;
+  /** Trails shown publicly (excludes rejected records); set at load time. */
+  publicTotal?: number;
 }
 export type CatalogBounds = [west: number, south: number, east: number, north: number];
 export interface CatalogMapPoint {
@@ -164,8 +166,16 @@ const SOURCE_NAMES: Record<CatalogTrail["source"], string> = {
 
 export const sourceName = (source: CatalogTrail["source"]) => SOURCE_NAMES[source] ?? source;
 
+/** Where a trail is, for list rows: its park, forest, BLM area or resort, else the managing agency. */
+export function trailPlace(t: Pick<CatalogTrail, "park" | "forest" | "blmArea" | "skiResort" | "sourceType" | "source">) {
+  if (t.park ?? t.forest ?? t.skiResort) return (t.park ?? t.forest ?? t.skiResort)!;
+  const agency: Partial<Record<NonNullable<CatalogTrail["sourceType"]>, string>> = { NPS_OFFICIAL: "National Park Service", USFS_OFFICIAL: "U.S. Forest Service", BLM_OFFICIAL: t.blmArea ?? "Bureau of Land Management" };
+  return (t.sourceType && agency[t.sourceType]) ?? sourceName(t.source);
+}
+
 /** Short trails show meters instead of a misleading "<0.1 mi". */
 export function displayMiles(miles: number | null) {
   if (miles === null) return "Distance unknown";
-  return miles < 0.1 ? `${Math.round((miles * 1609.344) / 5) * 5} m` : `${miles.toFixed(1)} mi`;
+  if (miles < 0.1) return `${Math.round((miles * 1609.344) / 5) * 5} m`;
+  return miles >= 100 ? `${Math.round(miles).toLocaleString("en-US")} mi` : `${miles.toFixed(1)} mi`;
 }

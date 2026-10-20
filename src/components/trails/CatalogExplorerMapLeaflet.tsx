@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { CatalogBounds, CatalogMapPoint, CatalogMapResult, CatalogTrail } from "@/lib/trail-catalog/types";
-import { displayMiles, sourceName } from "@/lib/trail-catalog/types";
+import { displayMiles, trailPlace } from "@/lib/trail-catalog/types";
 import { normalizeLongitude } from "@/lib/trail-catalog/map";
 import { CatalogPhotos } from "./CatalogPhotos";
 
@@ -396,7 +396,7 @@ export function CatalogExplorerMap({ initialData, query }: { initialData: Catalo
           <div className="catalog-selection-heading">
             <div>
               <h2 id="selected-trail-title" ref={selectedHeading} tabIndex={-1}>{selected.name}</h2>
-              <p>{selected.region} · {displayMiles(selected.miles)} · {sourceName(selected.source)}</p>
+              <p>{selected.region} · {displayMiles(selected.miles)} · {trailPlace(selected)}</p>
             </div>
             <button
               type="button"
