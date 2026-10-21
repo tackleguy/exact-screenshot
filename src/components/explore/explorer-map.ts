@@ -17,7 +17,28 @@ export const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
 export const DIFFICULTY_COLORS: Record<string, string> = { e: "#2f9e5b", m: "#2f7fd8", h: "#d8452f", x: "#1d1d1d" };
 export const DIFFICULTY_LABELS: Record<string, string> = { e: "Easy", m: "Moderate", h: "Hard", x: "Expert" };
 export const SELECTED_COLOR = "#ffc21a";
+export const THRU_HIKE_COLOR = "#d97706";
 const FONT = ["Americana-Bold"];
+
+/** Piste colours according to standard ski difficulty conventions */
+export const PISTE_COLORS: Record<string, string> = {
+  novice: "#22c55e",       // Green circle
+  easy: "#3b82f6",         // Blue square
+  intermediate: "#ef4444", // Red square
+  advanced: "#0f172a",     // Black diamond
+  expert: "#581c87",       // Double black
+  freeride: "#ea580c",     // Orange backcountry/freeride
+  nordic: "#06b6d4",       // Cyan nordic track
+};
+
+/** POI colors for outdoor navigation points */
+export const POI_COLORS: Record<string, string> = {
+  trailhead: "#10b981", // Emerald
+  water: "#0284c7",     // Sky blue
+  campsite: "#f59e0b",  // Amber
+  peak: "#8b5cf6",      // Violet / summit
+  parking: "#64748b",   // Slate
+};
 
 const difficultyColor: maplibregl.ExpressionSpecification = [
   "match", ["get", "d"],
@@ -25,6 +46,27 @@ const difficultyColor: maplibregl.ExpressionSpecification = [
   "h", DIFFICULTY_COLORS.h,
   "x", DIFFICULTY_COLORS.x,
   DIFFICULTY_COLORS.m,
+];
+
+const pisteDifficultyColor: maplibregl.ExpressionSpecification = [
+  "match", ["get", "pisteDifficulty"],
+  "novice", PISTE_COLORS.novice,
+  "easy", PISTE_COLORS.easy,
+  "intermediate", PISTE_COLORS.intermediate,
+  "advanced", PISTE_COLORS.advanced,
+  "expert", PISTE_COLORS.expert,
+  "freeride", PISTE_COLORS.freeride,
+  PISTE_COLORS.easy,
+];
+
+const poiColor: maplibregl.ExpressionSpecification = [
+  "match", ["get", "poiType"],
+  "trailhead", POI_COLORS.trailhead,
+  "water", POI_COLORS.water,
+  "campsite", POI_COLORS.campsite,
+  "peak", POI_COLORS.peak,
+  "parking", POI_COLORS.parking,
+  POI_COLORS.trailhead,
 ];
 
 /**
@@ -72,16 +114,79 @@ export async function explorerStyle(basemap: Basemap): Promise<maplibregl.StyleS
   try {
     return topoPaths(await loadOpenTrailMapStyle("trail"));
   } catch {
-    // OpenTrailMap is down: imagery still gives a usable map with Hyked trails on top.
     return rasterStyle("hybrid");
   }
 }
 
 export const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
+export interface OverlayData {
+  pins: GeoJSON.FeatureCollection;
+  grid: GeoJSON.FeatureCollection;
+  lines: GeoJSON.FeatureCollection;
+  selected: GeoJSON.FeatureCollection;
+  drive: GeoJSON.FeatureCollection;
+  route: GeoJSON.FeatureCollection;
+  thruHikes?: GeoJSON.FeatureCollection;
+  pistes?: GeoJSON.FeatureCollection;
+  lifts?: GeoJSON.FeatureCollection;
+  pois?: GeoJSON.FeatureCollection;
+}
+
 /** Hyked's own sources and layers; re-installed after every basemap switch. */
-export function installOverlay(map: maplibregl.Map, data: { pins: GeoJSON.FeatureCollection; grid: GeoJSON.FeatureCollection; lines: GeoJSON.FeatureCollection; selected: GeoJSON.FeatureCollection; drive: GeoJSON.FeatureCollection; route: GeoJSON.FeatureCollection }) {
+export function installOverlay(map: maplibregl.Map, data: OverlayData) {
   if (map.getSource("hy-pins")) return;
+
+  // 1. Long-Distance Through-Hike Corridors Layer
+  map.addSource("hy-thru-hikes", { type: "geojson", data: data.thruHikes ?? EMPTY });
+  map.addLayer({
+    id: "hy-thru-hikes-casing",
+    type: "line",
+    source: "hy-thru-hikes",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": "#451a03", "line-width": ["interpolate", ["linear"], ["zoom"], 4, 3, 10, 6, 14, 10], "line-opacity": 0.8 },
+  });
+  map.addLayer({
+    id: "hy-thru-hikes",
+    type: "line",
+    source: "hy-thru-hikes",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: { "line-color": THRU_HIKE_COLOR, "line-width": ["interpolate", ["linear"], ["zoom"], 4, 1.8, 10, 4, 14, 6] },
+  });
+  map.addLayer({
+    id: "hy-thru-hikes-label",
+    type: "symbol",
+    source: "hy-thru-hikes",
+    minzoom: 8,
+    layout: { "symbol-placement": "line", "text-field": ["get", "name"], "text-font": FONT, "text-size": 13, "symbol-spacing": 400 },
+    paint: { "text-color": "#451a03", "text-halo-color": "#fef3c7", "text-halo-width": 2 },
+  });
+
+  // 2. Ski Pistes & Aerial Lifts
+  map.addSource("hy-ski-pistes", { type: "geojson", data: data.pistes ?? EMPTY });
+  map.addLayer({
+    id: "hy-ski-pistes",
+    type: "line",
+    source: "hy-ski-pistes",
+    minzoom: 11,
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": pisteDifficultyColor,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 14, 4.5, 17, 7],
+      "line-opacity": 0.9,
+    },
+  });
+  map.addSource("hy-ski-lifts", { type: "geojson", data: data.lifts ?? EMPTY });
+  map.addLayer({
+    id: "hy-ski-lifts",
+    type: "line",
+    source: "hy-ski-lifts",
+    minzoom: 12,
+    layout: { "line-cap": "butt", "line-join": "round" },
+    paint: { "line-color": "#475569", "line-width": 2, "line-dasharray": [3, 2] },
+  });
+
+  // 3. Local Trails & Singletracks
   map.addSource("hy-lines", { type: "geojson", data: data.lines });
   map.addSource("hy-route", { type: "geojson", data: data.route });
   const routeColor = getComputedStyle(map.getContainer()).getPropertyValue("--accent").trim() || SELECTED_COLOR;
@@ -110,6 +215,7 @@ export function installOverlay(map: maplibregl.Map, data: { pins: GeoJSON.Featur
     paint: { "text-color": "#1d1a16", "text-halo-color": "#fffdf7", "text-halo-width": 1.8 },
   });
 
+  // 4. Clusters & Pins
   for (const source of ["hy-grid", "hy-pins"] as const) {
     const filter: maplibregl.FilterSpecification = source === "hy-pins" ? ["has", "point_count"] : ["has", "count"];
     const count: maplibregl.ExpressionSpecification = source === "hy-pins" ? ["get", "point_count"] : ["get", "count"];
@@ -143,6 +249,61 @@ export function installOverlay(map: maplibregl.Map, data: { pins: GeoJSON.Featur
     id: "hy-pin-selected", type: "circle", source: "hy-pins", filter: ["==", ["get", "id"], ""],
     paint: { "circle-color": SELECTED_COLOR, "circle-radius": 10, "circle-stroke-color": "#1a1405", "circle-stroke-width": 3 },
   });
+
+  // 5. Mountain POIs (Trailheads, Water Sources, Campsites, Summits, Parking)
+  map.addSource("hy-pois", { type: "geojson", data: data.pois ?? EMPTY });
+  map.addLayer({
+    id: "hy-pois-circle",
+    type: "circle",
+    source: "hy-pois",
+    minzoom: 11,
+    paint: {
+      "circle-color": poiColor,
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 4, 15, 7],
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 1.5,
+    },
+  });
+  map.addLayer({
+    id: "hy-pois-label",
+    type: "symbol",
+    source: "hy-pois",
+    minzoom: 12.5,
+    layout: {
+      "text-field": ["get", "name"],
+      "text-font": FONT,
+      "text-size": 11,
+      "text-offset": [0, 1.2],
+      "text-anchor": "top",
+    },
+    paint: {
+      "text-color": "#0f172a",
+      "text-halo-color": "#ffffff",
+      "text-halo-width": 1.5,
+    },
+  });
+}
+
+/** Toggles visibility for specific layer categories */
+export function setLayerGroupVisibility(
+  map: maplibregl.Map,
+  group: "thru-hikes" | "day-trails" | "ski" | "pois",
+  visible: boolean,
+) {
+  const layerMap: Record<string, string[]> = {
+    "thru-hikes": ["hy-thru-hikes-casing", "hy-thru-hikes", "hy-thru-hikes-label"],
+    "day-trails": ["hy-lines-casing", "hy-lines", "hy-lines-label", "hy-pin"],
+    ski: ["hy-ski-pistes", "hy-ski-lifts"],
+    pois: ["hy-pois-circle", "hy-pois-label"],
+  };
+
+  const layers = layerMap[group] ?? [];
+  const val = visible ? "visible" : "none";
+  for (const layerId of layers) {
+    if (map.getLayer(layerId)) {
+      map.setLayoutProperty(layerId, "visibility", val);
+    }
+  }
 }
 
 export function setSky(map: maplibregl.Map, on: boolean) {

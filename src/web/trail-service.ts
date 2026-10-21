@@ -13,6 +13,8 @@ import {
   getDetailedThruHikeLines,
   getSectionLine,
 } from "@/lib/trail-catalog/through-hikes-data";
+import { fetchLiveOsmTrails } from "@/lib/geo/overpass";
+import { snapPointToNearestLine, simplifyForZoom } from "@/lib/geo/snap";
 
 type Metadata = CatalogManifest & { directory: string; cells: string[] };
 type Lines = [number, number][][];
@@ -193,6 +195,87 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
   if (request.method !== "GET") return Response.json({ error: "This trail action is not supported." }, { status: 405 });
   try {
     const suffix = url.pathname.slice("/api/trail-catalog".length).split("/").filter(Boolean);
+    // Dedicated endpoint for All Long-Distance Through-Hike Geometries
+    if (suffix[0] === "thru-hikes") {
+      const features: GeoJSON.Feature[] = [];
+      for (const hike of DETAILED_THRU_HIKES) {
+        const lines = getDetailedThruHikeLines(hike.id);
+        if (lines && lines.length) {
+          features.push({
+            type: "Feature",
+            id: hike.id,
+            properties: {
+              id: hike.id,
+              name: hike.name,
+              shortName: hike.shortName,
+              miles: hike.officialMiles,
+              region: hike.region,
+              kind: "thru-hike",
+            },
+            geometry: {
+              type: "MultiLineString",
+              coordinates: lines,
+            },
+          });
+        }
+      }
+      return Response.json({ type: "FeatureCollection", features });
+    }
+
+    // Dedicated endpoint for Mountain POIs (Trailheads, Water, Campsites, Summits, Parking)
+    if (suffix[0] === "pois") {
+      const f = parseCatalogFilters(params);
+      const bbox = f.bbox;
+      if (!bbox) {
+        return Response.json({ type: "FeatureCollection", features: [] });
+      }
+      try {
+        const live = await fetchLiveOsmTrails([bbox[1], bbox[0], bbox[3], bbox[2]]);
+        const poiFeatures = live.features.filter((feat) => feat.geometry.type === "Point");
+        return Response.json({ type: "FeatureCollection", features: poiFeatures });
+      } catch {
+        return Response.json({ type: "FeatureCollection", features: [] });
+      }
+    }
+
+    // Dedicated Snap-to-Trail endpoint (Projects user click or GPS waypoint directly to trail vector geometry)
+    if (suffix[0] === "snap") {
+      const lat = Number(params.get("lat"));
+      const lng = Number(params.get("lng"));
+      const tolerance = Number(params.get("tolerance") ?? 50);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return Response.json({ error: "lat and lng query parameters required." }, { status: 400 });
+      }
+
+      const { rows } = await select(new URLSearchParams({ lat: String(lat), lng: String(lng), radiusKm: "15" }), fetcher);
+      const candidateLines: [number, number][][] = [];
+
+      for (const r of rows.slice(0, 20)) {
+        const d = await detail(r.id, fetcher);
+        if (d?.lines) candidateLines.push(...d.lines);
+      }
+
+      // Also include detailed thru-hikes if nearby
+      for (const hike of DETAILED_THRU_HIKES) {
+        const lines = getDetailedThruHikeLines(hike.id);
+        if (lines) candidateLines.push(...lines);
+      }
+
+      const snapped = snapPointToNearestLine([lng, lat], candidateLines, tolerance);
+      if (snapped) {
+        return Response.json(snapped);
+      }
+
+      return Response.json({
+        snapped: [lng, lat],
+        distanceMeters: Infinity,
+        alongMeters: 0,
+        segmentIndex: -1,
+        original: [lng, lat],
+        isSnapped: false,
+      });
+    }
+
     if (!suffix.length || ["points", "lines", "map"].includes(suffix[0])) {
       const zoom = Number(params.get("zoom") ?? 11);
       if (["points", "lines"].includes(suffix[0]) && !localTrailsVisible(zoom)) {
@@ -203,28 +286,61 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       const bbox = f.bbox;
       const local = bbox ? { ...f, lat: (bbox[1] + bbox[3]) / 2, lng: (bbox[0] + bbox[2]) / 2, radiusKm: 1000 } : f;
       const result = filterCatalog(rows, { ...local, limit: suffix.length ? MAP_TRAIL_LIMIT : f.limit ?? TRAIL_CARD_LIMIT, uniqueNames: true });
+
       if (suffix[0] === "points") {
+        let trails: (string | number | null)[][] = result.trails.map((t) => [
+          t.id,
+          t.name,
+          t.longitude,
+          t.latitude,
+          t.miles,
+          { easy: "e", moderate: "m", hard: "h", expert: "x" }[
+            resolveDifficulty({ reported: t.difficulty, miles: t.miles, name: t.name }).difficulty
+          ],
+          t.park ?? t.forest ?? t.region,
+          t.routeType ?? null,
+        ]);
+
+        // Coverage expansion: If local catalog yields sparse results in this viewport (< 5 trails) and bbox is active,
+        // stream real OpenStreetMap data dynamically via live Overpass API!
+        if (trails.length < 5 && bbox && Math.abs(bbox[2] - bbox[0]) < 12 && Math.abs(bbox[3] - bbox[1]) < 10) {
+          try {
+            const live = await fetchLiveOsmTrails([bbox[1], bbox[0], bbox[3], bbox[2]]);
+            for (const feat of live.features) {
+              if (feat.geometry.type === "Point") continue;
+              const p = feat.properties;
+              const coords = feat.geometry.type === "LineString" ? feat.geometry.coordinates : feat.geometry.coordinates[0];
+              const mid = coords ? coords[Math.floor(coords.length / 2)] : null;
+              if (!mid) continue;
+              const lenMiles = Math.round((feat.geometry.type === "LineString" ? coords.length * 0.04 : 4.5) * 10) / 10;
+              trails.push([
+                p.id,
+                p.name,
+                mid[0],
+                mid[1],
+                lenMiles,
+                p.sacScale?.includes("T1") ? "e" : p.sacScale?.includes("T2") ? "m" : p.sacScale?.includes("T3") ? "h" : "m",
+                p.kind === "piste" ? "Ski Piste" : p.surface ? `OSM · ${p.surface}` : "OpenStreetMap",
+                "point-to-point",
+              ]);
+            }
+          } catch {
+            // Live OSM Overpass query failed or timed out; continue with local catalog
+          }
+        }
+
         return Response.json({
-          total: result.total,
+          total: trails.length,
           clusters: [],
-          trails: result.trails.map((t) => [
-            t.id,
-            t.name,
-            t.longitude,
-            t.latitude,
-            t.miles,
-            { easy: "e", moderate: "m", hard: "h", expert: "x" }[
-              resolveDifficulty({ reported: t.difficulty, miles: t.miles, name: t.name }).difficulty
-            ],
-            t.park ?? t.forest ?? t.region,
-            t.routeType ?? null,
-          ]),
+          trails: trails.slice(0, MAP_TRAIL_LIMIT),
         });
       }
+
       if (suffix[0] === "lines") {
-        const features = await Promise.all(
+        let features = await Promise.all(
           result.trails.map(async (t) => {
             const d = await detail(t.id, fetcher);
+            const simplified = (d?.lines ?? []).map((line) => simplifyForZoom(line as [number, number][], zoom));
             return {
               type: "Feature",
               id: t.id,
@@ -235,12 +351,39 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
                   resolveDifficulty({ reported: t.difficulty, miles: t.miles, name: t.name }).difficulty
                 ],
               },
-              geometry: { type: "MultiLineString", coordinates: d?.lines ?? [] },
+              geometry: { type: "MultiLineString", coordinates: simplified },
             };
           }),
         );
-        return Response.json({ type: "FeatureCollection", features });
+
+        // Fallback coverage: stream live OSM lines if local geometry is sparse in viewport
+        if (features.length < 5 && bbox && Math.abs(bbox[2] - bbox[0]) < 6 && Math.abs(bbox[3] - bbox[1]) < 5) {
+          try {
+            const live = await fetchLiveOsmTrails([bbox[1], bbox[0], bbox[3], bbox[2]]);
+            for (const feat of live.features) {
+              if (feat.geometry.type === "Point") continue;
+              const p = feat.properties;
+              features.push({
+                type: "Feature",
+                id: p.id,
+                properties: {
+                  id: p.id,
+                  name: p.name,
+                  d: p.pisteDifficulty ? (p.pisteDifficulty === "novice" ? "e" : p.pisteDifficulty === "expert" ? "x" : "m") : "m",
+                  sacScale: p.sacScale,
+                  surface: p.surface,
+                },
+                geometry: feat.geometry,
+              } as unknown as { type: "Feature"; id: string; properties: { id: string; name: string; d: string }; geometry: { type: "MultiLineString"; coordinates: [number, number][][] } });
+            }
+          } catch {
+            // Fallback continues with local features
+          }
+        }
+
+        return Response.json({ type: "FeatureCollection", features: features.slice(0, MAP_TRAIL_LIMIT) });
       }
+
       if (suffix[0] === "map") return Response.json(buildCatalogMap(result.trails));
       return Response.json({ ...result, manifest });
     }

@@ -15,7 +15,18 @@ import { SectionIcon } from "./SectionIcon";
 import { ConnectedTrails } from "./ConnectedTrails";
 import type { Point } from "@/lib/trail-catalog/quality";
 import { NearbyTrails } from "./NearbyTrails";
-import { DIFFICULTY_COLORS, DIFFICULTY_LABELS, EMPTY, explorerStyle, installOverlay, setSky, type Basemap } from "./explorer-map";
+import {
+  DIFFICULTY_COLORS,
+  DIFFICULTY_LABELS,
+  EMPTY,
+  explorerStyle,
+  installOverlay,
+  setSky,
+  setLayerGroupVisibility,
+  type Basemap,
+  type OverlayData,
+} from "./explorer-map";
+import { snapPointToNearestLine } from "@/lib/geo/snap";
 import "./explorer.css";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -90,13 +101,30 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const railRef = useRef<HTMLDivElement>(null);
-  const sourcesRef = useRef({ pins: EMPTY, grid: EMPTY, lines: EMPTY, selected: EMPTY, drive: EMPTY, route: EMPTY });
+  const sourcesRef = useRef<OverlayData>({
+    pins: EMPTY,
+    grid: EMPTY,
+    lines: EMPTY,
+    selected: EMPTY,
+    drive: EMPTY,
+    route: EMPTY,
+    thruHikes: EMPTY,
+    pistes: EMPTY,
+    lifts: EMPTY,
+    pois: EMPTY,
+  });
   const fetchAbort = useRef<AbortController | null>(null);
   const hovered = useRef<number | string | null>(null);
 
   const [filters, setFilters] = useState<Filters>({ activity: initial.activity, difficulty: [], length: "", routeType: "" });
   const filtersRef = useRef(filters);
   const [basemap, setBasemap] = useState<Basemap>("topo");
+  const [layers, setLayers] = useState({
+    thruHikes: true,
+    dayTrails: true,
+    ski: initial.activity === "ski",
+    pois: true,
+  });
   const [is3d, setIs3d] = useState(false);
   const [bearing, setBearing] = useState(0);
   const [ready, setReady] = useState(false);
@@ -183,11 +211,39 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     collectExtras();
   }, [collectExtras]);
 
-  const setSource = useCallback((key: keyof typeof sourcesRef.current, data: GeoJSON.FeatureCollection) => {
+  const setSource = useCallback((key: keyof OverlayData, data: GeoJSON.FeatureCollection) => {
     sourcesRef.current[key] = data;
-    const source = mapRef.current?.getSource(`hy-${key}`) as maplibregl.GeoJSONSource | undefined;
+    const idMap: Record<keyof OverlayData, string> = {
+      pins: "hy-pins",
+      grid: "hy-grid",
+      lines: "hy-lines",
+      selected: "hy-selected",
+      drive: "hy-drive",
+      route: "hy-route",
+      thruHikes: "hy-thru-hikes",
+      pistes: "hy-ski-pistes",
+      lifts: "hy-ski-lifts",
+      pois: "hy-pois",
+    };
+    const source = mapRef.current?.getSource(idMap[key]) as maplibregl.GeoJSONSource | undefined;
     source?.setData(data);
   }, []);
+
+  // Sync layer visibility state with MapLibre layers
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    setLayerGroupVisibility(map, "thru-hikes", layers.thruHikes);
+    setLayerGroupVisibility(map, "day-trails", layers.dayTrails);
+    setLayerGroupVisibility(map, "ski", layers.ski);
+    setLayerGroupVisibility(map, "pois", layers.pois);
+  }, [layers, ready]);
+
+  useEffect(() => {
+    if (filters.activity === "ski") {
+      setLayers((prev) => ({ ...prev, ski: true }));
+    }
+  }, [filters.activity]);
 
   const showConnectedRoute = useCallback((points: Point[]) => {
     setSource("route", { type: "FeatureCollection", features: points.length ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: points } }] : [] });
@@ -198,9 +254,18 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     const map = mapRef.current;
     if (!map) return;
     fetchAbort.current?.abort();
+
+    // Stream Long-Distance Through-Hikes once
+    if ((sourcesRef.current.thruHikes?.features.length ?? 0) === 0) {
+      void fetch("/api/trail-catalog/thru-hikes")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((fc) => { if (fc) setSource("thruHikes", fc); })
+        .catch(() => undefined);
+    }
+
     if (!localTrailsVisible(map.getZoom())) {
       setPoints({ trails: [], clusters: [], total: 0 });
-      setSource("pins", EMPTY); setSource("grid", EMPTY); setSource("lines", EMPTY); setSource("selected", EMPTY); setSource("drive", EMPTY);
+      setSource("pins", EMPTY); setSource("grid", EMPTY); setSource("lines", EMPTY); setSource("selected", EMPTY); setSource("drive", EMPTY); setSource("pois", EMPTY);
       setLoading(false); setLoadError(null);
       return;
     }
@@ -241,8 +306,17 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error("lines"))))
         .then((data: GeoJSON.FeatureCollection) => { if (!signal.aborted) setSource("lines", { ...data, features: data.features.slice(0, MAP_TRAIL_LIMIT) }); })
         .catch(() => undefined);
+
+      // Stream Mountain POIs (Trailheads, Water, Camps, Summits)
+      const poiParams = new URLSearchParams();
+      poiParams.set("bbox", [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(4)).join(","));
+      void fetch(`/api/trail-catalog/pois?${poiParams}`, { signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((fc) => { if (fc && !signal.aborted) setSource("pois", fc); })
+        .catch(() => undefined);
     } else {
       setSource("lines", EMPTY);
+      setSource("pois", EMPTY);
     }
   }, [setSource]);
 
@@ -287,17 +361,44 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       const select = (id: string) => setSelectedId(id);
       map.on("click", "hy-pin", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
       map.on("click", "hy-lines", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
-      const tappedOwn = (e: maplibregl.MapMouseEvent) => map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-ski-hit", "hy-ski-pin"].filter((l) => map.getLayer(l)) }).length > 0;
+      map.on("click", "hy-thru-hikes", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
+      map.on("click", "hy-pois-circle", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
+      map.on("click", "hy-ski-pistes", (e) => { const f = e.features?.[0]; if (f) openSkiRef.current(f); });
+      const tappedOwn = (e: maplibregl.MapMouseEvent) => map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-thru-hikes", "hy-ski-pistes", "hy-pois-circle", "hy-ski-hit", "hy-ski-pin"].filter((l) => map.getLayer(l)) }).length > 0;
       map.on("click", "hy-osm-hit", (e) => {
         if (tappedOwn(e)) return;
         const f = e.features?.[0]; if (!f || !featureKey(f)) return;
         const t = buildFromTiles(map, f); saveOsmTrail(t); routerRef.current.push(osmTrailHref(t));
       });
       map.on("click", "hy-ski-hit", (e) => {
-        if (map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines"] }).length) return;
+        if (map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-thru-hikes"] }).length) return;
         const f = e.features?.[0]; if (f) openSkiRef.current(f);
       });
       map.on("click", "hy-ski-pin", (e) => { const s = e.features?.[0]?.properties?.slug; if (s) routerRef.current.push(`/ski-areas/${s}`); });
+
+      // Precision Map-Snapping on click: snap to closest vector segment if clicked near a trail
+      map.on("click", (e) => {
+        if (tappedOwn(e)) return;
+        if (map.getZoom() >= 12) {
+          const renderedLines = map.queryRenderedFeatures({
+            layers: ["hy-lines", "hy-thru-hikes"].filter((l) => map.getLayer(l)),
+          });
+          const candidateLines: [number, number][][] = [];
+          for (const feat of renderedLines) {
+            const geom = feat.geometry;
+            if (geom.type === "LineString") candidateLines.push(geom.coordinates as [number, number][]);
+            else if (geom.type === "MultiLineString") candidateLines.push(...(geom.coordinates as [number, number][][]));
+          }
+          if (candidateLines.length > 0) {
+            const snapped = snapPointToNearestLine([e.lngLat.lng, e.lngLat.lat], candidateLines, 45);
+            if (snapped && snapped.isSnapped) {
+              const matchedFeature = renderedLines[snapped.lineIndex];
+              const id = matchedFeature?.properties?.id;
+              if (id) select(String(id));
+            }
+          }
+        }
+      });
       map.on("sourcedata", (e) => { if (e.sourceId === "trails" && e.isSourceLoaded) collectExtras(); });
       map.on("click", "hy-pins-cluster", async (e) => {
         const f = e.features?.[0];
@@ -311,7 +412,18 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         const [w, s, ea, n] = raw.split(",").map(Number);
         if ([w, s, ea, n].every(Number.isFinite)) map.fitBounds([[w, s], [ea, n]], { padding: 60, maxZoom: 11, duration: 600 });
       });
-      for (const layer of ["hy-pin", "hy-lines", "hy-pins-cluster", "hy-grid-cluster", "hy-osm-hit", "hy-ski-hit", "hy-ski-pin"]) {
+      for (const layer of [
+        "hy-pin",
+        "hy-lines",
+        "hy-thru-hikes",
+        "hy-ski-pistes",
+        "hy-pois-circle",
+        "hy-pins-cluster",
+        "hy-grid-cluster",
+        "hy-osm-hit",
+        "hy-ski-hit",
+        "hy-ski-pin",
+      ]) {
         map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
       }
@@ -680,13 +792,38 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 13 9 5 9-5" /></svg>
           </button>
           {open === "layers" && (
-            <div className="hx-pop hx-pop--left hx-layers">
+            <div className="hx-pop hx-pop--left hx-layers" style={{ minWidth: "260px" }}>
+              <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--plan-muted, #94a3b8)", marginBottom: "6px", letterSpacing: "0.5px" }}>Basemap</div>
               {([["topo", "Topo", "Contours, hillshade and every mapped path"], ["satellite", "Satellite", "Aerial imagery"], ["hybrid", "Hybrid", "Imagery with roads and place names"]] as const).map(([key, label, hint]) => (
-                <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} onClick={() => { setBasemap(key); setOpen(null); }}>
+                <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} onClick={() => { setBasemap(key); }}>
                   <span className="hx-layer-swatch" aria-hidden="true" />
                   <span><strong>{label}</strong><small>{hint}</small></span>
                 </button>
               ))}
+
+              <div style={{ borderTop: "1px solid var(--plan-line, rgba(255,255,255,0.1))", margin: "10px 0", paddingTop: "8px" }}>
+                <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--plan-muted, #94a3b8)", marginBottom: "6px", letterSpacing: "0.5px" }}>Active Layers</div>
+                
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", cursor: "pointer", fontSize: "13px" }}>
+                  <input type="checkbox" checked={layers.thruHikes} onChange={(e) => setLayers((l) => ({ ...l, thruHikes: e.target.checked }))} />
+                  <span>🥾 Long-Distance Thru-Hikes</span>
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", cursor: "pointer", fontSize: "13px" }}>
+                  <input type="checkbox" checked={layers.dayTrails} onChange={(e) => setLayers((l) => ({ ...l, dayTrails: e.target.checked }))} />
+                  <span>🌲 Day Trails & Singletracks</span>
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", cursor: "pointer", fontSize: "13px" }}>
+                  <input type="checkbox" checked={layers.ski} onChange={(e) => setLayers((l) => ({ ...l, ski: e.target.checked }))} />
+                  <span>⛷️ Ski Pistes & Aerial Lifts</span>
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", cursor: "pointer", fontSize: "13px" }}>
+                  <input type="checkbox" checked={layers.pois} onChange={(e) => setLayers((l) => ({ ...l, pois: e.target.checked }))} />
+                  <span>📍 POIs (Trailheads, Water, Camps)</span>
+                </label>
+              </div>
             </div>
           )}
         </div>
