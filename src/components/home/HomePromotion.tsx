@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, Backpack, Map, Route } from "lucide-react";
-import { HomeSearch } from "./HomeSearch";
+import { ArrowUpRight, Backpack, Map, Route, Search } from "lucide-react";
 import discovery from "@/assets/trail-discovery.jpg";
 
 const photo = typeof discovery === "string" ? discovery : discovery.src;
@@ -19,7 +18,7 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
         <h1>Hyked</h1>
         <p className="discovery-headline">Your next great day<br />starts on a trail.</p>
         <p className="discovery-intro">Find your kind of outside. Discover real trails, plan the journey, and bring just what you need.</p>
-        <HomeSearch />
+        <form action="/explore/trails/catalog" className="discovery-search" role="search"><Search size={20} aria-hidden /><label htmlFor="discovery-query" className="sr-only">Search trails</label><input id="discovery-query" name="q" type="search" placeholder="Find a trail or your next escape" /><button type="submit" className="btn-primary" aria-label="Search trails"><ArrowUpRight size={22} aria-hidden /></button></form>
         <Link href="/explore/trails" className="discovery-map-link">Explore the map <ArrowUpRight size={17} aria-hidden /></Link>
       </div>
       <span className="discovery-photo-caption">More fresh air. Less guesswork.</span>

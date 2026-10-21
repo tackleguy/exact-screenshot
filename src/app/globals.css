@@ -488,6 +488,11 @@ html { scroll-padding-block:20px 100px; }
 .discovery-hero .site-search-field input { color: var(--hero-search-ink); font-size: 15px; }
 .discovery-hero .site-search-field input::placeholder { color: var(--hero-search-ink); opacity: .75; }
 .discovery-hero .site-search-results { color: var(--foreground); }
+.discovery-search { display: flex; align-items: center; gap: 12px; max-width: 550px; margin-inline: auto; padding: 6px 6px 6px 20px; border-radius: 30px; background: var(--hero-search); color: var(--hero-search-ink); box-shadow: var(--overlay-shadow); }
+.discovery-search > svg { flex-shrink: 0; }
+.discovery-search input { width: 100%; min-width: 0; min-height: 44px; background: transparent; color: var(--hero-search-ink); font-size: 14px; }
+.discovery-search input::placeholder { color: var(--hero-search-ink); opacity: .75; }
+.discovery-search .btn-primary { width: 44px; height: 44px; padding: 0; border-radius: 50%; flex-shrink: 0; }
 .discovery-map-link { display: inline-flex; align-items: center; gap: 8px; color: var(--hero-foreground); font-size: 14px; margin-top: 22px; min-height: 40px; }
 .discovery-map-link:hover { text-decoration: underline; }
 .discovery-photo-caption { position: absolute; bottom: 20px; right: 24px; color: var(--hero-muted); font-size: 11px; }
