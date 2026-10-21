@@ -9,6 +9,7 @@
     "dev": "next dev",
     "prebuild": "node scripts/prepare-map-assets.mjs",
     "build": "next build",
+    "build:dev": "bun run build",
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "tsx scripts/apply-migrations.ts",
