@@ -6,6 +6,7 @@ import { AppShell } from "@/components/nav/AppShell";
 import { DeployBanner } from "@/components/nav/DeployBanner";
 import { HomePromotion } from "@/components/home/HomePromotion";
 import { TrailExplorer } from "@/components/explore/TrailExplorer";
+import { OsmTrailPage } from "@/components/trails/OsmTrailPage";
 import { CatalogTrailDetail } from "@/components/trails/CatalogTrailDetail";
 import { CatalogPresentation, type CatalogResult } from "./CatalogPresentation";
 import { CommunityTrails } from "./CommunityTrails";
@@ -64,6 +65,7 @@ function TrailCatalogPage() {
   const { search } = useLocation();
   return new URLSearchParams(search).get("collection") === "community" ? <CommunityTrails /> : <Catalog />;
 }
+function OsmTrailRoute() { const { id } = useParams(); return <OsmTrailPage key={id} id={id ?? ""} />; }
 function TrailDetail() {
   const { id } = useParams();
   const [state, setState] = useState<{ trail?: CatalogTrail; lines?: [number, number][][]; manifest?: CatalogManifest; error?: string }>({});
@@ -123,7 +125,7 @@ function BackendPage() { const location = useLocation(); return <Status title="T
 function App() {
   return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><AppShell notice={<DeployBanner />}><Routes>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<Navigate to="/explore/trails" replace />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
-    <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
+    <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
     <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
