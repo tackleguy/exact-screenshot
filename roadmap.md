@@ -1,4 +1,6 @@
 # Lovable publishing and simpler discovery
+- [ ] Wire Explore and Map to a working real trail service, including names, nearby trails, and directions.
+- [ ] Limit displayed trails and load local trail details only when zoomed in; test these visibility rules.
 - [x] Configure build/build:dev to emit the Vite website into dist while preserving the Next.js API server build.
 - [x] Verify reused home, gear add/reload, planning, login, map loading, and mobile layout; API URL regression tests passed.
 - [ ] Connect live trail services and verify catalog, nearby directions, and downloads — blocked on the separately hosted API's real HTTPS URL.

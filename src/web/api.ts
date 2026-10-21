@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { apiTarget } from "./api-target";
+import { isTrailServicePath, trailService } from "./trail-service";
 export const apiOrigin = (import.meta.env.VITE_HYKED_API_URL ?? "").replace(/\/+$/, "");
 async function accountActivities(request: Request): Promise<Response> {
   const client = createClient();
@@ -26,6 +27,7 @@ export function installApiBridge() {
     if (target === null) return original(input, init);
     const request = new Request(input instanceof Request ? input : new URL(url, window.location.origin), init);
     if (new URL(request.url).pathname === "/api/activities") return accountActivities(request);
+    if (!target && isTrailServicePath(new URL(request.url).pathname)) return trailService(request, original);
     if (!target) return Response.json({ error: "Live trail services are not connected yet." }, { status: 503 });
     const headers = new Headers(request.headers);
     return original(new Request(target, request), { headers });
@@ -36,6 +38,15 @@ export function installApiBridge() {
     if (!anchor) return;
     const target = apiTarget(anchor.href, window.location.origin, apiOrigin);
     if (target) anchor.href = target;
+    else if (target === "" && isTrailServicePath(new URL(anchor.href).pathname)) {
+      event.preventDefault();
+      void trailService(new Request(anchor.href), original).then(async response => {
+        if (!response.ok) { const data = await response.json(); window.alert(data.error); return; }
+        const url = URL.createObjectURL(await response.blob());
+        const download = document.createElement("a"); download.href = url; download.download = "trail.gpx"; download.click();
+        setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      });
+    }
     else if (target === "") { event.preventDefault(); window.alert("Live trail services are not connected yet."); }
   }, true);
 }

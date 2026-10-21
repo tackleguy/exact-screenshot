@@ -1,5 +1,6 @@
 import type * as maplibregl from "maplibre-gl";
 import { loadOpenTrailMapStyle } from "@/lib/opentrailmap";
+import { TRAIL_DETAIL_ZOOM } from "@/lib/trail-catalog/discovery";
 
 export type Basemap = "topo" | "satellite" | "hybrid";
 
@@ -38,7 +39,7 @@ function topoPaths(style: maplibregl.StyleSpecification): maplibregl.StyleSpecif
     const informal = /informal|disallowed/.test(layer.id);
     return [{
       ...layer,
-      minzoom: 11,
+      minzoom: TRAIL_DETAIL_ZOOM,
       paint: {
         "line-color": "#8c4a32",
         "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.7, 14, 1.4, 18, 3],
@@ -92,7 +93,7 @@ export function installOverlay(map: maplibregl.Map, data: { pins: GeoJSON.Featur
 
   map.addLayer({ id: "hy-lines-casing", type: "line", source: "hy-lines", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#14110f", "line-opacity": 0.55, "line-width": ["interpolate", ["linear"], ["zoom"], 9, 3, 13, 6, 17, 10] } });
   map.addLayer({
-    id: "hy-lines", type: "line", source: "hy-lines", layout: { "line-cap": "round", "line-join": "round" },
+    id: "hy-lines", type: "line", source: "hy-lines", minzoom: TRAIL_DETAIL_ZOOM, layout: { "line-cap": "round", "line-join": "round" },
     paint: {
       "line-color": difficultyColor,
       "line-width": ["interpolate", ["linear"], ["zoom"], 9, ["case", ["boolean", ["feature-state", "hover"], false], 3, 1.6], 13, ["case", ["boolean", ["feature-state", "hover"], false], 5.5, 3.5], 17, 7],
@@ -126,7 +127,7 @@ export function installOverlay(map: maplibregl.Map, data: { pins: GeoJSON.Featur
     });
   }
   map.addLayer({
-    id: "hy-pin", type: "circle", source: "hy-pins", filter: ["!", ["has", "point_count"]],
+    id: "hy-pin", type: "circle", source: "hy-pins", minzoom: TRAIL_DETAIL_ZOOM, filter: ["!", ["has", "point_count"]],
     paint: {
       "circle-color": difficultyColor,
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 5, 10, 7, 14, 6],
