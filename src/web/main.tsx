@@ -14,6 +14,8 @@ import { LocalGear } from "@/components/gear/LocalGear";
 import { TripPlanner } from "@/components/assistant/TripPlanner";
 import { TrailDatabase } from "@/components/pack-trails/TrailDatabase";
 import { SkiMapClient } from "@/components/ski/SkiMapClient";
+import { SkiAreasPage } from "@/components/ski/SkiAreasPage";
+import { SkiAreaDetailPage } from "@/components/ski/SkiAreaDetailPage";
 import { GpsRecorder } from "@/components/gps/GpsRecorder";
 import { ActivityListRow } from "@/components/activities/ActivityListRow";
 import { ActivityStats } from "@/components/activities/ActivityStats";
@@ -99,6 +101,7 @@ function Planner() {
   return <TripPlanner context={context} initialRegion={params.get("region") ?? ""} initialPrompt={params.get("prompt") ?? ""} />;
 }
 function SavedTrails() { const { user } = useAccount(); return user ? <div className="fieldbook-page"><TrailDatabase userId={user.id} /></div> : null; }
+function SkiAreaDetail() { const { slug } = useParams(); return <SkiAreaDetailPage slug={slug ?? ""} />; }
 function Recorder() { const { search } = useLocation(); const params = new URLSearchParams(search); const type = params.get("type"); const activity: ActivityType = type === "run" || type === "bike" || type === "ski" ? type : "hike"; return <GpsRecorder activityType={activity} title={`${activity.charAt(0).toUpperCase()}${activity.slice(1)}`} trailId={params.get("trail_id") ?? undefined} skiAreaId={params.get("resort_id") ?? undefined} skiAreaName={params.get("resort_name") ?? undefined} autoStart={Boolean(params.get("trail_id") || params.get("resort_id"))} />; }
 function ActivityFeed({ profile = false }: { profile?: boolean }) {
   const { user } = useAccount(); const [activities, setActivities] = useState<Activity[]>([]); const [error, setError] = useState("");
@@ -120,7 +123,7 @@ function BackendPage() { const location = useLocation(); return <Status title="T
 function App() {
   return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><AppShell notice={<DeployBanner />}><Routes>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<Navigate to="/explore/trails" replace />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
-    <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} />
+    <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
     <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
