@@ -278,6 +278,72 @@ export type Database = {
         }
         Relationships: []
       }
+      ski_areas: {
+        Row: {
+          bounds: Json | null
+          country: string
+          country_name: string
+          counts: Json
+          created_at: string
+          elevation_max_ft: number | null
+          elevation_min_ft: number | null
+          file: string | null
+          id: string
+          latitude: number
+          lifts: number
+          locality: string
+          longitude: number
+          name: string
+          notes: string | null
+          region: string
+          ski_types: string[]
+          slug: string
+          website: string | null
+        }
+        Insert: {
+          bounds?: Json | null
+          country?: string
+          country_name?: string
+          counts?: Json
+          created_at?: string
+          elevation_max_ft?: number | null
+          elevation_min_ft?: number | null
+          file?: string | null
+          id: string
+          latitude: number
+          lifts?: number
+          locality?: string
+          longitude: number
+          name: string
+          notes?: string | null
+          region?: string
+          ski_types?: string[]
+          slug: string
+          website?: string | null
+        }
+        Update: {
+          bounds?: Json | null
+          country?: string
+          country_name?: string
+          counts?: Json
+          created_at?: string
+          elevation_max_ft?: number | null
+          elevation_min_ft?: number | null
+          file?: string | null
+          id?: string
+          latitude?: number
+          lifts?: number
+          locality?: string
+          longitude?: number
+          name?: string
+          notes?: string | null
+          region?: string
+          ski_types?: string[]
+          slug?: string
+          website?: string | null
+        }
+        Relationships: []
+      }
       trip_journal: {
         Row: {
           avg_day_temp_f: number | null
