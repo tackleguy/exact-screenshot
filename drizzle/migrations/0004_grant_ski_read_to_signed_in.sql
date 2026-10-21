@@ -1,0 +1,1 @@
+GRANT SELECT ON public.ski_areas TO authenticated; GRANT SELECT ON public.ski_area_details TO authenticated;

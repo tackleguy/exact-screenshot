@@ -29,6 +29,13 @@
       "when": 1792559531820,
       "tag": "0003_tighten_read_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792566656424,
+      "tag": "0004_grant_ski_read_to_signed_in",
+      "breakpoints": true
     }
   ]
 }
