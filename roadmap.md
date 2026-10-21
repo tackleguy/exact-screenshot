@@ -12,6 +12,6 @@
 - [x] Declutter desktop and mobile navigation, discovery, and map controls while retaining existing tools.
 - [x] Preserve honest source-based labels and add nearby trail and trailhead directions; naming tests and desktop selection flow passed, mobile layout checked without horizontal overflow.
 - [ ] Finish nearby essential directions and on-map driving routes — waiting on the separately hosted API's real HTTPS URL.
-- [ ] Ski areas tabs/map, every map line tappable (OSM trail pages), verify all flows work
+- [x] Ski areas tabs/map, every map line tappable (OSM trail pages), verify all flows work
 - [ ] Polish UI, improve Gear page, AllTrails-style trail view page; test before finishing
 - [ ] Maximize US trail coverage, then add international trails
