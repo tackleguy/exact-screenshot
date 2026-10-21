@@ -1,10 +1,9 @@
-import { describe, expect, it } from "vitest";
+import test from "node:test";
+import assert from "node:assert/strict";
 import { osmDifficulty, osmSections } from "./osm-trail";
 
-describe("OSM trail classification", () => {
-  it("mtb:scale:imba 3 is difficult", () => expect(osmDifficulty({ "mtb:scale:imba": 3 })).toBe("difficult"));
-  it("unknown difficulty stays blank", () => expect(osmDifficulty({ highway: "path" })).toBeNull());
-  it("foot=no is not hike & walk", () => expect(osmSections({ foot: "no" })).not.toContain("foot"));
-  it("horse=designated is horseback", () => expect(osmSections({ horse: "designated" })).toContain("horse"));
-  it("bicycle on dirt is bike", () => expect(osmSections({ bicycle: "yes", surface: "dirt" })).toContain("bike"));
-});
+test("mtb:scale:imba 3 is difficult", () => assert.equal(osmDifficulty({ "mtb:scale:imba": 3 }), "difficult"));
+test("unknown difficulty stays blank", () => assert.equal(osmDifficulty({ highway: "path" }), null));
+test("foot=no is not hike & walk", () => assert.ok(!osmSections({ foot: "no" }).includes("foot")));
+test("horse=designated is horseback", () => assert.ok(osmSections({ horse: "designated" }).includes("horse")));
+test("bicycle on dirt is bike", () => assert.ok(osmSections({ bicycle: "yes", surface: "dirt" }).includes("bike")));
