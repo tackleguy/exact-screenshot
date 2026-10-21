@@ -345,3 +345,39 @@ test("resort season notes become short labels", () => {
   assert.equal(resortSeasonLabel("current (fetched 2026)"), "2026 summer listing");
   assert.equal(resortSeasonLabel("current summer (page undated)"), "undated page");
 });
+
+import { winterVerdict } from "./winter-audit";
+test("second winter pass: lift lines, USFS snow routes and winter names leave hiking; summer trails stay", () => {
+  const empty = new PisteIndex([]);
+  const line = north(0, 1500);
+  assert.equal(winterVerdict({ name: "CHAIR LIFT" }, line, empty, empty, null)?.use, "downhill");
+  assert.equal(winterVerdict({ name: "2730-240 SPUR SNOW" }, line, empty, empty, null)?.use, "oversnow");
+  assert.equal(winterVerdict({ name: "Snow Lake Trail" }, line, empty, empty, null), null, "place names with Snow stay");
+  const snow = new LineIndex();
+  snow.add(line, "usfs-snow-1");
+  assert.equal(winterVerdict({ name: "Ridge Road" }, line, empty, empty, snow)?.use, "oversnow");
+  assert.equal(winterVerdict({ name: "Ridge Trail", sources: [{ type: "USFS_OFFICIAL", id: "1", url: "", name: "Ridge Trail" }] }, line, empty, empty, snow), null, "a USFS hiking record keeps it hikeable");
+  const row = { ...base, name: "Ridge Road", miles: 1, winterUse: "oversnow" as const };
+  assert.equal(filterCatalog([row], {}).total, 0);
+  assert.equal(filterCatalog([row], { activity: "ski" }).total, 1);
+});
+
+import { trailActivities, sectionOf } from "./activity";
+test("sections: official uses add biking and horses without removing hiking; surfaces split mountain from path biking", () => {
+  const shared = { ...base, name: "Ridge Trail", miles: 4, uses: ["Hiking", "Bikes", "Horses"] };
+  assert.deepEqual(trailActivities(shared).filter((a) => ["hike", "bike", "mtb", "horse"].includes(a)).sort(), ["bike", "hike", "horse", "mtb"]);
+  // Bikes allowed, hikers not recorded either way: still a hike.
+  assert.ok(trailActivities({ ...base, name: "Ridge Trail", miles: 4, uses: ["Bikes"] }).includes("hike"));
+  const railTrail = { ...base, name: "Old Mill Rail Trail", miles: 6, surface: "Crushed stone" };
+  assert.ok(trailActivities(railTrail).includes("path-bike"));
+  assert.ok(!trailActivities(railTrail).includes("mtb"));
+  const boardwalk = { ...base, name: "Bobcat Boardwalk", miles: 0.6 };
+  assert.ok(trailActivities(boardwalk).includes("walk"));
+  assert.ok(!trailActivities({ ...base, name: "Summit Ridge Trail", miles: 6 }).includes("walk"));
+  // USGS says no hikers: out of foot sections, still listed for its allowed uses.
+  const noHikers = { ...base, name: "Pine Loop", miles: 3, uses: ["Bikes"], flags: ["no-hiking" as const] };
+  assert.equal(filterCatalog([noHikers], {}).total, 0);
+  assert.equal(filterCatalog([noHikers], { activity: "mtb" }).total, 1);
+  assert.equal(sectionOf("path-bike").key, "bike");
+  assert.equal(sectionOf(undefined).key, "foot");
+});

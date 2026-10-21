@@ -1,3 +1,4 @@
+import { resolveDifficulty } from "@/lib/trail-difficulty";
 import type { CatalogBounds, CatalogFilters, CatalogTrail } from "./types";
 import { countryName } from "./types";
 import { withinBounds } from "./map";
@@ -34,6 +35,7 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     .filter(Boolean);
   const activity = filters.activity ?? "hike";
   const includeWinter = filters.includeWinter === true || activity === "ski";
+  const difficulties = filters.difficulty ? new Set(filters.difficulty.split(",").map((d) => normalize(d))) : null;
   return rows.filter((r, i) => {
     if (!includeWinter && isWinterActivityTrail(r)) return false;
     if (activity !== "all" && !matchesCatalogActivity(r, activity)) return false;
@@ -44,11 +46,11 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     // Pieces of longer trails, unnamed stubs, connectors and closed trails are not presented as hikes unless asked for.
     if (!approved && !filters.includeFragments && (r.quality === "fragment" || r.flags?.includes("closed"))) return false;
     // Sidewalks and road sidepaths are not hikes; they stay listed for biking.
-    if (!approved && !filters.includeFragments && activity !== "bike" && activity !== "all" && r.flags?.includes("sidewalk")) return false;
+    if (!approved && !filters.includeFragments && activity !== "bike" && activity !== "path-bike" && activity !== "all" && r.flags?.includes("sidewalk")) return false;
     // Motorized routes are not hikes, runs or bike rides; they show only with every activity or partial segments.
     if (!approved && !filters.includeFragments && activity !== "all" && r.flags?.includes("motorized")) return false;
     // The managing agency says hiking isn't an allowed use here.
-    if (!approved && !filters.includeFragments && (activity === "hike" || activity === "backpack" || activity === "run") && r.flags?.includes("no-hiking")) return false;
+    if (!approved && !filters.includeFragments && (activity === "hike" || activity === "walk" || activity === "backpack" || activity === "run") && r.flags?.includes("no-hiking")) return false;
     if (filters.resort && normalize(r.skiResort ?? "") !== normalize(filters.resort)) return false;
     if (filters.sourceType && r.sourceType !== filters.sourceType) return false;
     if (filters.kind && r.kind !== filters.kind) return false;
@@ -62,7 +64,9 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     if (terms.length && !terms.every((t) => (texts?.[i] ?? searchableText(r)).includes(t))) return false;
     if (filters.minMiles !== undefined && (r.miles === null || r.miles < filters.minMiles)) return false;
     if (filters.maxMiles !== undefined && (r.miles === null || r.miles > filters.maxMiles)) return false;
-    if (filters.difficulty && normalize(r.difficulty ?? "") !== normalize(filters.difficulty)) return false;
+    // Reported difficulty when the source gives one, otherwise the same estimate the trail page shows.
+    if (difficulties && !difficulties.has(resolveDifficulty({ reported: r.difficulty, miles: r.miles, name: r.name, elevationFt: r.elevationFt ? r.elevationFt.max - r.elevationFt.min : null }).difficulty)) return false;
+    if (filters.routeType && r.routeType !== filters.routeType) return false;
     if (filters.dogFriendly && r.dogs !== true) return false;
     if (
       Number.isFinite(filters.lat) &&
@@ -168,7 +172,8 @@ export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
     limit: number("limit", 1, 48),
     minMiles: number("minMiles", 0, 10000),
     maxMiles: number("maxMiles", 0, 10000),
-    difficulty: params.get("difficulty")?.slice(0, 30),
+    difficulty: params.get("difficulty")?.slice(0, 40) || undefined,
+    routeType: (["loop", "point-to-point", "network"] as const).find((t) => t === params.get("routeType")),
     dogFriendly: params.get("dogFriendly") === "true",
     includeWinter: params.get("includeWinter") === "true" || activity === "ski",
     activity,

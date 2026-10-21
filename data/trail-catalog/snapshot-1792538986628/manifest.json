@@ -392,7 +392,7 @@
       "count": 2244
     }
   ],
-  "indexSha256": "dc3650a14b6c12f309bd809f1607ba36d5d661c80cbc1a56da0022b79af34019",
+  "indexSha256": "e4294ab746961b2060b56f535a379216e8af4bce61397d5f6c886811f90c75cd",
   "excluded": {
     "missingName": 130,
     "invalidGeometry": 3254,
@@ -414,6 +414,8 @@
     "Standalone trails shorter than 0.05 mi are mapping fragments and are excluded.",
     "Pieces that the Forest Service records as one official trail (same TRAIL_CN) are joined into it even across mapping gaps; old links redirect. Official agency trails come from the NPS Public Trails layer (existing, official, open or temporarily closed; not unofficial, unmaintained, sidewalk, water or snow trails), U.S. Forest Service National Forest System Trails (land trails where hiking is an allowed use or has a managed season) and BLM transportation data (routes managed for non-motorized or non-mechanized public use). A line already in the catalog within 25 m for ≥60% of its length confirms that trail and is recorded as a source; only new lines become trails. Catalog lines on Forest Service trails that do not allow hiking are rejected. Trails only an agency maps show a sampled elevation range (Copernicus DEM via Open-Meteo).",
     "Every trail is checked by config/trail-quality.json rules: 94,484 passed, 20,775 are short trails, 3,903 need review and 27,296 are partial, unnamed or connector segments kept out of default results. No elevation is available from these sources.",
-    "1,527 records follow downhill ski pistes mapped in OpenSkiMap and are listed as ski runs, not hiking trails; 2,350 follow Nordic ski tracks and stay hikeable."
+    "1,527 records follow downhill ski pistes mapped in OpenSkiMap and are listed as ski runs, not hiking trails; 2,350 follow Nordic ski tracks and stay hikeable.",
+    "Second winter pass: 2998 more records are ski or over-snow routes (lift lines and courses on pistes, U.S. Forest Service snow-only trails, winter-only names) and are listed under Ski, not hiking.",
+    "Allowed uses (hiking, biking, horses, snowshoe, cross-country ski, motorized) come from the official use fields of the USGS National Digital Trails sections and the U.S. Forest Service and BLM records; a use is listed when sections allowing it make up at least half the trail. 47,427 trails have official uses; the rest are sorted by name and surface. Trails USGS records as closed to hikers, or open only to motor vehicles, are kept out of foot sections."
   ]
 }

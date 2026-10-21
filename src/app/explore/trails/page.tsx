@@ -8,6 +8,9 @@ import { TrailSearchFilters } from "@/components/trails/TrailSearchFilters";
 import { TrailsExploreMap } from "@/components/trails/TrailsExploreMap";
 import { GpxRouteUpload } from "@/components/trails/GpxRouteUpload";
 import { CatalogBrowser } from "@/components/trails/CatalogBrowser";
+import { cookies } from "next/headers";
+import { SECTION_COOKIE } from "@/lib/preferred-section";
+import { TRAIL_SECTIONS, parseTrailSection } from "@/lib/trail-catalog/activity";
 
 export const metadata = { title: "Explore trails — Hyked" };
 
@@ -22,7 +25,12 @@ export default async function ExploreTrailsPage({
     if (typeof value === "string") urlParams.set(key, value);
   }
 
-  if (params.collection !== "community") return <CatalogBrowser params={urlParams} />;
+  if (params.collection !== "community") {
+    // Open on the visitor's chosen section unless the link names one.
+    const section = parseTrailSection((await cookies()).get(SECTION_COOKIE)?.value);
+    if (!urlParams.has("activity") && section && section !== "foot") urlParams.set("activity", TRAIL_SECTIONS.find((s) => s.key === section)!.activity);
+    return <CatalogBrowser params={urlParams} />;
+  }
 
   const filters = parseTrailFilters(urlParams);
   const hasFilters = [...urlParams.keys()].length > 0;

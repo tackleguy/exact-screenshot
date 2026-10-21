@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { NavIcon } from "./NavIcon";
 const links = [
   { href: "/explore/trails", label: "Explore", icon: "explore" as const },
+  { href: "/map", label: "Map", icon: "map" as const },
   { href: "/plan", label: "My trips", icon: "trips" as const },
   { href: "/gear", label: "Gear", icon: "gear" as const },
   { href: "/you", label: "Profile", icon: "profile" as const },

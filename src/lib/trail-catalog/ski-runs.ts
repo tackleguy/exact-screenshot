@@ -15,7 +15,8 @@ export interface SkiRun {
 export interface SkiAreaPoint { id: string; name: string | null; activities: string[]; point: Point; website: string | null }
 export interface SkiRunCache { retrievedAt: string; runs: SkiRun[]; areas: SkiAreaPoint[] }
 
-export type WinterUse = "downhill" | "nordic";
+/** downhill: a ski run; oversnow: a winter-only route (snowmobile, USFS snow trail); nordic: a groomed track on a summer trail. */
+export type WinterUse = "downhill" | "oversnow" | "nordic";
 export interface SkiMatch { use: WinterUse; share: number; runName: string | null; areaName: string | null; nameMatches: boolean }
 
 /** A sample counts as on a piste within this distance (generalized source lines are offset by ~10–20 m). */

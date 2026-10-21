@@ -63,6 +63,11 @@ export function CatalogTrailDetail({
               <strong>Downhill ski run{t.skiArea ? ` at ${t.skiArea}` : ""}.</strong> This line follows a mapped ski piste,
               so it is listed with ski trails, not hikes. Resorts set their own rules for summer access and uphill travel.
             </>
+          ) : t.winterUse === "oversnow" ? (
+            <>
+              <strong>Winter over-snow route.</strong> This is mapped as a snowmobile, ski or snowshoe route
+              (for example a U.S. Forest Service snow trail), so it is listed with ski trails, not hikes.
+            </>
           ) : (
             <>
               <strong>Nordic ski track{t.skiArea ? ` at ${t.skiArea}` : ""}.</strong> This trail is groomed for

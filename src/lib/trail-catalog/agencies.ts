@@ -128,7 +128,7 @@ export function trailTypeFor(row: Pick<CatalogTrail, "name" | "miles" | "surface
 /** Confidence from source strength and the automated quality checks. */
 export function confidenceFor(row: Pick<CatalogTrail, "quality" | "flags" | "winterUse" | "source" | "kind"> & { sources?: SourceRef[] }): Confidence {
   const flags = row.flags ?? [];
-  if (row.quality === "fragment" || row.winterUse === "downhill" || flags.includes("sidewalk") || flags.includes("motorized") || flags.includes("no-hiking")) return "REJECTED";
+  if (row.quality === "fragment" || row.winterUse === "downhill" || row.winterUse === "oversnow" || flags.includes("sidewalk") || flags.includes("motorized") || flags.includes("no-hiking")) return "REJECTED";
   if (row.source === "resort") return "NEEDS_REVIEW";
   if (row.quality === "review") return "NEEDS_REVIEW";
   if (row.kind === "route") return "VERIFIED";

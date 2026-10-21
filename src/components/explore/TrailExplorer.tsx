@@ -1,0 +1,683 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as maplibregl from "@/lib/maplibre";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf, type CatalogActivity, type TrailSectionKey } from "@/lib/trail-catalog/activity";
+import { appleMapsDirectionsUrl, googleMapsDirectionsUrl, type AccessPoint } from "@/lib/trail-catalog/access";
+import { storeSection } from "@/lib/preferred-section";
+import type { ExploreCluster, ExplorePointTrail } from "@/lib/trail-catalog/server";
+import type { CatalogTrail } from "@/lib/trail-catalog/types";
+import type { WeatherPeriod } from "@/lib/weather/types";
+import { SectionIcon } from "./SectionIcon";
+import { DIFFICULTY_COLORS, DIFFICULTY_LABELS, EMPTY, explorerStyle, installOverlay, setSky, type Basemap } from "./explorer-map";
+import "./explorer.css";
+
+type Bounds = [number, number, number, number];
+interface PointsResponse { total: number; trails: ExplorePointTrail[]; clusters: ExploreCluster[] }
+interface Detail { trail: CatalogTrail; lines: [number, number][][] }
+interface Elevation { profile: [number, number][]; gainFt: number; lossFt: number; minFt: number; maxFt: number; partial: boolean }
+interface Drive { distanceMeters: number; durationSeconds: number; line: [number, number][] }
+
+const LENGTHS = [
+  { key: "", label: "Any length" },
+  { key: "0-3", label: "Under 3 mi" },
+  { key: "3-8", label: "3–8 mi" },
+  { key: "8-15", label: "8–15 mi" },
+  { key: "15-", label: "15 mi +" },
+] as const;
+const ROUTE_TYPES = [
+  { key: "", label: "Any route" },
+  { key: "loop", label: "Loop" },
+  { key: "point-to-point", label: "Point to point" },
+  { key: "network", label: "Trail network" },
+] as const;
+const SUB_ACTIVITIES: Record<TrailSectionKey, CatalogActivity[]> = {
+  foot: ["hike", "walk", "backpack", "run"],
+  bike: ["bike", "mtb", "path-bike"],
+  horse: ["horse"],
+  snow: ["ski"],
+};
+const ALL_LABEL: Partial<Record<CatalogActivity, string>> = { hike: "All on foot", bike: "All biking" };
+const LINE_ZOOM = 9.5;
+
+interface Filters { activity: CatalogActivity; difficulty: string[]; length: string; routeType: string }
+
+function filterParams(f: Filters) {
+  const p = new URLSearchParams({ activity: f.activity });
+  if (f.difficulty.length) p.set("difficulty", f.difficulty.join(","));
+  const [min, max] = f.length.split("-");
+  if (min) p.set("minMiles", min);
+  if (max) p.set("maxMiles", max);
+  if (f.routeType) p.set("routeType", f.routeType);
+  return p;
+}
+
+const fmtMiles = (miles: number | null) => (miles === null ? "—" : miles < 10 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`);
+function fmtDuration(hours: number) {
+  if (!Number.isFinite(hours) || hours <= 0) return null;
+  const h = Math.floor(hours), m = Math.round((hours - h) * 60 / 5) * 5;
+  return h ? `${h} h${m ? ` ${m} min` : ""}` : `${Math.max(5, m)} min`;
+}
+/** Naismith-style moving time: 2 mph on foot plus an hour per 2,000 ft of climb; riders roll faster. */
+function movingHours(miles: number | null, gainFt: number | null, activity: CatalogActivity) {
+  if (miles === null) return NaN;
+  const speed = activity === "path-bike" ? 11 : activity === "bike" || activity === "mtb" ? 7 : activity === "horse" ? 4 : activity === "ski" ? 3 : 2;
+  return miles / speed + (gainFt ?? 0) / (activity === "bike" || activity === "mtb" || activity === "path-bike" ? 3000 : 2000);
+}
+const ROUTE_LABEL: Record<string, string> = { loop: "Loop", "point-to-point": "Point to point", network: "Network" };
+
+function distanceKm(a: [number, number], b: [number, number]) {
+  const r = Math.PI / 180, x = (b[0] - a[0]) * r * Math.cos(((a[1] + b[1]) / 2) * r), y = (b[1] - a[1]) * r;
+  return Math.sqrt(x * x + y * y) * 6371;
+}
+
+export interface ExplorerStart { activity: CatalogActivity; trail: string | null; center: [number, number] | null; zoom: number | null }
+
+export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const railRef = useRef<HTMLDivElement>(null);
+  const sourcesRef = useRef({ pins: EMPTY, grid: EMPTY, lines: EMPTY, selected: EMPTY, drive: EMPTY });
+  const fetchAbort = useRef<AbortController | null>(null);
+  const hovered = useRef<number | string | null>(null);
+
+  const [filters, setFilters] = useState<Filters>({ activity: initial.activity, difficulty: [], length: "", routeType: "" });
+  const filtersRef = useRef(filters);
+  const [basemap, setBasemap] = useState<Basemap>("topo");
+  const [is3d, setIs3d] = useState(false);
+  const [bearing, setBearing] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [open, setOpen] = useState<null | "section" | "difficulty" | "length" | "route" | "layers">(null);
+  const [points, setPoints] = useState<PointsResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [center, setCenter] = useState<[number, number]>(initial.center ?? [-98.6, 39.8]);
+  const [zoom, setZoom] = useState(initial.zoom ?? 3.6);
+  const [selectedId, setSelectedId] = useState<string | null>(initial.trail);
+  // Per-trail results are kept with the id they belong to, so a new selection never shows stale data.
+  const [detailFor, setDetailFor] = useState<{ id: string; value: Detail } | null>(null);
+  const [elevationFor, setElevationFor] = useState<{ id: string; value: Elevation | "none" } | null>(null);
+  const [weatherFor, setWeatherFor] = useState<{ id: string; value: WeatherPeriod | null } | null>(null);
+  const [driveFor, setDriveFor] = useState<{ id: string; value: Drive } | null>(null);
+  const [driveStateFor, setDriveStateFor] = useState<{ id: string; value: string } | null>(null);
+  const detail = detailFor?.id === selectedId ? detailFor.value : null;
+  const elevation = elevationFor?.id === selectedId ? elevationFor.value : null;
+  const weather = weatherFor?.id === selectedId ? weatherFor.value : null;
+  const drive = driveFor?.id === selectedId ? driveFor.value : null;
+  const driveState = driveStateFor?.id === selectedId ? driveStateFor.value : null;
+  const [query, setQuery] = useState("");
+  const [resultsFor, setResultsFor] = useState<{ q: string; value: CatalogTrail[] } | null>(null);
+  const results = query.trim().length >= 3 && resultsFor?.q === query.trim() ? resultsFor.value : null;
+  const [mapError, setMapError] = useState<string | null>(null);
+
+  const section = sectionOf(filters.activity);
+
+  const setSource = useCallback((key: keyof typeof sourcesRef.current, data: GeoJSON.FeatureCollection) => {
+    sourcesRef.current[key] = data;
+    const source = mapRef.current?.getSource(`hy-${key}`) as maplibregl.GeoJSONSource | undefined;
+    source?.setData(data);
+  }, []);
+
+  const refresh = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const b = map.getBounds();
+    const pad = 0.08;
+    const w = b.getEast() - b.getWest(), h = b.getNorth() - b.getSouth();
+    const bbox: Bounds = [Math.max(-180, b.getWest() - w * pad), Math.max(-85, b.getSouth() - h * pad), Math.min(180, b.getEast() + w * pad), Math.min(85, b.getNorth() + h * pad)];
+    const params = filterParams(filtersRef.current);
+    params.set("bbox", bbox.map((n) => n.toFixed(4)).join(","));
+    fetchAbort.current?.abort();
+    const controller = new AbortController();
+    fetchAbort.current = controller;
+    const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]);
+    setLoading(true);
+    void fetch(`/api/trail-catalog/points?${params}`, { signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("points"))))
+      .then((data: PointsResponse) => {
+        setPoints(data);
+        setLoadError(null);
+        setSource("pins", { type: "FeatureCollection", features: data.trails.map(([id, name, lng, lat, miles, d]) => ({ type: "Feature", properties: { id, name, miles, d }, geometry: { type: "Point", coordinates: [lng, lat] } })) });
+        setSource("grid", { type: "FeatureCollection", features: data.clusters.map(([lng, lat, count, w2, s2, e2, n2]) => ({ type: "Feature", properties: { count, bounds: [w2, s2, e2, n2].join(",") }, geometry: { type: "Point", coordinates: [lng, lat] } })) });
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setLoadError("Trails couldn’t load here. Move the map to try again.");
+      })
+      .finally(() => { if (!signal.aborted) setLoading(false); });
+    if (map.getZoom() >= LINE_ZOOM && w < 4 && h < 3) {
+      const lp = filterParams(filtersRef.current);
+      lp.set("bbox", [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(4)).join(","));
+      lp.set("zoom", String(Math.round(map.getZoom())));
+      void fetch(`/api/trail-catalog/lines?${lp}`, { signal })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("lines"))))
+        .then((data: GeoJSON.FeatureCollection) => setSource("lines", data))
+        .catch(() => undefined);
+    } else {
+      setSource("lines", EMPTY);
+    }
+  }, [setSource]);
+
+  // Map setup; the style is swapped in place when the basemap changes.
+  useEffect(() => {
+    if (!containerRef.current) return;
+    let disposed = false;
+    const startCenter = initial.center ?? [-98.6, 39.8];
+    const startZoom = initial.zoom ?? 3.6;
+    void explorerStyle("topo").then((style) => {
+      if (disposed || !containerRef.current) return;
+      const map = new maplibregl.Map({ container: containerRef.current, style, center: startCenter, zoom: startZoom, maxPitch: 80, attributionControl: false, hash: false });
+      mapRef.current = map;
+      map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+      map.addControl(new maplibregl.ScaleControl({ unit: "imperial", maxWidth: 90 }), "bottom-left");
+      map.on("style.load", () => installOverlay(map, sourcesRef.current));
+      map.on("load", () => {
+        setReady(true);
+        refresh();
+        // Start the compact attribution folded; the (i) button still opens it.
+        containerRef.current?.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
+      });
+      map.on("error", (e) => {
+        const msg = e.error?.message ?? "";
+        if (/style/i.test(msg)) setMapError("The map style didn’t load. Try Satellite from the layers button.");
+      });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      map.on("moveend", () => {
+        const c = map.getCenter();
+        setCenter([c.lng, c.lat]);
+        setZoom(map.getZoom());
+        const params = new URLSearchParams(window.location.search);
+        params.set("lat", c.lat.toFixed(4));
+        params.set("lng", c.lng.toFixed(4));
+        params.set("z", map.getZoom().toFixed(1));
+        window.history.replaceState(null, "", `?${params}`);
+        clearTimeout(timer);
+        timer = setTimeout(refresh, 220);
+      });
+      map.on("rotate", () => setBearing(map.getBearing()));
+
+      const select = (id: string) => setSelectedId(id);
+      map.on("click", "hy-pin", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
+      map.on("click", "hy-lines", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
+      map.on("click", "hy-pins-cluster", async (e) => {
+        const f = e.features?.[0];
+        const source = map.getSource("hy-pins") as maplibregl.GeoJSONSource | undefined;
+        if (!f || !source) return;
+        const zoomTo = await source.getClusterExpansionZoom(Number(f.properties?.cluster_id));
+        map.easeTo({ center: (f.geometry as GeoJSON.Point).coordinates as [number, number], zoom: zoomTo + 0.3, duration: 500 });
+      });
+      map.on("click", "hy-grid-cluster", (e) => {
+        const raw = String(e.features?.[0]?.properties?.bounds ?? "");
+        const [w, s, ea, n] = raw.split(",").map(Number);
+        if ([w, s, ea, n].every(Number.isFinite)) map.fitBounds([[w, s], [ea, n]], { padding: 60, maxZoom: 11, duration: 600 });
+      });
+      for (const layer of ["hy-pin", "hy-lines", "hy-pins-cluster", "hy-grid-cluster"]) {
+        map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
+        map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
+      }
+      map.on("mousemove", "hy-lines", (e) => {
+        const id = e.features?.[0]?.id;
+        if (id === undefined || id === hovered.current) return;
+        if (hovered.current !== null) map.setFeatureState({ source: "hy-lines", id: hovered.current }, { hover: false });
+        hovered.current = id;
+        map.setFeatureState({ source: "hy-lines", id }, { hover: true });
+      });
+      map.on("mouseleave", "hy-lines", () => {
+        if (hovered.current !== null) map.setFeatureState({ source: "hy-lines", id: hovered.current }, { hover: false });
+        hovered.current = null;
+      });
+      const ro = new ResizeObserver(() => map.resize());
+      ro.observe(containerRef.current);
+      map.once("remove", () => ro.disconnect());
+    });
+    return () => {
+      disposed = true;
+      fetchAbort.current?.abort();
+      mapRef.current?.remove();
+      mapRef.current = null;
+    };
+    // The camera starts from the server-read URL once; later moves are the map's own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh]);
+
+  const is3dRef = useRef(is3d);
+  const selectedIdRef = useRef(selectedId);
+  const syncSelectedPin = useCallback(() => {
+    const map = mapRef.current;
+    if (map?.getLayer("hy-pin-selected")) map.setFilter("hy-pin-selected", ["==", ["get", "id"], selectedIdRef.current ?? ""]);
+  }, []);
+
+  // Basemap switch keeps the camera and re-installs Hyked layers on the new style.
+  const firstBasemap = useRef(true);
+  useEffect(() => {
+    if (firstBasemap.current) { firstBasemap.current = false; return; }
+    const map = mapRef.current;
+    if (!map) return;
+    let live = true;
+    void explorerStyle(basemap).then((style) => {
+      if (!live) return;
+      map.setStyle(style, { diff: false });
+      map.once("style.load", () => {
+        if (is3dRef.current) { map.setTerrain({ source: "terrain", exaggeration: 1.4 }); setSky(map, true); }
+        syncSelectedPin();
+      });
+    });
+    return () => { live = false; };
+  }, [basemap, syncSelectedPin]);
+
+  useEffect(() => {
+    is3dRef.current = is3d;
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    if (is3d) {
+      map.setTerrain({ source: "terrain", exaggeration: 1.4 });
+      setSky(map, true);
+      map.easeTo({ pitch: 62, bearing: map.getBearing() || -20, zoom: Math.max(map.getZoom(), 11.5), duration: 900 });
+    } else {
+      map.setTerrain(null);
+      setSky(map, false);
+      map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+    }
+  }, [is3d, ready]);
+
+  useEffect(() => {
+    filtersRef.current = filters;
+    if (ready) refresh();
+  }, [filters, ready, refresh]);
+
+  // Selection: full line, elevation and weather for the chosen trail.
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+    syncSelectedPin();
+    const params = new URLSearchParams(window.location.search);
+    if (selectedId) params.set("trail", selectedId); else params.delete("trail");
+    window.history.replaceState(null, "", `?${params}`);
+    setSource("selected", EMPTY);
+    setSource("drive", EMPTY);
+    if (!selectedId) return;
+    const controller = new AbortController();
+    const id = encodeURIComponent(selectedId);
+    const forId = selectedId;
+    void fetch(`/api/trail-catalog/${id}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("detail"))))
+      .then((d: Detail) => {
+        setDetailFor({ id: forId, value: d });
+        if (d.lines?.length) {
+          setSource("selected", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: d.lines } }] });
+          const map = mapRef.current;
+          if (map) {
+            const bounds = new maplibregl.LngLatBounds();
+            for (const line of d.lines) for (const p of line) bounds.extend(p);
+            const box = map.getBounds();
+            // Only move when the trail isn't already comfortably in view.
+            if (!box.contains(bounds.getNorthEast()) || !box.contains(bounds.getSouthWest()) || map.getZoom() < 11) {
+              map.fitBounds(bounds, { padding: { top: 140, bottom: 300, left: 60, right: 80 }, maxZoom: 15, duration: 800 });
+            }
+          }
+        } else {
+          mapRef.current?.easeTo({ center: [d.trail.longitude, d.trail.latitude], zoom: Math.max(mapRef.current.getZoom(), 12), duration: 700 });
+        }
+        void fetch(`/api/weather/forecast?lat=${d.trail.latitude}&lng=${d.trail.longitude}`, { signal: controller.signal })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((w: { forecast?: { periods: WeatherPeriod[] } } | null) => setWeatherFor({ id: forId, value: w?.forecast?.periods?.[0] ?? null }))
+          .catch(() => undefined);
+      })
+      .catch(() => undefined);
+    void fetch(`/api/trail-catalog/${id}/elevation`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : "none"))
+      .then((e: Elevation | "none") => setElevationFor({ id: forId, value: e }))
+      .catch((error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) setElevationFor({ id: forId, value: "none" }); });
+    return () => controller.abort();
+  }, [selectedId, setSource, syncSelectedPin]);
+
+  const cards = useMemo(() => {
+    // Nearest first, with short stubs and connectors yielding to real trails a little farther away.
+    const list = (points?.trails ?? []).map((t) => ({ t, km: distanceKm(center, [t[2], t[3]]) / Math.min(3, 0.4 + Math.sqrt(t[4] ?? 0.2)) }));
+    list.sort((a, b) => a.km - b.km);
+    const out = list.slice(0, 40).map((x) => x.t);
+    if (selectedId && !out.some((t) => t[0] === selectedId)) {
+      const hit = points?.trails.find((t) => t[0] === selectedId);
+      if (hit) out.unshift(hit);
+      else if (detail?.trail.id === selectedId) {
+        const t = detail.trail;
+        out.unshift([t.id, t.name, t.longitude, t.latitude, t.miles, "m", t.park ?? t.forest ?? t.region, t.routeType ?? null]);
+      }
+    }
+    return out;
+  }, [points, center, selectedId, detail]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    railRef.current?.querySelector<HTMLElement>(`[data-id="${CSS.escape(selectedId)}"]`)?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [selectedId, cards]);
+
+  // Trail search by name.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 3) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      const p = filterParams({ ...filtersRef.current, difficulty: [], length: "", routeType: "" });
+      p.set("q", q); p.set("limit", "8");
+      void fetch(`/api/trail-catalog?${p}`, { signal: controller.signal })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { trails?: CatalogTrail[] } | null) => setResultsFor({ q, value: d?.trails ?? [] }))
+        .catch(() => undefined);
+    }, 250);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [query]);
+
+  const start: AccessPoint | null = detail?.trail.trailhead ?? (detail ? { kind: "trail-end", name: null, latitude: detail.trail.latitude, longitude: detail.trail.longitude, toTrailMeters: 0 } : null);
+
+  function driveHere() {
+    if (!start || !selectedId) return;
+    const forId = selectedId;
+    const setDriveState = (value: string | null) => setDriveStateFor(value === null ? null : { id: forId, value });
+    if (!("geolocation" in navigator)) { setDriveState("Your browser can’t share its location. Use Google or Apple Maps."); return; }
+    setDriveState("Finding you…");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setDriveState("Planning the drive…");
+        void fetch(`/api/directions?from=${pos.coords.latitude},${pos.coords.longitude}&to=${start.latitude},${start.longitude}`)
+          .then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); return d as Drive; })
+          .then((d) => {
+            setDriveFor({ id: forId, value: d });
+            setDriveState(null);
+            setSource("drive", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: d.line } }] });
+            const bounds = new maplibregl.LngLatBounds();
+            for (const p of d.line) bounds.extend(p);
+            mapRef.current?.fitBounds(bounds, { padding: { top: 140, bottom: 320, left: 60, right: 80 }, duration: 900 });
+          })
+          .catch((error: Error) => setDriveState(error.message || "Directions are unavailable right now. Use Google or Apple Maps."));
+      },
+      () => setDriveState("Location is off. Allow location, or open Google or Apple Maps."),
+      { enableHighAccuracy: false, timeout: 12_000, maximumAge: 300_000 },
+    );
+  }
+
+  function locate() {
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => mapRef.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 11, duration: 1200 }),
+      () => setLoadError("Location is off for this site. Allow it in your browser to center the map on you."),
+      { timeout: 12_000, maximumAge: 300_000 },
+    );
+  }
+
+  const chooseSection = (key: TrailSectionKey) => {
+    storeSection(key);
+    setFilters((f) => ({ ...f, activity: TRAIL_SECTIONS.find((s) => s.key === key)!.activity }));
+  };
+  const activeFilters = filters.difficulty.length + (filters.length ? 1 : 0) + (filters.routeType ? 1 : 0);
+  const selectedCard = cards.find((t) => t[0] === selectedId);
+  const gain = elevation && elevation !== "none" ? elevation.gainFt : null;
+
+  return (
+    <div className="hx" onKeyDown={(e) => { if (e.key === "Escape") { setOpen(null); setQuery(""); } }}>
+      <div ref={containerRef} className="hx-map" role="region" aria-label="Trail map" />
+
+      <div className="hx-top">
+        <div className="hx-search">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z" /></svg>
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search trails by name" aria-label="Search trails by name" />
+          {results && (
+            <ul className="hx-results" role="listbox" aria-label="Matching trails">
+              {results.length === 0 && <li className="hx-results-empty">No {section.label.toLowerCase()} trails match “{query.trim()}”.</li>}
+              {results.map((t) => (
+                <li key={t.id}>
+                  <button type="button" onClick={() => { setQuery(""); setSelectedId(t.id); }}>
+                    <strong>{t.name}</strong>
+                    <span>{[t.park ?? t.forest ?? t.region, fmtMiles(t.miles)].filter(Boolean).join(" · ")}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="hx-chips" role="toolbar" aria-label="Trail filters">
+          <div className="hx-pop-anchor">
+            <button type="button" className="hx-chip hx-chip--section" aria-expanded={open === "section"} onClick={() => setOpen(open === "section" ? null : "section")}>
+              <SectionIcon section={section.key} size={18} />
+              {filters.activity === section.activity ? section.label : CATALOG_ACTIVITY_LABELS[filters.activity]}
+              <Caret />
+            </button>
+            {open === "section" && (
+              <div className="hx-pop hx-pop--wide">
+                <div className="hx-sections">
+                  {TRAIL_SECTIONS.map((s) => (
+                    <button key={s.key} type="button" className="hx-section" aria-pressed={section.key === s.key} onClick={() => chooseSection(s.key)}>
+                      <SectionIcon section={s.key} />
+                      <span>{s.label}</span>
+                    </button>
+                  ))}
+                </div>
+                {SUB_ACTIVITIES[section.key].length > 1 && (
+                  <div className="hx-subs">
+                    {SUB_ACTIVITIES[section.key].map((a) => (
+                      <button key={a} type="button" className="hx-sub" aria-pressed={filters.activity === a} onClick={() => setFilters((f) => ({ ...f, activity: a }))}>
+                        {ALL_LABEL[a] ?? CATALOG_ACTIVITY_LABELS[a]}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="hx-pop-note">{section.blurb}. Bike and horse access comes from official agency use records where they exist.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="hx-pop-anchor">
+            <button type="button" className="hx-chip" aria-pressed={filters.difficulty.length > 0} aria-expanded={open === "difficulty"} onClick={() => setOpen(open === "difficulty" ? null : "difficulty")}>
+              {filters.difficulty.length ? filters.difficulty.map((d) => DIFFICULTY_LABELS[d === "expert" ? "x" : d[0]]).join(", ") : "Difficulty"}
+              <Caret />
+            </button>
+            {open === "difficulty" && (
+              <div className="hx-pop">
+                {(["easy", "moderate", "hard", "expert"] as const).map((d) => (
+                  <label key={d} className="hx-check">
+                    <input type="checkbox" checked={filters.difficulty.includes(d)} onChange={(e) => setFilters((f) => ({ ...f, difficulty: e.target.checked ? [...f.difficulty, d] : f.difficulty.filter((x) => x !== d) }))} />
+                    <span className="hx-dot" style={{ background: DIFFICULTY_COLORS[d === "expert" ? "x" : d[0]] }} />
+                    {d[0].toUpperCase() + d.slice(1)}
+                  </label>
+                ))}
+                <p className="hx-pop-note">Agency-reported where given, otherwise estimated from length, name and terrain.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="hx-pop-anchor">
+            <button type="button" className="hx-chip" aria-pressed={Boolean(filters.length)} aria-expanded={open === "length"} onClick={() => setOpen(open === "length" ? null : "length")}>
+              {LENGTHS.find((l) => l.key === filters.length)?.key ? LENGTHS.find((l) => l.key === filters.length)!.label : "Length"}
+              <Caret />
+            </button>
+            {open === "length" && (
+              <div className="hx-pop">
+                {LENGTHS.map((l) => (
+                  <label key={l.key} className="hx-check">
+                    <input type="radio" name="hx-length" checked={filters.length === l.key} onChange={() => { setFilters((f) => ({ ...f, length: l.key })); setOpen(null); }} />
+                    {l.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="hx-pop-anchor">
+            <button type="button" className="hx-chip" aria-pressed={Boolean(filters.routeType)} aria-expanded={open === "route"} onClick={() => setOpen(open === "route" ? null : "route")}>
+              {filters.routeType ? ROUTE_LABEL[filters.routeType] : "Route type"}
+              <Caret />
+            </button>
+            {open === "route" && (
+              <div className="hx-pop">
+                {ROUTE_TYPES.map((r) => (
+                  <label key={r.key} className="hx-check">
+                    <input type="radio" name="hx-route" checked={filters.routeType === r.key} onChange={() => { setFilters((f) => ({ ...f, routeType: r.key })); setOpen(null); }} />
+                    {r.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+          {activeFilters > 0 && (
+            <button type="button" className="hx-chip hx-chip--clear" onClick={() => setFilters((f) => ({ ...f, difficulty: [], length: "", routeType: "" }))}>
+              Clear {activeFilters}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <p className="hx-status" aria-live="polite">
+        {loadError ?? mapError ?? (points
+          ? points.total === 0
+            ? `No ${section.label.toLowerCase()} trails here. Zoom out or clear filters.`
+            : `${points.total.toLocaleString("en-US")} ${points.total === 1 ? "trail" : "trails"} in view${points.clusters.length ? " · zoom in for details" : zoom < LINE_ZOOM ? " · zoom in to see routes" : ""}`
+          : "Loading trails…")}
+        {loading && <span className="hx-spinner" aria-hidden="true" />}
+      </p>
+
+      <div className="hx-right">
+      <div className="hx-controls" role="group" aria-label="Map controls">
+        <div className="hx-pop-anchor">
+          <button type="button" className="hx-ctl" aria-label="Map layers" aria-expanded={open === "layers"} onClick={() => setOpen(open === "layers" ? null : "layers")}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 13 9 5 9-5" /></svg>
+          </button>
+          {open === "layers" && (
+            <div className="hx-pop hx-pop--left hx-layers">
+              {([["topo", "Topo", "Contours, hillshade and every mapped path"], ["satellite", "Satellite", "Aerial imagery"], ["hybrid", "Hybrid", "Imagery with roads and place names"]] as const).map(([key, label, hint]) => (
+                <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} onClick={() => { setBasemap(key); setOpen(null); }}>
+                  <span className="hx-layer-swatch" aria-hidden="true" />
+                  <span><strong>{label}</strong><small>{hint}</small></span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <button type="button" className="hx-ctl hx-ctl--text" aria-pressed={is3d} aria-label={is3d ? "Show flat map" : "Show 3D terrain"} onClick={() => setIs3d((v) => !v)}>3D</button>
+        <button type="button" className="hx-ctl" aria-label="Center on my location" onClick={locate}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>
+        </button>
+        <div className="hx-ctl-group">
+          <button type="button" className="hx-ctl" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </button>
+          <button type="button" className="hx-ctl" aria-label="Zoom out" onClick={() => mapRef.current?.zoomOut()}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14" /></svg>
+          </button>
+        </div>
+        {(Math.abs(bearing) > 1 || is3d) && (
+          <button type="button" className="hx-ctl" aria-label="Reset north" onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: is3d ? 60 : 0, duration: 500 })}>
+            <svg viewBox="0 0 24 24" width="22" height="22" style={{ transform: `rotate(${-bearing}deg)` }} aria-hidden="true"><path d="M12 3 8.5 12h7L12 3Z" fill="#d8452f" /><path d="M12 21l3.5-9h-7L12 21Z" fill="currentColor" opacity="0.7" /></svg>
+          </button>
+        )}
+      </div>
+
+      <div className="hx-legend" aria-label="Difficulty colours">
+        {(["e", "m", "h", "x"] as const).map((d) => (
+          <span key={d}><i style={{ background: DIFFICULTY_COLORS[d] }} />{DIFFICULTY_LABELS[d]}</span>
+        ))}
+      </div>
+      </div>
+
+      <div className="hx-rail-wrap">
+        {cards.length > 0 ? (
+          <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, nearest first">
+            {cards.map((t) => {
+              const [id, name, , , miles, d, place, routeType] = t;
+              const active = id === selectedId;
+              const hours = movingHours(miles, active ? gain : null, filters.activity);
+              return (
+                <article key={id} data-id={id} role="listitem" className={`hx-card${active ? " hx-card--active" : ""}`}>
+                  <button type="button" className="hx-card-hit" onClick={() => setSelectedId(active ? null : id)} aria-pressed={active} aria-label={`${name}${active ? ", selected" : ""}`} />
+                  <div className="hx-card-head">
+                    <TrailShape id={id} lines={active ? detail?.lines : undefined} color={DIFFICULTY_COLORS[d]} />
+                    <div className="hx-card-title">
+                      <h3>{name}</h3>
+                      <p>{[place, routeType && ROUTE_LABEL[routeType]].filter(Boolean).join(" · ") || "Location not recorded"}</p>
+                    </div>
+                    {active && weather && (
+                      <span className="hx-weather" title={weather.shortForecast}>
+                        {(weather.temperatureF ?? weather.lowF) !== undefined && <strong>{Math.round((weather.temperatureF ?? weather.lowF)!)}°F</strong>}
+                        <small>{weather.name}</small>
+                      </span>
+                    )}
+                  </div>
+                  <dl className="hx-stats">
+                    <div><dt>Difficulty</dt><dd><span className="hx-dot" style={{ background: DIFFICULTY_COLORS[d] }} />{DIFFICULTY_LABELS[d]}</dd></div>
+                    <div><dt>Length</dt><dd>{fmtMiles(miles)}</dd></div>
+                    {active && gain !== null && <div><dt>Gain</dt><dd>{gain.toLocaleString("en-US")} ft</dd></div>}
+                    {fmtDuration(hours) && <div><dt>Est. time</dt><dd>{fmtDuration(hours)}</dd></div>}
+                  </dl>
+                  {active && (
+                    <div className="hx-card-more">
+                      {elevation && elevation !== "none" && elevation.profile.length > 2 ? <ElevationChart e={elevation} /> : elevation === null ? <div className="hx-elev hx-elev--loading" aria-label="Loading elevation" /> : null}
+                      {drive && (
+                        <p className="hx-drive">Drive: <strong>{fmtDuration(drive.durationSeconds / 3600)}</strong> · {Math.round(drive.distanceMeters / 1609.344)} mi to {start?.kind === "trail-end" ? "the trail" : start?.name ?? "the trailhead"}</p>
+                      )}
+                      {driveState && <p className="hx-drive" role="status">{driveState}</p>}
+                      <div className="hx-actions">
+                        <Link className="hx-btn hx-btn--primary" href={`/explore/trails/${encodeURIComponent(id)}`}>View trail</Link>
+                        {start && (
+                          <>
+                            <button type="button" className="hx-btn" onClick={driveHere}>Drive here</button>
+                            <a className="hx-btn" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer">Google Maps</a>
+                            <a className="hx-btn" href={appleMapsDirectionsUrl(start.latitude, start.longitude, start.name ?? name)} target="_blank" rel="noopener noreferrer">Apple Maps</a>
+                          </>
+                        )}
+                      </div>
+                      {start && <p className="hx-start">{start.kind === "trail-end" ? "Directions go to the trail’s mapped start; no trailhead is mapped nearby." : `Directions go to ${start.name ?? (start.kind === "parking" ? "trailhead parking" : "the trailhead")}${start.toTrailMeters > 50 ? `, ${Math.round(start.toTrailMeters)} m from the trail` : ""}.`}</p>}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        ) : points && points.clusters.length > 0 ? (
+          <p className="hx-rail-empty">Zoom in or tap a circle to see trails.</p>
+        ) : null}
+        {selectedCard === undefined && selectedId && detail === null && <p className="sr-only" role="status">Loading trail</p>}
+      </div>
+    </div>
+  );
+}
+
+function Caret() {
+  return <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>;
+}
+
+/** Outline of the actual trail when its line is loaded; otherwise a difficulty swatch (no invented shape). */
+function TrailShape({ id, lines, color }: { id: string; lines?: [number, number][][]; color: string }) {
+  if (!lines?.length) return <span className="hx-shape hx-shape--empty" style={{ background: color }} aria-hidden="true" />;
+  let w = 180, s = 90, e = -180, n = -90;
+  for (const l of lines) for (const [x, y] of l) { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); n = Math.max(n, y); }
+  const k = Math.cos(((s + n) / 2) * Math.PI / 180);
+  const scale = 44 / (Math.max((e - w) * k, n - s) || 1e-6);
+  const ox = (56 - (e - w) * k * scale) / 2, oy = (56 - (n - s) * scale) / 2;
+  const d = lines.map((l) => l.map(([x, y], i) => `${i ? "L" : "M"}${(ox + (x - w) * k * scale).toFixed(1)},${(oy + (n - y) * scale).toFixed(1)}`).join("")).join("");
+  return (
+    <svg className="hx-shape" viewBox="0 0 56 56" aria-hidden="true" data-trail={id}>
+      <path d={d} fill="none" stroke="#000" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.4" />
+      <path d={d} fill="none" stroke={color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ElevationChart({ e }: { e: Elevation }) {
+  const W = 320, H = 64;
+  const maxMile = e.profile[e.profile.length - 1][0] || 1;
+  const range = Math.max(40, e.maxFt - e.minFt);
+  const pts = e.profile.map(([m, ft]) => [(m / maxMile) * W, H - 4 - ((ft - e.minFt) / range) * (H - 10)] as const);
+  const line = pts.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(1)},${y.toFixed(1)}`).join("");
+  return (
+    <figure className="hx-elev">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Elevation from ${e.minFt.toLocaleString("en-US")} to ${e.maxFt.toLocaleString("en-US")} feet, ${e.gainFt.toLocaleString("en-US")} feet of climbing`}>
+        <path d={`${line}L${W},${H}L0,${H}Z`} className="hx-elev-fill" />
+        <path d={line} className="hx-elev-line" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <figcaption>
+        <span>{e.minFt.toLocaleString("en-US")}–{e.maxFt.toLocaleString("en-US")} ft</span>
+        <span>{e.gainFt.toLocaleString("en-US")} ft up · {e.lossFt.toLocaleString("en-US")} ft down{e.partial ? " (partial)" : ""}</span>
+      </figcaption>
+    </figure>
+  );
+}

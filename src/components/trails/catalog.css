@@ -215,3 +215,10 @@
 .catalog-trip-stop h4 { font-weight: 600; }
 .catalog-trip-stop ul { margin: 6px 0 0; padding-left: 18px; list-style: disc; }
 .catalog-trip-warn { color: #9a5b13; margin-top: 6px; }
+
+.catalog-sections { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.catalog-section { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--foreground); font-size: 14px; font-weight: 600; text-decoration: none; transition: background-color 160ms ease-out, border-color 160ms ease-out; }
+.catalog-section svg { color: var(--accent); }
+.catalog-section:hover { border-color: var(--accent); }
+.catalog-section[aria-current="page"] { border-color: var(--accent); background: var(--surface-muted); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+@media (prefers-reduced-motion: reduce) { .catalog-section { transition: none; } }

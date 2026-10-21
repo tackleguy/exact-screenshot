@@ -9,6 +9,6 @@ export const NAV_SHORTCUTS = [
   { keys: "G then G", label: "Gear", href: "/gear", chord: "g" },
   { keys: "G then R", label: "Record activity", href: "/record", chord: "r" },
   { keys: "G then P", label: "Profile", href: "/you", chord: "p" },
-  { keys: "G then M", label: "Adventure map", href: "/map", chord: "m" },
+  { keys: "G then M", label: "Trail map", href: "/map", chord: "m" },
   { keys: "G then A", label: "Activity log", href: "/", chord: "a" },
 ] as const;

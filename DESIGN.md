@@ -199,6 +199,18 @@ Numbered stages read Choose a trail → Prepare your pack → Record your outing
 
 The shallow landscape banner is a CSS crop of `public/images/fieldbook/planning-landscape.png`, the approved generated Fieldbook composition. It carries embedded provenance and an adjacent `.provenance.json` file. Visible and accessible labels identify a planning illustration; it is never evidence of the selected route's appearance.
 
+### Trail map (`/map`)
+
+The trail map is the second scoped exception to the light workspace, after `/record/live`. It is full-bleed under the evergreen rail, with dark floating chrome so controls read over topo, satellite and 3D terrain alike. Its tokens live in `src/components/explore/explorer.css` and must not leak into planning pages.
+
+- **Ink chrome** (`#10201a`, hover `#1a2e26`): search, filter chips, map controls, trail cards and popovers. Text `#f4f2ec`, supporting text `#b6c3ba`.
+- **Trail highlight** (`#ffc21a`): the selected trail line, the active card outline, the primary card action, focus rings and the 3D/active control state.
+- **Difficulty colours** (pins, lines, legend, card badges): easy `#2f9e5b`, moderate `#2f7fd8`, hard `#d8452f`, expert `#1d1d1d`. Lines carry a dark casing so they hold on every basemap.
+- **OpenStreetMap paths** from OpenTrailMap tiles are fine dashed topo lines (`#8c4a32`), never the access colours of the upstream style.
+- **Shapes:** search and filter chips are full pills (999px); controls and cards use 12–14px corners. Shadows are soft and offset (`0 6px 20px`), reserved for floating chrome.
+- **Type:** Inter at 12–15.5px with tabular numerals; card names 15.5px semibold.
+- **Behaviour:** the card rail lists trails in view nearest first (short stubs rank lower). Selecting a pin, line or card loads the full line, elevation profile, today’s forecast and directions (in-map drive route, Google Maps, Apple Maps). Sections (Hike & walk, Bike, Horseback, Snow) open on the visitor’s sign-up choice.
+
 ## Do's and Don'ts
 
 ### Do:

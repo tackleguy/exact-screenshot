@@ -107,7 +107,9 @@ export interface CatalogFilters {
   limit?: number;
   minMiles?: number;
   maxMiles?: number;
+  /** One or more of easy, moderate, hard, expert (comma separated): reported, else estimated. */
   difficulty?: string;
+  routeType?: import("./quality").RouteType;
   dogFriendly?: boolean;
   /** When true, keep ski/snowshoe/snowmobile-named sections. Default excludes them. */
   includeWinter?: boolean;

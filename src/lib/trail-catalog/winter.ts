@@ -15,7 +15,7 @@ export function isWinterActivityTrail(trail: Pick<CatalogTrail, "name" | "manage
   // Summer trails a resort lists; the resort's name ("Taos Ski Valley") says nothing about the trail.
   if (trail.source === "resort") return false;
   // Mapped on a downhill piste: a ski run whatever its name says.
-  if (trail.winterUse === "downhill") return true;
+  if (trail.winterUse === "downhill" || trail.winterUse === "oversnow") return true;
   const haystack = `${trail.name} ${trail.manager ?? ""}`;
   if (PLACE_FALSE_POSITIVE.test(haystack)) return false;
   return WINTER_ACTIVITY.test(haystack);

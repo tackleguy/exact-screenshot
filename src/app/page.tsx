@@ -18,7 +18,7 @@ async function Landing() {
   return <div className="fieldbook-page">
     <header className="fieldbook-page-toolbar"><div><h1>Find, plan and pack your next hike.</h1><p className="fieldbook-page-intro">Real trails from official sources, with the water, towns and gear to get you through them.</p></div></header>
     <form action="/explore/trails" className="mt-6 flex max-w-2xl gap-3" role="search"><label htmlFor="home-search" className="sr-only">Search trails or places</label><input id="home-search" name="q" placeholder="Search a trail, park or town" className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-4 py-3 text-base" /><button className="btn-primary" type="submit">Search</button></form>
-    <div className="mt-4 flex flex-wrap gap-3"><Link href="/explore/trails" className="btn-ghost">Browse the map</Link><Link href="/plan" className="btn-ghost">Plan a trip</Link></div>
+    <div className="mt-4 flex flex-wrap gap-3"><Link href="/map" className="btn-ghost">Open the trail map</Link><Link href="/plan" className="btn-ghost">Plan a trip</Link></div>
     <ul className="mt-10 grid gap-4 sm:grid-cols-2">{features.map(([title, body]) => <li key={title} className="fieldbook-empty"><h3>{title}</h3><p>{body}</p></li>)}</ul>
     <p className="mt-8 text-sm text-stone-600">Have an account? <Link href="/login" className="underline">Sign in</Link> to record hikes and keep your gear and trips in sync. New here? <Link href="/signup" className="underline">Create an account</Link>.</p>
   </div>;

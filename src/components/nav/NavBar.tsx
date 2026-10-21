@@ -10,6 +10,7 @@ import { NavIcon } from "./NavIcon";
 
 const navLinks = [
   { href: "/explore/trails", label: "Explore", icon: "explore" as const, hint: "G then E" },
+  { href: "/map", label: "Map", icon: "map" as const, hint: "G then M" },
   { href: "/plan", label: "My trips", icon: "trips" as const, hint: "G then T" },
   { href: "/gear", label: "Gear", icon: "gear" as const, hint: "G then G" },
 ];
@@ -33,7 +34,6 @@ const footerLinks = [
 
 const tools = [
   { href: "/record", label: "Record activity", hint: "G then R" },
-  { href: "/map", label: "Adventure map", hint: "G then M" },
   { href: "/", label: "Activity log", hint: "G then A" },
   { href: "/pack-trails", label: "Route guides" },
   { href: "/explore/trails?collection=community", label: "Community & GPX trails" },

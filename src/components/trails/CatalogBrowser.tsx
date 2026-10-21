@@ -5,6 +5,8 @@ import { countryName, displayMiles, trailPlace } from "@/lib/trail-catalog/types
 import { QUALITY_STATUS_LABELS } from "@/lib/trail-catalog/quality";
 import { CatalogMap } from "./CatalogMap";
 import { NavIcon } from "@/components/nav/NavIcon";
+import { SectionIcon } from "@/components/explore/SectionIcon";
+import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf } from "@/lib/trail-catalog/activity";
 import "./catalog.css";
 
 export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
@@ -34,7 +36,7 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
       : filters.country && countryName(filters.country),
     filters.kind === "route" && "Through-hikes",
     filters.kind === "segment" && "Sections only",
-    activity === "ski" && "Ski trails",
+    activity !== "hike" && activity !== "all" && CATALOG_ACTIVITY_LABELS[activity],
     filters.uniqueNames && "Unique names",
     filters.includeFragments && "Partial segments",
     filters.region,
@@ -71,12 +73,6 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
           <Link className="catalog-button secondary" href="/explore/trails?country=intl&kind=route">
             International
           </Link>
-          <Link
-            className="catalog-button secondary"
-            href="/explore/trails?activity=ski&includeWinter=true"
-          >
-            Ski trails
-          </Link>
           <Link className="catalog-button secondary" href="/explore/ski">
             Ski maps
           </Link>
@@ -88,10 +84,24 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
           Have a trip in mind? Plan it
         </Link>
       </header>
+      <nav className="catalog-sections" aria-label="Trail sections">
+        {TRAIL_SECTIONS.map((section) => {
+          const next = new URLSearchParams(params);
+          next.delete("page");
+          next.delete("includeWinter");
+          next.set("activity", section.activity);
+          return (
+            <Link key={section.key} href={`/explore/trails?${next}`} className="catalog-section" aria-current={sectionOf(activity === "all" ? "hike" : activity).key === section.key ? "page" : undefined}>
+              <SectionIcon section={section.key} size={20} />
+              {section.label}
+            </Link>
+          );
+        })}
+      </nav>
       <form className="catalog-filters" action="/explore/trails">
         {!preview && <input type="hidden" name="limit" value={limit} />}
         {filters.bbox && <input type="hidden" name="bbox" value={filters.bbox.join(",")} />}
-        {activity !== "hike" && activity !== "all" && (
+        {activity !== "all" && (
           <input type="hidden" name="activity" value={activity} />
         )}
         {activity === "ski" && <input type="hidden" name="includeWinter" value="true" />}

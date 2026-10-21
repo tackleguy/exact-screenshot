@@ -152,7 +152,7 @@ input,textarea { caret-color: var(--accent); }
   .fieldbook-nav { display:none; }.fieldbook-mobile-header { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:64px; padding:12px 20px; background:#173f35; color:#fff; position:relative; z-index:60; }
   .fieldbook-brand { font-size:18px; }.fieldbook-mobile-header .nav-tools { margin:0; }.fieldbook-mobile-header .nav-tools summary { padding:10px 0 10px 12px; list-style:none; }
   .fieldbook-mobile-header .nav-tools-content { position:absolute; right:12px; top:60px; background:#173f35; padding:12px; border-radius:8px; width:min(330px,calc(100vw - 24px)); box-shadow:0 8px 24px #173f3526; }
-  .fieldbook-bottom-nav { position:fixed; inset:auto 0 0; z-index:60; display:grid; grid-template-columns:repeat(4,1fr); gap:4px; background:var(--surface); border-top:1px solid var(--border); padding:8px 12px max(8px,env(safe-area-inset-bottom)); }
+  .fieldbook-bottom-nav { position:fixed; inset:auto 0 0; z-index:60; display:grid; grid-template-columns:repeat(5,1fr); gap:2px; background:var(--surface); border-top:1px solid var(--border); padding:8px 12px max(8px,env(safe-area-inset-bottom)); }
   .fieldbook-bottom-nav a { min-height:50px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color:var(--sage); font-size:12px; border-radius:8px; }
   .fieldbook-bottom-nav a[aria-current] { color:var(--accent); background:var(--surface-muted); font-weight:600; }.fieldbook-bottom-nav svg { width:20px; height:20px; }
   .fieldbook-page { padding:24px 20px 40px; }.fieldbook-page-toolbar { align-items:flex-start; flex-wrap:wrap; }.fieldbook-page h1 { font-size:30px; }.fieldbook-page h2 { font-size:22px; }
@@ -288,3 +288,20 @@ html { scroll-padding-block:20px 100px; }
   isolation: isolate;
   z-index: 0;
 }
+
+/* Sign-up: preferred trail section */
+.section-picker { border: 0; margin: 0; padding: 0; }
+.section-picker-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.section-option { position: relative; display: grid; align-content: start; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 2px; align-items: center; padding: 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--foreground); cursor: pointer; transition: border-color 160ms ease-out, background-color 160ms ease-out; }
+.section-option input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }
+.section-option svg { color: var(--accent); }
+.section-option-label { font-size: 14px; font-weight: 600; }
+.section-option-blurb { grid-column: 1 / -1; font-size: 12px; line-height: 1.45; color: var(--sage); }
+.section-option:hover { border-color: var(--accent); }
+.section-option:has(input:checked) { border-color: var(--accent); background: var(--surface-muted); box-shadow: inset 0 0 0 1px var(--accent); }
+.section-option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .section-option { transition: none; } }
+
+/* Full-bleed trail map */
+.app-shell--map .app-content { min-height: 0; }
+@media (max-width: 767px) { .app-shell--map .app-content { min-height: 0; } }

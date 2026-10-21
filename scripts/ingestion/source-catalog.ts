@@ -12,6 +12,8 @@ import { auditCatalog } from "../../src/lib/trail-catalog/audit";
 import { QUALITY_RULES, isPlaceholderName } from "../../src/lib/trail-catalog/quality";
 import { PisteIndex, matchSkiRun, type SkiRunCache } from "../../src/lib/trail-catalog/ski-runs";
 import { TrailheadIndex, trailEnds, type TrailheadCache } from "../../src/lib/trail-catalog/access";
+import { geometryCell } from "../../src/lib/trail-catalog/cells";
+import { USFS_SNOW_WHERE, pisteIndexes, winterVerdict } from "../../src/lib/trail-catalog/winter-audit";
 import { BLM_LAYERS, DUPLICATE_SHARE, blmUses, LineIndex, NPS_WHERE, USFS_HIKING_WHERE, USFS_NO_HIKING_WHERE, classifyTerrain, pointsAlong } from "../../src/lib/trail-catalog/additions";
 import { namesAgree } from "../../src/lib/trail-catalog/verify";
 import { confidenceFor, normalizeSeason, sourceTypeFor, titleCaseName, trailStatusFor, trailTypeFor, usfsUses, type SourceRef, type SourceType } from "../../src/lib/trail-catalog/agencies";
@@ -300,7 +302,7 @@ async function main() {
   const trails: typeof merged = [];
   for (const trail of merged) {
     if ((trail.row.miles ?? 0) < minimumTrailMiles) { excluded.tooShort += trail.sectionIds.length; continue; }
-    trail.row.geometryShard = shardOf(trail.row.id);
+    trail.row.geometryShard = geometryCell(trail.row.longitude, trail.row.latitude);
     trails.push(trail);
   }
   // Attach confirming official sources, and sample the elevation range of trails that only an agency maps.
@@ -373,7 +375,7 @@ async function main() {
   trails.sort((a, b) => a.row.name.localeCompare(b.row.name) || a.row.id.localeCompare(b.row.id));
   // Records whose line follows OpenSkiMap pistes are ski runs, not hiking trails (npm run source:ski).
   let skiSource: CatalogManifest["sources"][number] | null = null;
-  const winterCounts = { downhill: 0, nordic: 0 };
+  const winterCounts = { downhill: 0, oversnow: 0, nordic: 0 };
   try {
     const ski = JSON.parse(gunzipSync(await readFile(path.join(root, ".cache/ski/runs-na.json.gz"))).toString()) as SkiRunCache;
     const pistes = new PisteIndex(ski.runs);
@@ -386,6 +388,25 @@ async function main() {
     }
     skiSource = { name: "OpenSkiMap — ski runs (used to identify ski runs; not listed as trails)", url: "https://openskimap.org", license: "ODbL — © OpenStreetMap contributors", count: 0, query: `U.S./Canadian pistes; a record is a run when ≥60% of its line follows a piste`, retrievedAt: ski.retrievedAt };
     console.log(`Ski pistes: ${winterCounts.downhill} downhill runs, ${winterCounts.nordic} Nordic tracks`);
+    // Second pass: lift lines and courses on pistes, USFS snow-only routes and winter-only names.
+    const { downhillOnly } = pisteIndexes(ski);
+    const snow = new LineIndex();
+    for (let offset = 0; ; offset += 1000) {
+      const query = new URLSearchParams({ f: "json", where: USFS_SNOW_WHERE, outFields: "objectid", returnGeometry: "true", outSR: "4326", geometryPrecision: "5", maxAllowableOffset: "0.0001", orderByFields: "objectid ASC", resultOffset: String(offset), resultRecordCount: "1000" });
+      const data = await fetchPage(`${USFS}/query?${query}`, `usfs-snow-${offset}-${hash(query.toString()).slice(0, 8)}`);
+      for (const f of data.features!) if (f.geometry?.paths?.length) snow.add(f.geometry.paths, String(f.attributes.objectid));
+      if (!data.exceededTransferLimit || !data.features!.length) break;
+    }
+    let second = 0;
+    for (const trail of trails) {
+      if (trail.row.kind !== "segment") continue;
+      const verdict = winterVerdict(trail.row, trail.lines, pistes, downhillOnly, snow);
+      if (!verdict || verdict.use === trail.row.winterUse) continue;
+      trail.row.winterUse = verdict.use;
+      winterCounts[verdict.use]++;
+      second++;
+    }
+    console.log(`Winter second pass: ${second} more ski or over-snow records`);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     console.warn("No ski run cache; run npm run source:ski to identify ski runs.");
@@ -462,9 +483,9 @@ async function main() {
       if (id && id !== trail.row.id && !aliases[shardOf(id)]?.[id]) (aliases[shardOf(id)] ??= {})[id] = trail.row.id;
     }
   }
+  for (const [cell, data] of Object.entries(shards)) await writeFile(path.join(stage, `geometry-${cell}.json.gz`), gzipSync(JSON.stringify(data), { level:9 }));
   for (let i = 0; i < 64; i++) {
     const shard = String(i).padStart(2, "0");
-    await writeFile(path.join(stage, `geometry-${shard}.json.gz`), gzipSync(JSON.stringify(shards[shard] ?? {}), { level:9 }));
     await writeFile(path.join(stage, `aliases-${shard}.json.gz`), gzipSync(JSON.stringify(aliases[shard] ?? {}), { level:9 }));
   }
   await writeFile(path.join(stage, "index.json.gz"), index);

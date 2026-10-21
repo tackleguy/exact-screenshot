@@ -36,7 +36,7 @@ const ESRI_LABELS =
 const ESRI_ROADS =
   "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}";
 const TERRARIUM_DEM =
-  "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{y}/{x}.png";
+  "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
 
 const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
   type: "raster-dem",

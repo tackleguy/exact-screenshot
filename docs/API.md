@@ -18,10 +18,11 @@ Query (all optional):
 | `q` | text: trail, park, forest, town, state |
 | `country` | `US`, `CA`, or `intl` (curated international guides) |
 | `region` | state/province name, e.g. `Colorado` |
-| `activity` | `hike` (default), `backpack`, `bike`, `run`, `ski`, `all` |
+| `activity` | `hike` (default), `walk`, `backpack`, `run`, `bike`, `mtb`, `path-bike`, `horse`, `ski`, `all` (see **Sections** below) |
 | `kind` | `segment` (trails) or `route` (through-hikes) |
 | `minMiles`, `maxMiles`, `targetMiles` | length filters / sort by closeness to a target |
-| `difficulty` | `easy`, `moderate`, `hard` |
+| `difficulty` | one or more of `easy`, `moderate`, `hard`, `expert`, comma separated (agency-reported, else estimated) |
+| `routeType` | `loop`, `point-to-point`, `network` |
 | `dogFriendly` | `true` |
 | `lat`, `lng`, `radiusKm` | near a point (sorted by distance) |
 | `bbox` | `west,south,east,north` |
@@ -68,6 +69,12 @@ Response: `{ trails: Trail[], total, page, pages, limit, manifest }`.
 
 ### `GET /api/trail-catalog/map` — map points
 Same filters as search. Returns `{ points: { id, latitude, longitude, count, bounds?, trail? }[], total, bounds, grouped }`. When `grouped` is true, points with `count > 1` are clusters: zoom to `bounds`.
+
+### `GET /api/trail-catalog/points?bbox=…&<filters>` — compact pins for a map view
+Same filters as search. Returns `{ total, trails, clusters }`. When up to 2,500 trails match, `trails` lists every one as a tuple `[id, name, lng, lat, miles, difficulty, place, routeType]` (difficulty `e`/`m`/`h`/`x`) and `clusters` is empty: cluster them client-side (MapLibre `cluster: true`). Above that, `trails` is empty and `clusters` is `[lng, lat, count, west, south, east, north][]`: zoom to the bounds on tap.
+
+### `GET /api/trail-catalog/lines?bbox=…&zoom=…&<filters>` — trail lines in view
+GeoJSON `FeatureCollection` of `MultiLineString` features with `properties: { id, name, d, miles }` (`d` = difficulty letter), simplified for `zoom`. Use from zoom ~10; views wider than 4° × 3° return no features (`truncated: true`). Colour lines by `d` and open the trail on click.
 
 ### `GET /api/trail-catalog/{id}` — one trail with its line
 Returns `{ trail: Trail, lines: [lng, lat][][] }`. `lines` is empty for resort-listed trails and guides without a mapped route. Draw `lines` as a multi-line on the map.
@@ -119,6 +126,19 @@ JSON body: `{ trailId, format: "html" | "json" | "gpx" | "csv", days?, startDate
 ### `GET /api/trail-catalog/{id}/photos` — nearby Wikimedia Commons photos (with license and credit)
 
 ---
+
+## Sections
+
+Trails are sorted into four sections; people pick one at sign-up (`profiles.preferred_section`: `foot`, `bike`, `horse`, `snow`, also in the auth user's `user_metadata.preferred_section`). Open the map and search on it.
+
+| section | `activity` values |
+|---|---|
+| Hike & walk (`foot`) | `hike` (all foot trails), `walk` (paved, boardwalk and nature walks ≤ 8 mi), `backpack`, `run` |
+| Bike (`bike`) | `bike` (all), `mtb` (natural-surface trails), `path-bike` (rail trails, greenways, paved and gravel paths) |
+| Horseback (`horse`) | `horse` |
+| Snow (`snow`) | `ski` (Nordic, snowshoe, snowmobile and ski-area routes) |
+
+Bike, horse, snowshoe and ski access come from official allowed-use records (USGS National Digital Trails, USFS, BLM) where they exist (`trail.uses`), otherwise from names and surfaces. Trails an agency records as closed to hikers or open only to motor vehicles are left out of foot sections.
 
 ## Places, routing, weather
 

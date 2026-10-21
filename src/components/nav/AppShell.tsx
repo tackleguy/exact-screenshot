@@ -11,10 +11,11 @@ export function AppShell({ children, notice }: { children: ReactNode; notice: Re
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const recording = pathname.startsWith("/record/live");
   const standalone = recording || pathname.startsWith("/login") || pathname.startsWith("/signup");
+  const fullMap = pathname === "/map";
 
   return (
     <div
-      className={`app-shell${sidebarCollapsed ? " app-shell--collapsed" : ""}${standalone ? " app-shell--standalone" : ""}${recording ? " app-shell--recording" : ""}`}
+      className={`app-shell${sidebarCollapsed ? " app-shell--collapsed" : ""}${standalone ? " app-shell--standalone" : ""}${recording ? " app-shell--recording" : ""}${fullMap ? " app-shell--map" : ""}`}
     >
       <a className="skip-link" href="#main-content">
         Skip to content
@@ -26,7 +27,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice: Re
         <main id="main-content" tabIndex={-1}>
           {children}
         </main>
-        {!standalone && notice}
+        {!standalone && !fullMap && notice}
         {process.env.NODE_ENV === "development" && <AccessibilityAudit />}
       </div>
       {!standalone && <BottomNav />}
