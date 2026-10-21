@@ -6,6 +6,7 @@ import { buildThroughHikeOverlay } from "../src/lib/trail-catalog/through-hikes"
 import { buildResortOverlay } from "../src/lib/trail-catalog/resorts";
 import { titleCaseName, normalizeSeason } from "../src/lib/trail-catalog/agencies";
 import type { CatalogTrail } from "../src/lib/trail-catalog/types";
+async function main() {
 const root = path.resolve("data/trail-catalog");
 const pointer = JSON.parse(await readFile(path.join(root, "current.json"), "utf8"));
 if (!/^snapshot-\d+$/.test(pointer.directory)) throw new Error("Invalid trail snapshot");
@@ -33,3 +34,9 @@ await Promise.all([...files].map(file => copyFile(path.join(source, file), path.
 await writeFile(path.join(output, "manifest.json"), JSON.stringify({ ...manifest, total: rows.length, cells: [...cells.keys()], directory: pointer.directory }));
 await writeFile(path.resolve("public/trail-data/current.json"), JSON.stringify(pointer));
 console.log(`Prepared ${rows.length} source-backed trails in ${cells.size} local cells.`);
+await Promise.all([
+  copyFile("data/sources/trailheads-na.json.gz", path.join(output, "trailheads.json.gz")),
+  copyFile("data/towns/towns.json.gz", path.join(output, "towns.json.gz")),
+]);
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });

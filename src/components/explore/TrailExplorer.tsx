@@ -9,6 +9,7 @@ import { appleMapsDirectionsUrl, googleMapsDirectionsUrl, type AccessPoint } fro
 import { storeSection } from "@/lib/preferred-section";
 import type { ExploreCluster, ExplorePointTrail } from "@/lib/trail-catalog/server";
 import type { CatalogTrail } from "@/lib/trail-catalog/types";
+import { localTrailsVisible, TRAIL_DETAIL_ZOOM, MAP_TRAIL_LIMIT, TRAIL_CARD_LIMIT } from "@/lib/trail-catalog/discovery";
 import type { WeatherPeriod } from "@/lib/weather/types";
 import { SectionIcon } from "./SectionIcon";
 import { DIFFICULTY_COLORS, DIFFICULTY_LABELS, EMPTY, explorerStyle, installOverlay, setSky, type Basemap } from "./explorer-map";
@@ -40,7 +41,7 @@ const SUB_ACTIVITIES: Record<TrailSectionKey, CatalogActivity[]> = {
   snow: ["ski"],
 };
 const ALL_LABEL: Partial<Record<CatalogActivity, string>> = { hike: "All on foot", bike: "All biking" };
-const LINE_ZOOM = 9.5;
+const LINE_ZOOM = TRAIL_DETAIL_ZOOM;
 
 interface Filters { activity: CatalogActivity; difficulty: string[]; length: string; routeType: string }
 
@@ -123,12 +124,21 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
   const refresh = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
+    fetchAbort.current?.abort();
+    if (!localTrailsVisible(map.getZoom())) {
+      setPoints({ trails: [], clusters: [], total: 0 });
+      setSource("pins", EMPTY); setSource("grid", EMPTY); setSource("lines", EMPTY); setSource("selected", EMPTY); setSource("drive", EMPTY);
+      setLoading(false); setLoadError(null);
+      return;
+    }
     const b = map.getBounds();
     const pad = 0.08;
     const w = b.getEast() - b.getWest(), h = b.getNorth() - b.getSouth();
     const bbox: Bounds = [Math.max(-180, b.getWest() - w * pad), Math.max(-85, b.getSouth() - h * pad), Math.min(180, b.getEast() + w * pad), Math.min(85, b.getNorth() + h * pad)];
     const params = filterParams(filtersRef.current);
     params.set("bbox", bbox.map((n) => n.toFixed(4)).join(","));
+    params.set("zoom", String(map.getZoom()));
+    params.set("limit", String(MAP_TRAIL_LIMIT));
     fetchAbort.current?.abort();
     const controller = new AbortController();
     fetchAbort.current = controller;
@@ -137,13 +147,15 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
     void fetch(`/api/trail-catalog/points?${params}`, { signal })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("points"))))
       .then((data: PointsResponse) => {
+        if (signal.aborted) return;
+        data.trails = data.trails.slice(0, MAP_TRAIL_LIMIT);
         setPoints(data);
         setLoadError(null);
         setSource("pins", { type: "FeatureCollection", features: data.trails.map(([id, name, lng, lat, miles, d]) => ({ type: "Feature", properties: { id, name, miles, d }, geometry: { type: "Point", coordinates: [lng, lat] } })) });
         setSource("grid", { type: "FeatureCollection", features: data.clusters.map(([lng, lat, count, w2, s2, e2, n2]) => ({ type: "Feature", properties: { count, bounds: [w2, s2, e2, n2].join(",") }, geometry: { type: "Point", coordinates: [lng, lat] } })) });
       })
       .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === "AbortError") return;
+        if (signal.aborted) return;
         setLoadError("Trails couldn’t load here. Move the map to try again.");
       })
       .finally(() => { if (!signal.aborted) setLoading(false); });
@@ -151,9 +163,10 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
       const lp = filterParams(filtersRef.current);
       lp.set("bbox", [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(4)).join(","));
       lp.set("zoom", String(Math.round(map.getZoom())));
+      lp.set("limit", String(MAP_TRAIL_LIMIT));
       void fetch(`/api/trail-catalog/lines?${lp}`, { signal })
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error("lines"))))
-        .then((data: GeoJSON.FeatureCollection) => setSource("lines", data))
+        .then((data: GeoJSON.FeatureCollection) => { if (!signal.aborted) setSource("lines", { ...data, features: data.features.slice(0, MAP_TRAIL_LIMIT) }); })
         .catch(() => undefined);
     } else {
       setSource("lines", EMPTY);
@@ -333,10 +346,11 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
   }, [selectedId, setSource, syncSelectedPin]);
 
   const cards = useMemo(() => {
+    if (!localTrailsVisible(zoom)) return [];
     // Nearest first, with short stubs and connectors yielding to real trails a little farther away.
     const list = (points?.trails ?? []).map((t) => ({ t, km: distanceKm(center, [t[2], t[3]]) / Math.min(3, 0.4 + Math.sqrt(t[4] ?? 0.2)) }));
     list.sort((a, b) => a.km - b.km);
-    const out = list.slice(0, 40).map((x) => x.t);
+    const out = list.slice(0, TRAIL_CARD_LIMIT).map((x) => x.t);
     if (selectedId && !out.some((t) => t[0] === selectedId)) {
       const hit = points?.trails.find((t) => t[0] === selectedId);
       if (hit) out.unshift(hit);
@@ -345,8 +359,8 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
         out.unshift([t.id, t.name, t.longitude, t.latitude, t.miles, "m", t.park ?? t.forest ?? t.region, t.routeType ?? null]);
       }
     }
-    return out;
-  }, [points, center, selectedId, detail]);
+    return out.slice(0, TRAIL_CARD_LIMIT);
+  }, [points, center, selectedId, detail, zoom]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -535,10 +549,10 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
       </div>
 
       <p className="hx-status" aria-live="polite">
-        {loadError ?? mapError ?? (points
+        {loadError ?? mapError ?? (!localTrailsVisible(zoom) ? "Zoom in to see local trails." : points
           ? points.total === 0
             ? `No ${section.label.toLowerCase()} trails here. Zoom out or clear filters.`
-            : `${points.total.toLocaleString("en-US")} ${points.total === 1 ? "trail" : "trails"} in view${points.clusters.length ? " · zoom in for details" : zoom < LINE_ZOOM ? " · zoom in to see routes" : ""}`
+            : `${Math.min(points.trails.length, MAP_TRAIL_LIMIT)} of ${points.total.toLocaleString("en-US")} trails nearby`
           : "Loading trails…")}
         {loading && <span className="hx-spinner" aria-hidden="true" />}
       </p>
