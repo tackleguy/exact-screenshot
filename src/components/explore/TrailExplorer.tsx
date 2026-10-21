@@ -12,6 +12,7 @@ import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { localTrailsVisible, TRAIL_DETAIL_ZOOM, MAP_TRAIL_LIMIT, TRAIL_CARD_LIMIT } from "@/lib/trail-catalog/discovery";
 import type { WeatherPeriod } from "@/lib/weather/types";
 import { SectionIcon } from "./SectionIcon";
+import { NearbyTrails } from "./NearbyTrails";
 import { DIFFICULTY_COLORS, DIFFICULTY_LABELS, EMPTY, explorerStyle, installOverlay, setSky, type Basemap } from "./explorer-map";
 import "./explorer.css";
 
@@ -76,7 +77,7 @@ function distanceKm(a: [number, number], b: [number, number]) {
 
 export interface ExplorerStart { activity: CatalogActivity; trail: string | null; center: [number, number] | null; zoom: number | null }
 
-export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
+export function TrailExplorer({ start: initial, workspace = false }: { start: ExplorerStart; workspace?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const railRef = useRef<HTMLDivElement>(null);
@@ -418,6 +419,10 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
       { timeout: 12_000, maximumAge: 300_000 },
     );
   }
+  function visit(lat: number, lng: number) {
+    setSelectedId(null);
+    mapRef.current?.flyTo({ center: [lng, lat], zoom: 12, duration: 1000 });
+  }
 
   const chooseSection = (key: TrailSectionKey) => {
     storeSection(key);
@@ -429,7 +434,8 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
   const gain = elevation && elevation !== "none" ? elevation.gainFt : null;
 
   return (
-    <div className="hx" onKeyDown={(e) => { if (e.key === "Escape") { setOpen(null); setQuery(""); } }}>
+    <div className={`hx${workspace ? " hx-workspace" : " hx-workspace hx-workspace--map"}`} onKeyDown={(e) => { if (e.key === "Escape") { setOpen(null); setQuery(""); } }}>
+      <header className="hx-workspace-header"><div><h1>{workspace ? "Explore trails" : "Trail map"}</h1><p>Find a route. Make it your next adventure.</p></div><nav aria-label="Trail workspace"><Link className="hx-btn" href="/explore/trails/catalog">Browse list</Link><Link className="hx-btn hx-btn--primary" href="/plan">Plan a trip <span aria-hidden>↗</span></Link></nav></header>
       <div ref={containerRef} className="hx-map" role="region" aria-label="Trail map" />
 
       <div className="hx-top">
@@ -601,6 +607,7 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
       </div>
 
       <div className="hx-rail-wrap">
+        <div className="hx-results-heading"><div><span className="hx-eyebrow">YOUR NEXT OUTING</span><h2>Trails nearby</h2></div><span className="hx-result-count">{cards.length}</span></div>
         {cards.length > 0 ? (
           <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, nearest first">
             {cards.map((t) => {
@@ -646,15 +653,14 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
                         )}
                       </div>
                       {start && <p className="hx-start">{start.kind === "trail-end" ? "Directions go to the trail’s mapped start; no trailhead is mapped nearby." : `Directions go to ${start.name ?? (start.kind === "parking" ? "trailhead parking" : "the trailhead")}${start.toTrailMeters > 50 ? `, ${Math.round(start.toTrailMeters)} m from the trail` : ""}.`}</p>}
+                      <NearbyTrails trailId={id} />
                     </div>
                   )}
                 </article>
               );
             })}
           </div>
-        ) : points && points.clusters.length > 0 ? (
-          <p className="hx-rail-empty">Zoom in or tap a circle to see trails.</p>
-        ) : null}
+        ) : <div className="hx-discover"><h3>{localTrailsVisible(zoom) ? "A little further afield?" : "Where are you headed?"}</h3><p>{localTrailsVisible(zoom) ? "Move the map or choose another area." : "Local trails appear as you zoom in."}</p><button className="hx-btn hx-btn--primary" type="button" onClick={locate}>◎ Trails near me</button><span className="hx-eyebrow">EXPLORE AN AREA</span><div className="hx-destinations"><button type="button" className="hx-btn" onClick={() => visit(37.74, -119.58)}>Yosemite <span>↗</span></button><button type="button" className="hx-btn" onClick={() => visit(40.31, -105.64)}>Rocky Mountain <span>↗</span></button><button type="button" className="hx-btn" onClick={() => visit(47.50, -121.75)}>Cascades <span>↗</span></button></div><Link className="hx-plan-link" href="/pack-trails">My saved routes <span>→</span></Link></div>}
         {selectedCard === undefined && selectedId && detail === null && <p className="sr-only" role="status">Loading trail</p>}
       </div>
     </div>

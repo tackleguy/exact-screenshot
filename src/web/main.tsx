@@ -69,13 +69,13 @@ function TrailDetail() {
   if (!state.trail || !state.manifest) return <Status title="Loading trail…" />;
   return <CatalogTrailDetail trail={state.trail} lines={state.lines ?? []} manifest={state.manifest} />;
 }
-function MapPage() {
+function MapPage({ workspace = false }: { workspace?: boolean }) {
   const { search } = useLocation(); const params = new URLSearchParams(search);
   const candidate = params.get("activity");
   const activity: CatalogActivity = candidate && (CATALOG_ACTIVITIES as readonly string[]).includes(candidate) ? candidate as CatalogActivity : "hike";
   const lat = params.has("lat") ? Number(params.get("lat")) : NaN; const lng = params.has("lng") ? Number(params.get("lng")) : NaN;
   const zoom = params.has("z") ? Number(params.get("z")) : NaN;
-  return <TrailExplorer start={{ activity, trail: params.get("trail"), center: Number.isFinite(lat) && lat >= -85 && lat <= 85 && Number.isFinite(lng) && lng >= -180 && lng <= 180 ? [lng, lat] : null, zoom: Number.isFinite(zoom) && zoom >= 1 && zoom <= 20 ? zoom : null }} />;
+  return <TrailExplorer workspace={workspace} start={{ activity, trail: params.get("trail"), center: Number.isFinite(lat) && lat >= -85 && lat <= 85 && Number.isFinite(lng) && lng >= -180 && lng <= 180 ? [lng, lat] : null, zoom: Number.isFinite(zoom) && zoom >= 1 && zoom <= 20 ? zoom : null }} />;
 }
 function Gear() { const { user, loading } = useAccount(); if (loading) return <Status title="Loading gear…" />; return user ? <div className="fieldbook-page"><GearPageClient userId={user.id} /></div> : <LocalGear />; }
 function Planner() {
@@ -114,7 +114,7 @@ function BackendPage() { const location = useLocation(); return <Status title="T
 function App() {
   return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><AppShell notice={<DeployBanner />}><Routes>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<Navigate to="/explore/trails" replace />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
-    <Route path="/explore/trails" element={<Catalog />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} />
+    <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<Catalog />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
     <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />

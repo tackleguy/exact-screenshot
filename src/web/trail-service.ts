@@ -4,10 +4,12 @@ import { buildCatalogMap } from "@/lib/trail-catalog/map";
 import { resolveDifficulty } from "@/lib/trail-difficulty";
 import { catalogGpx } from "@/lib/trail-catalog/gpx";
 import { readableTrailName, MAP_TRAIL_LIMIT, TRAIL_CARD_LIMIT, localTrailsVisible } from "@/lib/trail-catalog/discovery";
+import { TrailheadIndex, trailEnds, type TrailheadCache } from "@/lib/trail-catalog/access";
 type Metadata = CatalogManifest & { directory: string; cells: string[] };
 type Lines = [number, number][][];
 const cache = new Map<string, Promise<unknown>>();
 let metadata: Promise<Metadata> | undefined;
+let trailheads: Promise<TrailheadIndex> | undefined;
 async function asset<T>(file: string, fetcher: typeof fetch): Promise<T> {
   let hit = cache.get(file);
   if (!hit) {
@@ -15,8 +17,13 @@ async function asset<T>(file: string, fetcher: typeof fetch): Promise<T> {
       const res = await fetcher(`/trail-data/${file}`);
       if (!res.ok) throw new Error("Trail data could not load. Please try again.");
       if (file.endsWith(".gz")) {
-        if (!res.body) throw new Error("Empty trail data response");
-        return JSON.parse(await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).text());
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        // Hosts may already decompress .gz responses through Content-Encoding.
+        const blob = new Blob([bytes]);
+        const text = bytes[0] === 0x1f && bytes[1] === 0x8b
+          ? await new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).text()
+          : await blob.text();
+        return JSON.parse(text);
       }
       return res.json();
     })().catch(error => { cache.delete(file); throw error; });
@@ -69,6 +76,12 @@ async function detail(id: string, fetcher: typeof fetch): Promise<{ trail: Catal
       const member = await detail(memberId, fetcher);
       if (member) lines.push(...member.lines);
     }
+  }
+  const ends = trailEnds(lines);
+  if (ends && !trail.trailhead) {
+    trailheads ??= asset<TrailheadCache>(`${m.directory}/trailheads.json.gz`, fetcher).then(data => new TrailheadIndex(data.trailheads)).catch(error => { trailheads = undefined; throw error; });
+    const head = (await trailheads).nearest(ends);
+    trail.trailhead = head ?? { kind: "trail-end", name: null, longitude: ends[0][0], latitude: ends[0][1], toTrailMeters: 0 };
   }
   return { trail, lines, manifest: m };
 }
