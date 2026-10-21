@@ -33,13 +33,15 @@ const footerLinks = [
 ];
 
 const tools = [
+  { href: "/explore/trails/catalog", label: "All trails & filters" },
+  { href: "/explore/trails/catalog?kind=route", label: "Through-hikes" },
   { href: "/you", label: "Profile" },
   { href: "/login", label: "Log in" },
   { href: "/signup", label: "Create account" },
   { href: "/record", label: "Record activity", hint: "G then R" },
   { href: "/", label: "Activity log", hint: "G then A" },
   { href: "/pack-trails", label: "Route guides" },
-  { href: "/explore/trails?collection=community", label: "Community & GPX trails" },
+  { href: "/explore/trails/catalog?collection=community", label: "Community & GPX trails" },
   { href: "/explore/ski", label: "Ski trails" },
 ];
 
