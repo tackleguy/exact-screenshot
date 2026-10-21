@@ -393,7 +393,9 @@ async function main() {
   // Start points: the nearest mapped OSM trailhead to either end (npm run source:trailheads).
   let trailheadSource: CatalogManifest["sources"][number] | null = null;
   try {
-    const cached = JSON.parse(gunzipSync(await readFile(path.join(root, ".cache/trailheads/trailheads-na.json.gz"))).toString()) as TrailheadCache;
+    // The local cache (npm run source:trailheads) wins; the committed copy keeps rebuilds working when Overpass is down.
+    const raw = await readFile(path.join(root, ".cache/trailheads/trailheads-na.json.gz")).catch(() => readFile(path.join(root, "data/sources/trailheads-na.json.gz")));
+    const cached = JSON.parse(gunzipSync(raw).toString()) as TrailheadCache;
     const index = new TrailheadIndex(cached.trailheads);
     let matched = 0;
     for (const trail of trails) {
