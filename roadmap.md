@@ -1,4 +1,5 @@
 # Lovable publishing and simpler discovery
+- [ ] Make driving directions open a real map, restore pre-redesign tools, and add connected point-to-point trail planning using parallel investigations.
 - [x] Restore the visible map and remake trail browsing as a compact chess.com-inspired workspace; verify search, map navigation, and directions.
 - [x] Wire Explore and Map to the source-backed local trail catalog, including names, nearby trails, and trailhead directions; verified Yosemite Falls through the UI.
 - [x] Limit displayed trails and load local trail details only when zoomed in; visibility tests passed and the initial zoomed-out screen has no local trail cards.
