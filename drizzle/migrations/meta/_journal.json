@@ -15,6 +15,13 @@
       "when": 1792558938443,
       "tag": "0001_create_ski_area_details",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792559393670,
+      "tag": "0002_bind_journal_photos_read_to_owner",
+      "breakpoints": true
     }
   ]
 }
