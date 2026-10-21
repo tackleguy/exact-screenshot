@@ -4,7 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "
 import Link from "./compat/link";
 import { AppShell } from "@/components/nav/AppShell";
 import { DeployBanner } from "@/components/nav/DeployBanner";
-import { HomeSearch } from "@/components/home/HomeSearch";
+import { HomePromotion } from "@/components/home/HomePromotion";
 import { TrailExplorer } from "@/components/explore/TrailExplorer";
 import { CatalogTrailDetail } from "@/components/trails/CatalogTrailDetail";
 import { CatalogPresentation, type CatalogResult } from "./CatalogPresentation";
@@ -114,7 +114,7 @@ function ActivityDetail() {
 }
 function Home() {
   const { user } = useAccount();
-  return <div className="fieldbook-page"><section className="mountain-hero"><img src={mountainUrl} alt="Alpine mountains at blue hour" className="mountain-hero-image" /><div className="mountain-hero-content"><p className="section-label">Trails · Gear · Adventure</p><h1>Hyked</h1><p className="mountain-hero-intro">Find your next trail. Pack for the journey.</p><HomeSearch /><div className="mountain-hero-links"><Link href="/explore/trails">Explore trails <span aria-hidden>↗</span></Link><Link href="/plan">Plan a trip <span aria-hidden>↗</span></Link></div></div></section>{user ? <ActivityFeed /> : <section className="mt-8"><h2>Make room for the outdoors.</h2><div className="fieldbook-trail-paths"><Link href="/explore/trails"><h3>Find a trail</h3></Link><Link href="/plan"><h3>Plan your trip</h3></Link><Link href="/gear"><h3>Prepare your gear</h3></Link></div></section>}</div>;
+  return <><HomePromotion signedIn={Boolean(user)} />{user && <ActivityFeed />}</>;
 }
 function BackendPage() { const location = useLocation(); return <Status title="This page needs live trail services">{apiOrigin ? <a className="btn-primary" href={`${apiOrigin}${location.pathname}${location.search}`}>Open this page</a> : "Live trail services are not connected yet."}</Status>; }
 function App() {
