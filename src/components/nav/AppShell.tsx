@@ -11,7 +11,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice: Re
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const recording = pathname.startsWith("/record/live");
   const standalone = recording || pathname.startsWith("/login") || pathname.startsWith("/signup");
-  const fullMap = pathname === "/map";
+  const fullMap = pathname === "/map" || pathname === "/explore/trails";
 
   return (
     <div
