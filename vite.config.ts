@@ -4,7 +4,7 @@ import path from "node:path";
 export default defineConfig(({ mode }) => {
   const root = process.cwd();
   const env = loadEnv(mode, root, "");
-  const publicNames = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_CATALOG_TILE_URL", "NEXT_PUBLIC_CATALOG_TILE_ATTRIBUTION"];
+  const publicNames = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_CATALOG_TILE_URL", "NEXT_PUBLIC_CATALOG_TILE_ATTRIBUTION", "NEXT_PUBLIC_OPENTRAILMAP_URL"];
   const define = Object.fromEntries(publicNames.map(name => [`process.env.${name}`, JSON.stringify(env[name] ?? (name === "NEXT_PUBLIC_SUPABASE_URL" ? env.VITE_SUPABASE_URL : name === "NEXT_PUBLIC_SUPABASE_ANON_KEY" ? env.VITE_SUPABASE_PUBLISHABLE_KEY : undefined)) ?? "undefined"]));
   return {
     root: path.join(root, "src/web"), envDir: root, publicDir: path.join(root, "public"), plugins: [react()], define,

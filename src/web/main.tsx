@@ -32,6 +32,7 @@ import { apiOrigin, installApiBridge } from "./api";
 import { useAccount } from "./session";
 import "@/app/globals.css";
 import "./web.css";
+const mountainUrl = typeof mountainNight === "string" ? mountainNight : mountainNight.src;
 
 function Status({ title, children }: { title: string; children?: ReactNode }) { return <section className="fieldbook-page"><h1>{title}</h1><p role="status">{children}</p></section>; }
 function RequireAccount({ children }: { children: ReactNode }) {
@@ -107,11 +108,11 @@ function ActivityDetail() {
 }
 function Home() {
   const { user } = useAccount();
-  return <><section className="mountain-hero"><img src={mountainNight.src} alt="Alpine mountains at blue hour" className="mountain-hero-image" /><div className="mountain-hero-content"><p className="section-label">Trails · Gear · Adventure</p><h1>Hyked</h1><p className="mountain-hero-intro">Find your next trail. Pack for the journey.</p><HomeSearch /><div className="mountain-hero-links"><Link href="/explore/trails">Explore trails <span aria-hidden>↗</span></Link><Link href="/plan">Plan a trip <span aria-hidden>↗</span></Link></div></div></section>{user ? <ActivityFeed /> : <section className="fieldbook-page"><h2>Make room for the outdoors.</h2><div className="fieldbook-trail-paths"><Link href="/explore/trails"><h3>Find a trail</h3></Link><Link href="/plan"><h3>Plan your trip</h3></Link><Link href="/gear"><h3>Prepare your gear</h3></Link></div></section>}</>;
+  return <><section className="mountain-hero"><img src={mountainUrl} alt="Alpine mountains at blue hour" className="mountain-hero-image" /><div className="mountain-hero-content"><p className="section-label">Trails · Gear · Adventure</p><h1>Hyked</h1><p className="mountain-hero-intro">Find your next trail. Pack for the journey.</p><HomeSearch /><div className="mountain-hero-links"><Link href="/explore/trails">Explore trails <span aria-hidden>↗</span></Link><Link href="/plan">Plan a trip <span aria-hidden>↗</span></Link></div></div></section>{user ? <ActivityFeed /> : <section className="fieldbook-page"><h2>Make room for the outdoors.</h2><div className="fieldbook-trail-paths"><Link href="/explore/trails"><h3>Find a trail</h3></Link><Link href="/plan"><h3>Plan your trip</h3></Link><Link href="/gear"><h3>Prepare your gear</h3></Link></div></section>}</>;
 }
 function BackendPage() { const location = useLocation(); return <Status title="This page needs live trail services">{apiOrigin ? <a className="btn-primary" href={`${apiOrigin}${location.pathname}${location.search}`}>Open this page</a> : "Live trail services are not connected yet."}</Status>; }
 function App() {
-  return <><img src={mountainNight.src} alt="" aria-hidden className="mountain-backdrop" /><AppShell notice={<DeployBanner />}><Routes>
+  return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><AppShell notice={<DeployBanner />}><Routes>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<Navigate to="/explore/trails" replace />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<Catalog />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} />
