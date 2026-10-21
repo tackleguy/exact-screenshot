@@ -6,10 +6,12 @@
   },
   "scripts": {
     "predev": "node scripts/prepare-map-assets.mjs",
-    "dev": "next dev",
+    "dev": "vite --config vite.config.ts",
+    "dev:server": "next dev",
     "prebuild": "node scripts/prepare-map-assets.mjs",
-    "build": "next build",
+    "build": "vite build --config vite.config.ts",
     "build:dev": "bun run build",
+    "build:server": "node scripts/prepare-map-assets.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "tsx scripts/apply-migrations.ts",
@@ -37,7 +39,8 @@
     "pbf": "^4.0.2",
     "pngjs": "^7.0.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -47,6 +50,7 @@
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.2",
     "axe-core": "^4.12.1",
     "eslint": "^9",
     "eslint-config-next": "^16.3.5",
@@ -54,6 +58,7 @@
     "supabase": "^2.116.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite": "^8.3.4"
   }
 }
