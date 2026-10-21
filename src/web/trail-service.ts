@@ -2,6 +2,7 @@ import { parseCatalogFilters, filterCatalog, normalize, distanceKm } from "@/lib
 import type { CatalogTrail, CatalogManifest } from "@/lib/trail-catalog/types";
 import { buildCatalogMap } from "@/lib/trail-catalog/map";
 import { resolveDifficulty } from "@/lib/trail-difficulty";
+import { parseCommonsPhoto, type CommonsPage } from "@/lib/trail-catalog/photos";
 import { catalogGpx } from "@/lib/trail-catalog/gpx";
 import { readableTrailName, MAP_TRAIL_LIMIT, TRAIL_CARD_LIMIT, localTrailsVisible } from "@/lib/trail-catalog/discovery";
 import { TrailheadIndex, trailEnds, type TrailheadCache } from "@/lib/trail-catalog/access";
@@ -118,6 +119,16 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       const { rows } = await select(new URLSearchParams({ lat: String(t.latitude), lng: String(t.longitude), radiusKm: "25" }), fetcher);
       const result = filterCatalog(rows.filter(r => r.id !== t.id), { lat: t.latitude, lng: t.longitude, radiusKm: 25, limit: TRAIL_CARD_LIMIT, uniqueNames: true });
       return Response.json({ trails: await Promise.all(result.trails.map(async r => { const full = await detail(r.id, fetcher); return { ...r, trailhead: full?.trail.trailhead, distanceKm: distanceKm(t.latitude, t.longitude, r.latitude, r.longitude) }; })) });
+    }
+    if (suffix[1] === "photos") {
+      const t = d.trail;
+      const q = async (params: Record<string, string>) => (await fetcher(`https://commons.wikimedia.org/w/api.php?${new URLSearchParams({ action: "query", format: "json", origin: "*", ...params })}`)).json();
+      const geo = await q({ list: "geosearch", gscoord: `${t.latitude}|${t.longitude}`, gsradius: "1500", gsnamespace: "6", gslimit: "12" });
+      const near = (geo.query?.geosearch ?? []) as { pageid: number; dist: number }[];
+      if (!near.length) return Response.json({ photos: [] });
+      const img = await q({ pageids: near.map(p => p.pageid).join("|"), prop: "imageinfo", iiprop: "url|mime|extmetadata", iiurlwidth: "960" });
+      const pages = (img.query?.pages ?? {}) as Record<string, CommonsPage>;
+      return Response.json({ photos: near.map(p => pages[String(p.pageid)] ? parseCommonsPhoto(pages[String(p.pageid)], p.dist) : null).filter(Boolean).slice(0, 8) });
     }
     if (suffix[1] === "gpx") return new Response(catalogGpx(d.trail, d.lines), { headers: { "Content-Type": "application/gpx+xml", "Content-Disposition": 'attachment; filename="trail.gpx"' } });
     return Response.json({ error: "This additional trip service needs the separately hosted service. Trail maps, nearby trails and directions are available." }, { status: 503 });
