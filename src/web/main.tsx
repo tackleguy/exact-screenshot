@@ -34,7 +34,6 @@ import { CATALOG_ACTIVITIES, type CatalogActivity } from "@/lib/trail-catalog/ac
 import mountainNight from "@/assets/mountain-night.jpg";
 import { apiOrigin, installApiBridge } from "./api";
 import { useAccount } from "./session";
-import { LocalOutdoorAiChat } from "@/components/assistant/LocalOutdoorAiChat";
 import "@/app/globals.css";
 import "./web.css";
 const mountainUrl = typeof mountainNight === "string" ? mountainNight : mountainNight.src;
@@ -131,7 +130,7 @@ function App() {
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
     <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
     <Route path="/parks/:id" element={<BackendPage />} /><Route path="/admin/*" element={<BackendPage />} /><Route path="*" element={<Status title="Page not found"><Link className="btn-ghost" href="/">Return to Hyked</Link></Status>} />
-  </Routes></AppShell><LocalOutdoorAiChat /></>;
+  </Routes></AppShell></>;
 }
 installApiBridge();
 const root = document.getElementById("root");

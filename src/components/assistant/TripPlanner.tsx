@@ -20,6 +20,7 @@ import { PlaceSearch } from "./PlaceSearch";
 import { TripShoppingList } from "./TripShoppingList";
 import { shoppingForTrip, shoppingText } from "@/lib/assistant/shopping";
 import { CatalogSuggestions } from "./CatalogSuggestions";
+import { LocalOutdoorAiChat } from "./LocalOutdoorAiChat";
 import "./planner.css";
 
 function NumberField({ label, value, onChange, min = 0, max = 10000, step = "any", hint }: { label: string; value: number | null; onChange: (n: number | null) => void; min?: number; max?: number; step?: string; hint?: string }) {
@@ -172,6 +173,7 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
           <div className="planner-prompt-footer"><button type="button" className="planner-link" onClick={() => setPrompt("30 miles, 3 days in Colorado")}>Try a 3-day Colorado trip</button><button className="planner-button">Build my trip <span aria-hidden="true">→</span></button></div>
         </form>}
         {!started && <div className="planner-intro"><h2>Your next trip, informed by your last.</h2><p>Start with a distance, number of days, and region. We’ll find route options, calculate the gear you’re carrying, and arrange it into a packing checklist.</p><p className="planner-help">Your account’s gear and hikes are used when you’re signed in. Add preferences and trip feedback here to make recommendations more personal.</p></div>}
+        {!started && <LocalOutdoorAiChat onApplyPrompt={(p) => { setPrompt(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />}
         {started && <>
           {step === 0 && <div className="planner-request-summary"><h2>{request.distanceMiles ? `${request.distanceMiles} miles` : "Choose your mileage"}{request.days ? ` over ${request.days} ${request.days === 1 ? "day" : "days"}` : ""}{request.region ? ` ${request.locationMode === "near" ? "near" : "in"} ${request.region}` : ""}</h2><div><p>{request.region} · About {request.distanceMiles ?? "—"} mi · {request.days ?? "—"} days</p><button className="planner-button secondary" onClick={() => setStarted(false)}>Edit request</button></div></div>}
           {step === 0 && <section className="planner-stage" aria-labelledby="trail-title">
@@ -252,7 +254,9 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
             </div><button className="planner-button secondary" type="button" disabled={searching || !request.region} onClick={() => void findSources(request)}>Refresh online route search</button>
           </details>
           <details className="planner-details planner-questions"><summary>{followUps.length ? `${followUps.length} details to make this plan yours` : "Your trip details are filled in"}</summary><ul>{followUps.map(q => <li key={q}>{q}</li>)}</ul><p className="planner-help">Update trip details above and My trip preferences alongside the plan.</p></details>
-          <div className="planner-ai-answer"><div className="planner-section-heading"><h3>Think it through with local AI</h3>{model.status === "ready" && !aiError && <button className="planner-link" onClick={() => void explain()}>Explain my plan</button>}</div>
+          <div className="planner-ai-answer">
+            <LocalOutdoorAiChat onApplyPrompt={(p) => { setPrompt(p); setNotice(`Prompt applied from Local AI: ${p}`); }} />
+            <div className="planner-section-heading"><h3>Think it through with local AI</h3>{model.status === "ready" && !aiError && <button className="planner-link" onClick={() => void explain()}>Explain my plan</button>}</div>
             <p className="planner-help">{model.status === "off" || model.status === "error" ? "Enable the browser model in Local AI to get an explanation using this trip, your gear, and past-trip feedback." : model.status === "loading" ? "The browser model is loading. Keep building your plan while it finishes." : model.status === "thinking" ? "Thinking on this device…" : "The local model prioritizes facts and questions from your current plan. Displayed weights and specifications come from the planner’s verified data."}</p>
             {explanation.length > 0 && explainedSignature === aiSignature && <ul className="planner-explanation">{explanation.map(text => <li key={text}>{text}</li>)}</ul>}<p id="planner-ai-error" role="status" className="planner-help">{aiError}</p>
             {aiError && <button type="button" className="planner-button secondary" aria-describedby="planner-ai-error" disabled={model.status === "loading" || model.status === "thinking"} onClick={() => void explain()}>Retry explanation</button>}

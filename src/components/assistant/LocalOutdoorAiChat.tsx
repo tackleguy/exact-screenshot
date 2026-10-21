@@ -18,7 +18,7 @@ const PRESET_PROMPTS = [
   "How can I reduce my base pack weight under 15 lbs?",
 ];
 
-function generateLocalOutdoorAiResponse(query: string): string {
+export function generateLocalOutdoorAiResponse(query: string): string {
   const q = query.toLowerCase();
 
   if (q.includes("14er") || q.includes("fourteener") || q.includes("elbert") || q.includes("massive") || q.includes("quandary")) {
@@ -98,55 +98,50 @@ Start with **Mount Kosciuszko** and **Kilimanjaro**, progress to **Elbrus** and 
 - **Section Hiking:** Breaking the trail down into manageable 3 to 14-day segments. Allows flexible scheduling, peak seasonal weather selection, and lower pack carry weights.
 
 **2. Food & Caloric Planning:**
-- Plan for **1.5 to 2.2 lbs (0.7–1.0 kg) of food per day** (approx. 3,500–4,500 kcal/day).
-- Focus on caloric density: **≥125 calories per ounce** (nuts, olive oil, peanut butter, dehydrated meals, chocolate, tortillas).
-- Keep maximum continuous food carries to **≤5–6 days** whenever possible to avoid excessive pack weight.
+- Plan for **3,500 – 4,500 calories per day** (1.5 to 2.2 lbs of dry food per day).
+- Target caloric density: **>120 calories per ounce** (nuts, olive oil, nut butters, dehydrated meals, chocolate).
 
-**3. Popular Resupply Gateways:**
-- **Colorado Trail (486 mi):** Breckenridge (mi 104), Leadville (mi 143), Twin Lakes (mi 177), Buena Vista / Salida (mi 253), Creede (mi 343), Silverton (mi 411).
-- **John Muir Trail (211 mi):** Tuolumne Meadows (mi 23), Red's Meadow (mi 60), Vermilion Valley Resort / Muir Trail Ranch (mi 108 — critical final resupply before 110-mile High Sierra stretch to Whitney!).
-- **Tahoe Rim Trail (165 mi):** Tahoe City (mi 0), Kingsbury Grade (mi 85), Echo Summit (mi 115).`;
+**3. Town Resupply Spacing:**
+- **Colorado Trail (486 mi):** Resupply towns spaced every 45–80 miles (Frisco/Breckenridge, Leadville, Buena Vista, Salida, Creede, Silverton).
+- **John Muir Trail (211 mi):** Resupply at Tuolumne Meadows (mi 23), Red's Meadow (mi 60), and Muir Trail Ranch / Vermilion Valley Resort (mi 108). After MTR, you must carry 8–10 days of food to Mount Whitney. Bear canisters are legally mandatory.`;
   }
 
-  if (q.includes("altitude") || q.includes("sickness") || q.includes("ams") || q.includes("headache") || q.includes("acclimatize")) {
-    return `### Altitude Sickness (AMS) Prevention & Safety 🩺
+  if (q.includes("altitude") || q.includes("ams") || q.includes("sickness") || q.includes("headache") || q.includes("acclimat")) {
+    return `### High Altitude Sickness (AMS) Protocol ⚠️
 
-**1. Golden Rules of Altitude Safety:**
-- **"Climb High, Sleep Low":** Ascend to higher elevation during the day for acclimatization hikes, then sleep at a lower elevation.
-- **Rule of Thumb above 10,000 ft:** Limit net sleeping elevation gains to no more than **1,000 to 1,500 ft (300–500 m) per night**, with a rest day every 3–4 days.
-- **Never Ascend with Symptoms:** If you experience headache, nausea, fatigue, or dizziness, stop ascending.
+Acute Mountain Sickness (AMS) can affect anyone above 8,000 feet, regardless of physical fitness.
 
-**2. Hydration & Fueling:**
-- The respiratory rate doubles at altitude, causing rapid insensible water loss in dry alpine air. Drink **4 liters daily**.
-- Avoid alcohol and sedatives, which suppress nocturnal breathing and exacerbate hypoxemia.
+**1. Prevention ("Climb High, Sleep Low"):**
+- Do not increase sleeping elevation by more than 1,000–1,500 feet per day above 9,000 ft.
+- Take a rest day every 3–4 days.
+- Hydration: 4–5 liters daily. Avoid alcohol and sedatives.
 
-**3. Medication & Supplements:**
-- **Acetazolamide (Diamox):** Carbonic anhydrase inhibitor that speeds up natural acclimatization by stimulating breathing. Consult a physician (standard dosage: 125mg twice daily, started 24h prior to ascent).
-- **Ibuprofen (Advil):** Effective for altitude-induced headaches and mild brain swelling.
+**2. Symptoms to Monitor:**
+- **Mild AMS:** Throbbing headache, nausea, dizziness, fatigue, sleeplessness.
+- **HAPE (High Altitude Pulmonary Edema):** Persistent cough, breathlessness at rest, gurgling in chest, pink sputum. *Immediate descent required!*
+- **HACE (High Altitude Cerebral Edema):** Loss of coordination (ataxia), confusion, slurred speech. *Medical emergency — descend immediately!*
 
-**4. When to Evacuate (HAPE & HACE):**
-- **HAPE (High Altitude Pulmonary Edema):** Persistent cough, breathlessness at rest, pink sputum, gurgling in chest.
-- **HACE (High Altitude Cerebral Edema):** Severe ataxia (inability to walk a straight line), confusion, hallucinations.
-- **The Only Cure:** Immediate descent of at least 2,000–3,000 ft. Do not delay.`;
+**3. The Golden Rules of Altitude Safety:**
+1. Any illness at altitude is altitude sickness until proven otherwise.
+2. Never ascend with symptoms of AMS.
+3. If symptoms worsen, **DESCEND IMMEDIATELY (at least 2,000–3,000 feet)**.`;
   }
 
-  if (q.includes("weight") || q.includes("ultralight") || q.includes("pack") || q.includes("gear") || q.includes("cut")) {
-    return `### Ultralight Backpacking: The "Big Three" Overhaul 🎒
+  if (q.includes("pack") || q.includes("weight") || q.includes("ultralight") || q.includes("gear") || q.includes("base weight")) {
+    return `### Ultralight Backpacking & Base Weight Guide ⚖️
 
-To get your base pack weight (pack weight excluding food, water, and fuel) under 15 lbs, focus 80% of your attention on the **Big Three**:
+**1. Base Weight Categories:**
+- **Traditional:** 20–30+ lbs base weight
+- **Lightweight:** 15–20 lbs base weight
+- **Ultralight (UL):** Under 10 lbs base weight
 
-**1. Shelter (Target: ≤ 2.0 lbs):**
-- Swap traditional heavy double-wall tents (4–6 lbs) for trekking-pole supported shelters (e.g. DCF / silpoly tents like Zpacks Duplex, Durston X-Mid, or Gossamer Gear The One).
-- Saves: **2.5 – 4.0 lbs instantly.**
+**2. The "Big Three" Overhaul (Save 5–10 lbs instantly):**
+- **Shelter:** Switch from a 5 lb freestanding tent to an ultralight trekking-pole shelter (18–28 oz, e.g. DCF or silpoly).
+- **Sleep System:** Replace synthetic 3.5 lb bag with a high-loft 850–950 fill down quilt (16–22 oz).
+- **Backpack:** Once gear is compact, move from a 5 lb rigid frame pack to a lightweight frameless or minimal-frame pack (18–32 oz).
 
-**2. Sleep System (Target: ≤ 2.5 lbs):**
-- **Quilt vs. Mummy Bag:** A down quilt (850–950 fill power, 20°F rating) weighs 18–22 oz because it eliminates the crushed bottom insulation and heavy zippers.
-- **Sleeping Pad:** Use a lightweight insulated pad (Therm-a-Rest NeoAir XLite NXT, R-value 4.5, 12.5 oz).
-- Saves: **1.5 – 3.0 lbs.**
-
-**3. Backpack (Target: ≤ 2.0 lbs):**
-- Transition from heavy 65L suspension packs (4.5–6.0 lbs) to a framed ultralight pack (e.g. Hyperlite Mountain Gear 2400, Gossamer Gear Mariposa, ULA Circuit at 28–34 oz).
-- Saves: **2.0 – 3.5 lbs.**
+**3. Weigh Everything with a Kitchen Scale:**
+- Track gear in ounces or grams. If you carried an item on your last 3 trips and never used it (excluding first aid & emergency gear), leave it home.
 
 **4. The 10 Essentials Weight Audit:**
 - Use a micro-stove (BRS 3000T at 0.9 oz or MSR PocketRocket 2 at 2.6 oz) and 550ml titanium pot (2.8 oz).
@@ -167,25 +162,22 @@ I analyzed your query: **"${query}"**
 Feel free to ask about specific **14ers**, **8,000m peaks**, **Seven Summits**, **thru-hikes**, resupply logistics, or pack weight optimization!`;
 }
 
-export function LocalOutdoorAiChat() {
-  const [open, setOpen] = useState(false);
+export function LocalOutdoorAiChat({
+  onApplyPrompt,
+}: {
+  onApplyPrompt?: (prompt: string) => void;
+}) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
       sender: "ai",
-      text: "👋 Hi! I am your **Hyked Local Outdoor AI Assistant**. I can help you plan through-hikes, prepare for Colorado 14ers and 8,000m summits, analyze pack weights, and check safety protocols. Ask me anything!",
-      timestamp: "Just now",
+      text: "👋 Welcome to the **Hyked Local Outdoor AI Assistant**! Running on your device for fast, private trip research. Ask about Colorado 14ers, 8,000m summits, through-hike resupplies, pack weight reduction, or high-altitude safety.",
+      timestamp: "Ready",
     },
   ]);
   const [isThinking, setIsThinking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (open) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages, open]);
 
   const handleSend = (textToSend?: string) => {
     const text = (textToSend || input).trim();
@@ -212,251 +204,266 @@ export function LocalOutdoorAiChat() {
       };
       setMessages((prev) => [...prev, aiMsg]);
       setIsThinking(false);
-    }, 600);
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }, 400);
   };
 
   return (
-    <>
-      {/* Floating Action Button */}
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
+    <div
+      className="planner-local-ai-card"
+      style={{
+        marginTop: "1.75rem",
+        marginBottom: "1.75rem",
+        background: "var(--surface-elevated, #161c24)",
+        border: "1px solid var(--plan-line, #28313e)",
+        borderRadius: "12px",
+        overflow: "hidden",
+        boxShadow: "0 4px 20px rgba(0, 0, 0, 0.25)",
+      }}
+    >
+      {/* Header */}
+      <div
         style={{
-          position: "fixed",
-          bottom: "1.75rem",
-          right: "1.75rem",
-          zIndex: 9999,
-          background: "linear-gradient(135deg, #0284c7 0%, #0f766e 100%)",
-          color: "#ffffff",
-          border: "none",
-          borderRadius: "9999px",
-          padding: "0.85rem 1.25rem",
+          padding: "1rem 1.25rem",
+          background: "linear-gradient(135deg, rgba(2, 132, 199, 0.15) 0%, rgba(15, 118, 110, 0.15) 100%)",
+          borderBottom: "1px solid var(--plan-line, #28313e)",
           display: "flex",
+          justifyContent: "space-between",
           alignItems: "center",
-          gap: "0.6rem",
-          boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3)",
-          cursor: "pointer",
-          fontWeight: 600,
-          fontSize: "0.95rem",
-          transition: "transform 0.2s ease, box-shadow 0.2s ease",
+          flexWrap: "wrap",
+          gap: "0.75rem",
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
-        onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
-        aria-label="Toggle Outdoor AI Assistant"
       >
-        <span style={{ fontSize: "1.2rem" }}>🧭</span>
-        <span>Local Outdoor AI</span>
-        <span
-          style={{
-            background: "#22c55e",
-            width: "8px",
-            height: "8px",
-            borderRadius: "50%",
-            display: "inline-block",
-          }}
-        />
-      </button>
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span style={{ fontSize: "1.25rem" }}>🧭</span>
+            <strong style={{ fontSize: "1.05rem", color: "var(--cream, #f8fafc)" }}>
+              Local Outdoor AI Intelligence
+            </strong>
+          </div>
+          <div style={{ fontSize: "0.78rem", color: "var(--plan-muted, #94a3b8)", marginTop: "0.2rem" }}>
+            On-device outdoor expertise · 14ers, 8,000m summits, through-hikes & pack weight
+          </div>
+        </div>
 
-      {/* Floating Chat Window Modal */}
-      {open && (
-        <div
-          style={{
-            position: "fixed",
-            bottom: "5rem",
-            right: "1.75rem",
-            width: "min(420px, calc(100vw - 2.5rem))",
-            height: "min(580px, calc(100vh - 7rem))",
-            zIndex: 9999,
-            background: "var(--surface-elevated, #0f172a)",
-            border: "1px solid var(--border, #334155)",
-            borderRadius: "16px",
-            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.6)",
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            color: "var(--cream, #f8fafc)",
-          }}
-        >
-          {/* Header */}
-          <div
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <span
             style={{
-              padding: "1rem 1.25rem",
-              background: "linear-gradient(135deg, rgba(2, 132, 199, 0.2) 0%, rgba(15, 118, 110, 0.2) 100%)",
-              borderBottom: "1px solid var(--border, #334155)",
-              display: "flex",
-              justifyContent: "space-between",
+              display: "inline-flex",
               alignItems: "center",
+              gap: "0.35rem",
+              fontSize: "0.75rem",
+              padding: "0.25rem 0.6rem",
+              borderRadius: "9999px",
+              background: "rgba(34, 197, 94, 0.12)",
+              color: "#4ade80",
+              border: "1px solid rgba(34, 197, 94, 0.25)",
             }}
           >
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <span style={{ fontSize: "1.25rem" }}>🧭</span>
-                <strong style={{ fontSize: "1.05rem" }}>Hyked Outdoor AI</strong>
-              </div>
-              <div style={{ fontSize: "0.75rem", color: "#38bdf8", marginTop: "0.15rem" }}>
-                Active on device · Offline capable · 14ers & Summits
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
+            <span
               style={{
-                background: "transparent",
-                border: "none",
-                color: "#94a3b8",
-                fontSize: "1.25rem",
-                cursor: "pointer",
-                padding: "0.25rem 0.5rem",
-                borderRadius: "6px",
-              }}
-              aria-label="Close Assistant"
-            >
-              ✕
-            </button>
-          </div>
-
-          {/* Quick Prompts */}
-          <div
-            style={{
-              padding: "0.6rem 0.75rem",
-              display: "flex",
-              gap: "0.5rem",
-              overflowX: "auto",
-              whiteSpace: "nowrap",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-              background: "rgba(0,0,0,0.15)",
-            }}
-          >
-            {PRESET_PROMPTS.map((prompt, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleSend(prompt)}
-                style={{
-                  fontSize: "0.75rem",
-                  padding: "0.35rem 0.7rem",
-                  borderRadius: "9999px",
-                  background: "rgba(56, 189, 248, 0.12)",
-                  color: "#38bdf8",
-                  border: "1px solid rgba(56, 189, 248, 0.25)",
-                  cursor: "pointer",
-                  flexShrink: 0,
-                }}
-              >
-                {prompt}
-              </button>
-            ))}
-          </div>
-
-          {/* Messages Container */}
-          <div
-            style={{
-              flex: 1,
-              padding: "1rem",
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-              gap: "0.85rem",
-            }}
-          >
-            {messages.map((m) => (
-              <div
-                key={m.id}
-                style={{
-                  alignSelf: m.sender === "user" ? "flex-end" : "flex-start",
-                  maxWidth: "92%",
-                  padding: "0.75rem 1rem",
-                  borderRadius: m.sender === "user" ? "14px 14px 2px 14px" : "14px 14px 14px 2px",
-                  background: m.sender === "user" ? "#0284c7" : "rgba(30, 41, 59, 0.9)",
-                  border: m.sender === "user" ? "none" : "1px solid rgba(255, 255, 255, 0.08)",
-                  fontSize: "0.88rem",
-                  lineHeight: 1.5,
-                  wordBreak: "break-word",
-                }}
-              >
-                <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
-                <div
-                  style={{
-                    fontSize: "0.7rem",
-                    color: m.sender === "user" ? "rgba(255,255,255,0.7)" : "#64748b",
-                    marginTop: "0.35rem",
-                    textAlign: "right",
-                  }}
-                >
-                  {m.timestamp}
-                </div>
-              </div>
-            ))}
-            {isThinking && (
-              <div
-                style={{
-                  alignSelf: "flex-start",
-                  padding: "0.6rem 0.9rem",
-                  borderRadius: "14px 14px 14px 2px",
-                  background: "rgba(30, 41, 59, 0.9)",
-                  fontSize: "0.85rem",
-                  color: "#38bdf8",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                }}
-              >
-                <span>Evaluating terrain & elevation...</span>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </div>
-
-          {/* Input Form */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            style={{
-              padding: "0.75rem 1rem",
-              borderTop: "1px solid var(--border, #334155)",
-              display: "flex",
-              gap: "0.5rem",
-              background: "rgba(0, 0, 0, 0.2)",
-            }}
-          >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about 14ers, summits, through-hikes..."
-              style={{
-                flex: 1,
-                background: "rgba(15, 23, 42, 0.8)",
-                border: "1px solid var(--border, #334155)",
-                borderRadius: "8px",
-                padding: "0.6rem 0.85rem",
-                color: "#f8fafc",
-                fontSize: "0.88rem",
-                outline: "none",
+                width: "6px",
+                height: "6px",
+                borderRadius: "50%",
+                background: "#22c55e",
+                display: "inline-block",
               }}
             />
+            Local Engine Active
+          </span>
+          {messages.length > 2 && (
             <button
-              type="submit"
-              disabled={!input.trim() || isThinking}
+              type="button"
+              onClick={() =>
+                setMessages([
+                  {
+                    id: "welcome",
+                    sender: "ai",
+                    text: "Chat cleared. What outdoor topic or route would you like to explore?",
+                    timestamp: "Ready",
+                  },
+                ])
+              }
+              className="planner-link"
+              style={{ fontSize: "0.78rem", minHeight: "auto", cursor: "pointer" }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Preset Prompt Chips */}
+      <div
+        style={{
+          padding: "0.75rem 1.25rem",
+          display: "flex",
+          gap: "0.5rem",
+          overflowX: "auto",
+          whiteSpace: "nowrap",
+          borderBottom: "1px solid var(--plan-line, #28313e)",
+          background: "rgba(0, 0, 0, 0.1)",
+        }}
+      >
+        {PRESET_PROMPTS.map((prompt, idx) => (
+          <button
+            key={idx}
+            type="button"
+            onClick={() => handleSend(prompt)}
+            style={{
+              fontSize: "0.75rem",
+              padding: "0.35rem 0.75rem",
+              borderRadius: "9999px",
+              background: "rgba(56, 189, 248, 0.08)",
+              color: "#38bdf8",
+              border: "1px solid rgba(56, 189, 248, 0.2)",
+              cursor: "pointer",
+              flexShrink: 0,
+              transition: "all 0.15s ease",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "rgba(56, 189, 248, 0.16)";
+              e.currentTarget.style.borderColor = "rgba(56, 189, 248, 0.4)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "rgba(56, 189, 248, 0.08)";
+              e.currentTarget.style.borderColor = "rgba(56, 189, 248, 0.2)";
+            }}
+          >
+            {prompt}
+          </button>
+        ))}
+      </div>
+
+      {/* Message Thread */}
+      <div
+        style={{
+          maxHeight: "360px",
+          minHeight: "180px",
+          padding: "1.25rem",
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: "1rem",
+        }}
+      >
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            style={{
+              alignSelf: m.sender === "user" ? "flex-end" : "flex-start",
+              maxWidth: m.sender === "user" ? "80%" : "96%",
+              padding: "0.85rem 1.15rem",
+              borderRadius: m.sender === "user" ? "12px 12px 2px 12px" : "12px 12px 12px 2px",
+              background: m.sender === "user" ? "var(--accent, #0284c7)" : "rgba(30, 41, 59, 0.75)",
+              color: m.sender === "user" ? "#ffffff" : "var(--cream, #f8fafc)",
+              border: m.sender === "user" ? "none" : "1px solid rgba(255, 255, 255, 0.06)",
+              fontSize: "0.88rem",
+              lineHeight: 1.6,
+            }}
+          >
+            <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
+            <div
               style={{
-                background: "#0284c7",
-                color: "#fff",
-                border: "none",
-                borderRadius: "8px",
-                padding: "0.6rem 1rem",
-                fontWeight: 600,
-                fontSize: "0.88rem",
-                cursor: input.trim() && !isThinking ? "pointer" : "not-allowed",
-                opacity: input.trim() && !isThinking ? 1 : 0.6,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginTop: "0.5rem",
+                gap: "1rem",
+                fontSize: "0.72rem",
+                color: m.sender === "user" ? "rgba(255,255,255,0.7)" : "var(--plan-muted, #94a3b8)",
               }}
             >
-              Send
-            </button>
-          </form>
-        </div>
-      )}
-    </>
+              <span>{m.timestamp}</span>
+              {m.sender === "ai" && onApplyPrompt && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const firstLine = m.text.split("\n")[0].replace(/[#*]/g, "").trim();
+                    onApplyPrompt(firstLine || "Alpine trip in Colorado");
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#38bdf8",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                    fontSize: "0.72rem",
+                    padding: 0,
+                  }}
+                >
+                  Apply to Trip Plan ↑
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {isThinking && (
+          <div
+            style={{
+              alignSelf: "flex-start",
+              padding: "0.6rem 0.9rem",
+              borderRadius: "12px 12px 12px 2px",
+              background: "rgba(30, 41, 59, 0.75)",
+              fontSize: "0.85rem",
+              color: "#38bdf8",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+            }}
+          >
+            <span>Analyzing elevation, route conditions & gear profiles...</span>
+          </div>
+        )}
+        <div ref={bottomRef} />
+      </div>
+
+      {/* Input Form */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleSend();
+        }}
+        style={{
+          padding: "0.85rem 1.25rem",
+          borderTop: "1px solid var(--plan-line, #28313e)",
+          display: "flex",
+          gap: "0.75rem",
+          background: "rgba(0, 0, 0, 0.15)",
+        }}
+      >
+        <input
+          type="text"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Ask local AI about 14ers, 8,000m giants, thru-hikes, altitude, gear..."
+          style={{
+            flex: 1,
+            background: "var(--surface, #0f172a)",
+            border: "1px solid var(--plan-line, #334155)",
+            borderRadius: "6px",
+            padding: "0.65rem 0.9rem",
+            color: "var(--cream, #f8fafc)",
+            fontSize: "0.88rem",
+            outline: "none",
+          }}
+        />
+        <button
+          type="submit"
+          disabled={!input.trim() || isThinking}
+          className="planner-button"
+          style={{
+            minHeight: "38px",
+            padding: "0 1.25rem",
+            fontSize: "0.84rem",
+            cursor: input.trim() && !isThinking ? "pointer" : "not-allowed",
+            opacity: input.trim() && !isThinking ? 1 : 0.6,
+          }}
+        >
+          Ask AI
+        </button>
+      </form>
+    </div>
   );
 }
