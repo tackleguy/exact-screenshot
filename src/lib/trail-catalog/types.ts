@@ -11,7 +11,7 @@ export interface CatalogTrail {
   longitude: number;
   difficulty: string | null;
   dogs: boolean | null;
-  source: "usgs" | "parks-canada" | "ontario" | "nps" | "usfs" | "blm" | "resort" | "guide" | "route-aggregate";
+  source: "usgs" | "parks-canada" | "ontario" | "nps" | "usfs" | "blm" | "resort" | "guide" | "route-aggregate" | "peak";
   sourceId: string;
   sourceUrl: string;
   officialUrl: string | null;
@@ -62,6 +62,16 @@ export interface CatalogTrail {
   uses?: string[];
   /** Source name when it was a placeholder ("-", "<unnamed>") and is shown as Unnamed trail. */
   originalName?: string;
+  /** Mountain peak category when this record is a prominent summit. */
+  peakCategory?: "14er" | "8000m" | "seven-summits";
+  /** Summit elevation in feet above sea level. */
+  summitElevationFt?: number;
+  /** Summit elevation in meters above sea level. */
+  summitElevationM?: number;
+  /** When this trail is a through-hike, the ordered list of constituent sections/segments. */
+  sections?: { id: string; name: string; miles: number; difficulty?: string | null; elevationFt?: number | null }[];
+  /** When this trail is a section/segment, the parent through-hike route it belongs to. */
+  partOfRoute?: { id: string; name: string; totalMiles: number };
 }
 export interface CatalogManifest {
   version: number;
@@ -128,6 +138,10 @@ export interface CatalogFilters {
   lng?: number;
   radiusKm?: number;
   targetMiles?: number;
+  /** Special collections: 14ers, 8000m, 7summits, thru-hikes, thru-sections */
+  collection?: string;
+  peakCategory?: "14er" | "8000m" | "seven-summits";
+  thruHikeSections?: boolean;
 }
 
 const COUNTRY_NAMES: Record<string, string> = {
@@ -150,6 +164,11 @@ const COUNTRY_NAMES: Record<string, string> = {
   BT: "Bhutan",
   ZA: "South Africa",
   AR: "Argentina",
+  RU: "Russia",
+  ID: "Indonesia",
+  PK: "Pakistan",
+  CN: "China",
+  AQ: "Antarctica",
 };
 
 export const countryName = (country: string) => COUNTRY_NAMES[country] ?? country;
@@ -164,6 +183,7 @@ const SOURCE_NAMES: Record<CatalogTrail["source"], string> = {
   resort: "Resort summer trail map",
   guide: "Curated guide",
   "route-aggregate": "Mapped corridor",
+  peak: "Mountain Summit Guide",
 };
 
 export const sourceName = (source: CatalogTrail["source"]) => SOURCE_NAMES[source] ?? source;

@@ -49,7 +49,29 @@ export function CatalogTrailDetail({
         ← Browse {isRoute ? "through-hikes" : (t.region ?? countryName(t.country))}
       </Link>
       <CatalogTrailHero trail={t} difficulty={difficulty.difficulty} distance={distance.primary} hasLines={hasLines} />
-      {isRoute && <span className="catalog-badge">Through-hike</span>}
+      {t.peakCategory && (
+        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
+          <span className="catalog-badge" style={{ background: "#7c3aed", color: "#fff", fontWeight: "bold" }}>
+            {t.peakCategory === "14er" ? "⛰️ 14er (14,000+ ft Peak)" : t.peakCategory === "8000m" ? "🏔️ 8,000m Earth Giant" : "👑 Seven Summits"}
+          </span>
+          {t.summitElevationFt && (
+            <span className="catalog-badge" style={{ background: "#0f766e", color: "#fff" }}>
+              Summit: {t.summitElevationFt.toLocaleString()} ft ({t.summitElevationM?.toLocaleString()} m)
+            </span>
+          )}
+        </div>
+      )}
+      {t.partOfRoute && (
+        <div className="catalog-quality-note" style={{ borderLeft: "4px solid #2563eb", background: "rgba(37, 99, 235, 0.08)", marginTop: "1rem" }} role="note">
+          <strong>Section of Through-Hike.</strong> This trail is an official section of <strong>{t.partOfRoute.name}</strong> ({t.partOfRoute.totalMiles.toLocaleString()} mi total).
+          <div style={{ marginTop: "0.5rem" }}>
+            <Link className="catalog-button" style={{ display: "inline-block", fontSize: "0.85rem", padding: "0.4rem 0.8rem" }} href={`/explore/trails/${encodeURIComponent(t.partOfRoute.id)}`}>
+              View Full Thru-Hike (All Together) →
+            </Link>
+          </div>
+        </div>
+      )}
+      {isRoute && !t.peakCategory && <span className="catalog-badge">Through-hike</span>}
       {t.winterUse && (
         <div className="catalog-quality-note" role="note">
           {t.winterUse === "downhill" ? (
@@ -209,6 +231,39 @@ export function CatalogTrailDetail({
         />
       )}
       <TripTools trailId={t.id} hasLine={hasLines} miles={t.miles} />
+      {t.sections && t.sections.length > 0 && (
+        <section className="catalog-sections-breakdown" style={{ marginTop: "2rem", marginBottom: "2rem" }}>
+          <h2 style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>Trail Sections & Segments ({t.sections.length})</h2>
+          <p style={{ margin: "0 0 1rem 0", fontSize: "0.875rem", color: "var(--mist, #94a3b8)" }}>
+            Hike the entire through-hike all together or explore individual sections below.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
+            {t.sections.map((sec, idx) => (
+              <div key={sec.id} style={{ border: "1px solid var(--border, #334155)", borderRadius: "8px", padding: "1rem", background: "var(--surface-elevated, #1e293b)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.5rem" }}>
+                  <span style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--accent, #38bdf8)", fontWeight: 600 }}>
+                    Section {idx + 1}
+                  </span>
+                  <span style={{ fontSize: "0.875rem", fontWeight: "bold" }}>{sec.miles} mi</span>
+                </div>
+                <h3 style={{ fontSize: "0.95rem", margin: "0 0 0.5rem 0", lineHeight: 1.3 }}>{sec.name}</h3>
+                {sec.elevationFt && (
+                  <p style={{ margin: "0 0 0.75rem 0", fontSize: "0.8rem", color: "var(--mist, #94a3b8)" }}>
+                    +{sec.elevationFt.toLocaleString()} ft gain
+                  </p>
+                )}
+                <Link
+                  href={`/explore/trails/${encodeURIComponent(sec.id)}`}
+                  className="catalog-button secondary"
+                  style={{ display: "inline-block", fontSize: "0.8rem", padding: "0.35rem 0.75rem", width: "100%", textAlign: "center" }}
+                >
+                  View Section Details →
+                </Link>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="catalog-detail-grid">
         <section>
           <h2>Plan around the whole route.</h2>

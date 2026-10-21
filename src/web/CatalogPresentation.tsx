@@ -17,11 +17,16 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
   const activity = filters.activity ?? "hike";
   const filterSummary = [
     filters.bbox && "Map area",
+    filters.collection === "14ers" && "⛰️ 14ers (14,000+ ft Peaks)",
+    filters.collection === "8000m" && "🏔️ The 14 Eight-Thousanders",
+    filters.collection === "7summits" && "👑 Seven Summits",
+    filters.collection === "thru-hikes" && "Through-Hikes (All Together)",
+    filters.collection === "thru-sections" && "Through-Hike Sections",
     filters.country === "intl"
       ? "International"
       : filters.country && countryName(filters.country),
-    filters.kind === "route" && "Through-hikes",
-    filters.kind === "segment" && "Sections only",
+    filters.kind === "route" && !filters.collection && "Through-hikes",
+    filters.kind === "segment" && !filters.collection && "Sections only",
     activity !== "hike" && activity !== "all" && CATALOG_ACTIVITY_LABELS[activity],
     filters.uniqueNames && "Unique names",
     filters.includeFragments && "Partial segments",
@@ -50,20 +55,29 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
         <h1>Find your next trail.</h1>
         <p>
           {(manifest.publicTotal ?? manifest.total).toLocaleString("en-US")} trails — whole mapped trails across the United
-          States and Canada, plus curated through-hikes worldwide.
+          States and Canada, plus curated through-hikes, 14ers, and world summits.
         </p>
         <div className="catalog-quick-links">
-          <Link className="catalog-button secondary" href="/explore/trails/catalog?kind=route">
-            Through-hikes
+          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=thru-hikes">
+            🥾 All Thru-Hikes
+          </Link>
+          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=thru-sections">
+            📍 Thru Sections
+          </Link>
+          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=14ers">
+            ⛰️ 14ers (14,000+ ft)
+          </Link>
+          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=8000m">
+            🏔️ 8,000m Giants
+          </Link>
+          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=7summits">
+            👑 Seven Summits
           </Link>
           <Link className="catalog-button secondary" href="/explore/trails/catalog?country=intl&kind=route">
-            International
+            🌍 International
           </Link>
           <Link className="catalog-button secondary" href="/explore/ski">
-            Ski maps
-          </Link>
-          <Link className="catalog-button secondary" href="/explore/trails/catalog?uniqueNames=true">
-            Unique names
+            ⛷️ Ski maps
           </Link>
         </div>
         <Link className="catalog-mobile-plan" href="/plan">
@@ -242,7 +256,17 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                       <div className="catalog-row-name">
                         <h2>
                           {t.name}
-                          {t.kind === "route" && <span className="catalog-badge">Through-hike</span>}
+                          {t.peakCategory && (
+                            <span className="catalog-badge" style={{ background: "#7c3aed", color: "#fff", fontWeight: "bold" }}>
+                              {t.peakCategory === "14er" ? "14er" : t.peakCategory === "8000m" ? "8,000m" : "Seven Summits"}
+                            </span>
+                          )}
+                          {t.kind === "route" && !t.peakCategory && <span className="catalog-badge">Through-hike</span>}
+                          {t.partOfRoute && (
+                            <span className="catalog-badge" style={{ background: "#2563eb", color: "#fff" }}>
+                              Section of {t.partOfRoute.name}
+                            </span>
+                          )}
                           {t.quality && t.quality !== "ok" && (
                             <span className={`catalog-badge quality-${t.quality}`}>{QUALITY_STATUS_LABELS[t.quality]}</span>
                           )}
@@ -250,7 +274,12 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                         <p>
                           {t.region ?? countryName(t.country)} · {trailPlace(t)}
                           {t.difficulty ? ` · ${t.difficulty}` : ""}
-                          {t.sectionCount && t.sectionCount > 1 ? ` · ${t.sectionCount.toLocaleString("en-US")} sections joined` : ""}
+                          {t.sections && t.sections.length > 0
+                            ? ` · ${t.sections.length} defined sections`
+                            : t.sectionCount && t.sectionCount > 1
+                              ? ` · ${t.sectionCount.toLocaleString("en-US")} sections joined`
+                              : ""}
+                          {t.summitElevationFt ? ` · Summit ${t.summitElevationFt.toLocaleString()} ft` : ""}
                         </p>
                       </div>
                       <span className="catalog-distance">

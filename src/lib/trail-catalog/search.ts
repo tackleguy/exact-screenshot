@@ -16,8 +16,10 @@ export const normalize = (value: string) =>
 export function searchableText(trail: CatalogTrail) {
   const place = `${countryName(trail.country)} ${trail.country}`;
   const kindLabel = trail.kind === "route" ? "through hike thru-hike long trail route" : "section";
+  const peakLabel = trail.peakCategory ? `summit peak ${trail.peakCategory} 14er 8000m eight-thousander seven summits` : "";
+  const partOf = trail.partOfRoute ? `section of ${trail.partOfRoute.name}` : "";
   return normalize(
-    [trail.name, trail.region, place, trail.manager, kindLabel, ...(trail.tags ?? [])].join(" "),
+    [trail.name, trail.region, place, trail.manager, kindLabel, peakLabel, partOf, ...(trail.tags ?? [])].join(" "),
   );
 }
 
@@ -37,6 +39,14 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
   const includeWinter = filters.includeWinter === true || activity === "ski";
   const difficulties = filters.difficulty ? new Set(filters.difficulty.split(",").map((d) => normalize(d))) : null;
   return rows.filter((r, i) => {
+    if (filters.collection === "14ers" && r.peakCategory !== "14er" && !r.tags?.includes("14er")) return false;
+    if (filters.collection === "8000m" && r.peakCategory !== "8000m" && !r.tags?.includes("8000m")) return false;
+    if (filters.collection === "7summits" && r.peakCategory !== "seven-summits" && !r.tags?.includes("Seven Summits")) return false;
+    if (filters.collection === "peaks" && !r.peakCategory) return false;
+    if (filters.collection === "thru-hikes" && (r.kind !== "route" || r.peakCategory)) return false;
+    if ((filters.collection === "thru-sections" || filters.thruHikeSections) && !r.partOfRoute) return false;
+    if (filters.peakCategory && r.peakCategory !== filters.peakCategory) return false;
+
     if (!includeWinter && isWinterActivityTrail(r)) return false;
     if (activity !== "all" && !matchesCatalogActivity(r, activity)) return false;
     // An admin decision overrides the automated checks: rejected trails are hidden, approved ones shown.
@@ -185,5 +195,8 @@ export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
     lat: number("lat", -90, 90),
     lng: number("lng", -180, 180),
     radiusKm: number("radiusKm", 0.1, 1000),
+    collection: params.get("collection")?.trim().toLowerCase() || undefined,
+    peakCategory: (["14er", "8000m", "seven-summits"] as const).find((c) => c === params.get("peakCategory")),
+    thruHikeSections: params.get("thruHikeSections") === "true",
   };
 }

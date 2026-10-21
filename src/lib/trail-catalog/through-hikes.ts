@@ -1,5 +1,7 @@
 import type { CatalogTrail } from "./types";
 import { PACK_TRAILS } from "@/lib/gear";
+import { getAllPeakTrails } from "./peaks";
+import { getDetailedThruHikeTrails } from "./through-hikes-data";
 
 /** National Scenic / major long trails matched in USGS/Ontario section names. */
 export const THROUGH_HIKE_PATTERNS: {
@@ -622,7 +624,7 @@ function normalizeName(name: string) {
 }
 
 /**
- * Curated guides + aggregates from mapped sections.
+ * Curated guides + aggregates from mapped sections + peaks + detailed through-hike sections.
  * Aggregates win when both exist for the same trail name (richer coverage note).
  */
 export function buildThroughHikeOverlay(sections: CatalogTrail[]): CatalogTrail[] {
@@ -633,5 +635,33 @@ export function buildThroughHikeOverlay(sections: CatalogTrail[]): CatalogTrail[
   for (const route of aggregateThroughHikes(sections)) {
     byName.set(normalizeName(route.name), route);
   }
+
+  // Enrich with detailed through-hikes and section breakdowns
+  const { thruHikes, sections: detailedSections } = getDetailedThruHikeTrails();
+  for (const detailed of thruHikes) {
+    const existing = byName.get(normalizeName(detailed.name));
+    if (existing) {
+      byName.set(normalizeName(detailed.name), {
+        ...existing,
+        sections: detailed.sections,
+        mappedMiles: detailed.mappedMiles ?? existing.mappedMiles,
+        note: existing.note ? `${detailed.note} ${existing.note}` : detailed.note,
+      });
+    } else {
+      byName.set(normalizeName(detailed.name), detailed);
+    }
+  }
+
+  // Add all prominent summits (14ers, 8000m, Seven Summits)
+  for (const peak of getAllPeakTrails()) {
+    byName.set(normalizeName(peak.name), peak);
+  }
+
+  // Add individual through-hike sections so users can search & browse them directly
+  for (const sec of detailedSections) {
+    byName.set(normalizeName(sec.name), sec);
+  }
+
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
+
