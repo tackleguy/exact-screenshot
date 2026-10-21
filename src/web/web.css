@@ -5,3 +5,100 @@
 .mountain-hero-links a:hover { color: var(--accent); }
 .fieldbook-trail-paths { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 24px; }
 @media (max-width: 640px) { .fieldbook-trail-paths { grid-template-columns: 1fr; gap: 16px; } }
+
+/* A quiet, task-focused trail workspace. */
+.hx-workspace { --hx-ink: var(--surface); --hx-ink-2: var(--surface-elevated); --hx-text: var(--foreground); --hx-muted: var(--sage); --hx-hi: var(--accent); --hx-line: var(--border); --hx-shadow: var(--overlay-shadow); background: var(--background); height: calc(100dvh - 80px); min-height: 620px; }
+.hx-workspace-header { position: absolute; inset: 0 0 auto; height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; background: var(--surface); border-bottom: 1px solid var(--border); z-index: 5; }
+.hx-workspace-header h1 { margin: 0; font-family: var(--font-inter); font-size: 26px; font-weight: 700; letter-spacing: 0; }
+.hx-workspace-header p { margin: 4px 0 0; color: var(--sage); font-size: 13px; }
+.hx-workspace-header nav { display: flex; gap: 8px; }
+.hx-workspace .hx-map { top: 88px; right: 350px; bottom: 0; }
+.hx-workspace .hx-top { top: 104px; left: 20px; right: 420px; gap: 8px; }
+.hx-workspace .hx-search { width: min(320px, 100%); border: 1px solid var(--border-strong); border-radius: 6px; }
+.hx-workspace .hx-chips { gap: 6px; }
+.hx-workspace .hx-chip { border-radius: 6px; height: 38px; font-size: 13px; padding-inline: 10px; }
+.hx-workspace .hx-chip--section { background: var(--surface); color: var(--foreground); }
+.hx-workspace .hx-status { top: 202px; left: 20px; max-width: calc(100% - 450px); border-radius: 6px; background: var(--surface); color: var(--sage); box-shadow: var(--overlay-shadow); font-size: 12px; }
+.hx-workspace .hx-right { top: 104px; right: 366px; }
+.hx-workspace .hx-ctl { border-radius: 6px; border: 1px solid var(--border); }
+.hx-workspace .hx-rail-wrap { top: 88px; bottom: 0; left: auto; right: 0; width: 350px; max-height: none; background: var(--surface); border-left: 1px solid var(--border); pointer-events: auto; overflow-y: auto; }
+.hx-results-heading { display: flex; justify-content: space-between; align-items: center; padding: 24px 20px 20px; border-bottom: 1px solid var(--border); }
+.hx-eyebrow { display: block; font-family: var(--font-data); font-size: 10px; color: var(--sage); letter-spacing: 0; }
+.hx-results-heading h2 { margin: 5px 0 0; font-family: var(--font-inter); font-size: 21px; font-weight: 700; }
+.hx-result-count { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--surface-muted); color: var(--accent); font-family: var(--font-data); font-size: 12px; }
+.hx-workspace .hx-rail { display: grid; gap: 0; overflow: visible; padding: 0; scrollbar-width: thin; scroll-snap-type: none; }
+.hx-workspace .hx-card { width: 100%; max-height: none; padding: 18px 20px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; box-shadow: none; overflow: visible; }
+.hx-workspace .hx-card:hover { background: var(--surface-elevated); box-shadow: none; }
+.hx-workspace .hx-card--active { background: var(--surface-elevated); box-shadow: inset 3px 0 0 var(--accent); }
+.hx-workspace .hx-card h3 { font-family: var(--font-inter); font-size: 16px; font-weight: 650; line-height: 1.4; }
+.hx-workspace .hx-shape { width: 38px; height: 38px; border-radius: 4px; }
+.hx-workspace .hx-shape--empty { width: 4px; height: 34px; }
+.hx-workspace .hx-stats { gap: 8px 14px; }
+.hx-workspace .hx-stats dd { font-size: 12px; }
+.hx-workspace .hx-btn { border-radius: 6px; font-size: 13px; min-height: 38px; padding-inline: 12px; }
+.hx-workspace .hx-btn--primary { color: var(--on-accent); background: var(--accent); border-color: var(--accent); }
+.hx-workspace .hx-btn--primary:hover { background: var(--accent-dim); }
+.hx-discover { display: grid; gap: 14px; padding: 24px 20px; }
+.hx-discover h3 { margin: 0; font-family: var(--font-inter); font-size: 18px; }
+.hx-discover p { margin: 0; color: var(--sage); font-size: 13px; line-height: 1.6; }
+.hx-discover > .hx-btn { width: 100%; min-height: 46px; font-size: 15px; margin-bottom: 12px; }
+.hx-destinations { display: grid; gap: 8px; }
+.hx-destinations .hx-btn { justify-content: space-between; min-height: 44px; }
+.hx-plan-link { display: flex; justify-content: space-between; color: var(--sage); padding-top: 16px; border-top: 1px solid var(--border); font-size: 13px; }
+.hx-nearby { padding-top: 12px; border-top: 1px solid var(--border); }
+.hx-nearby h4 { font-family: var(--font-inter); font-size: 13px; margin: 0 0 8px; }
+.hx-nearby p,.hx-nearby small { font-size: 11px; color: var(--sage); }
+.hx-nearby ul { list-style: none; margin: 0; padding: 0; }
+.hx-nearby li { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; }
+.hx-nearby li > a:first-child { min-width: 0; display: grid; gap: 2px; font-size: 12px; }
+.hx-nearby li > a:last-child { align-self: center; color: var(--accent); padding: 6px; }
+.hx-workspace .hx-filter-options { z-index: 8; }
+
+@media (min-width: 1100px) {
+  .app-shell:not(.app-shell--standalone) { --workspace-rail: 180px; }
+  .app-shell--collapsed:not(.app-shell--standalone) { --workspace-rail: 72px; }
+  .app-shell:not(.app-shell--standalone) .app-content { margin-left: var(--workspace-rail); }
+  .fieldbook-nav { position: fixed; inset: 0 auto 0 0; width: var(--workspace-rail); height: 100dvh; padding: 24px 12px; overflow: visible; border-right: 1px solid var(--border); border-bottom: 0; background: var(--surface); backdrop-filter: none; }
+  .fieldbook-nav-content { flex-direction: column; align-items: stretch; gap: 18px; }
+  .fieldbook-brand { padding: 8px; font-family: var(--font-inter); font-weight: 750; }
+  .fieldbook-destinations { display: grid; gap: 6px; }
+  .fieldbook-destinations a { padding: 12px; font-size: 15px; gap: 12px; border-radius: 6px; }
+  .fieldbook-nav-footer { margin: auto 0 0; display: grid; gap: 10px; }
+  .fieldbook-profile,.fieldbook-record { width: 100%; justify-content: flex-start; gap: 12px; }
+  .fieldbook-profile .fieldbook-nav-label,.fieldbook-record .fieldbook-nav-label { display: inline; }
+  .fieldbook-auth { flex-wrap: wrap; padding: 10px; }
+  .nav-tools summary { padding: 12px; }
+  .nav-tools-content { left: calc(100% + 16px); right: auto; top: 0; }
+  .fieldbook-nav-toggle { display: flex; order: 2; margin: 12px 0 0; font-size: 12px; }
+  .hx-workspace { height: 100dvh; }
+  .app-shell--collapsed .fieldbook-nav { width: var(--workspace-rail); }
+  .app-shell--collapsed .fieldbook-nav-content { width: 100%; }
+  .app-shell--collapsed .fieldbook-nav-footer { display: grid; }
+}
+@media (min-width: 768px) and (max-width: 1099px) {
+  .hx-workspace .hx-map { right: 310px; }
+  .hx-workspace .hx-rail-wrap { width: 310px; }
+  .hx-workspace .hx-right { right: 322px; }
+  .hx-workspace .hx-top { right: 374px; }
+  .hx-workspace .hx-status { max-width: calc(100% - 400px); }
+}
+@media (max-width: 767px) {
+  .hx-workspace { height: auto; min-height: 0; overflow: visible; display: flex; flex-direction: column; padding-top: 70px; }
+  .hx-workspace-header { height: 70px; padding: 12px 16px; }
+  .hx-workspace-header h1 { font-size: 21px; }
+  .hx-workspace-header p { display: none; }
+  .hx-workspace-header nav { gap: 6px; }
+  .hx-workspace-header .hx-btn { font-size: 11px; padding: 0 9px; }
+  .hx-workspace .hx-map { position: relative; inset: auto; height: 440px; min-height: 350px; width: 100%; }
+  .hx-workspace .hx-top { top: 82px; left: 12px; right: 12px; }
+  .hx-workspace .hx-search { width: 100%; }
+  .hx-workspace .hx-status { top: 183px; left: 12px; max-width: calc(100% - 80px); font-size: 11px; }
+  .hx-workspace .hx-right { top: 225px; right: 12px; }
+  .hx-workspace .hx-controls .hx-ctl-group { display: grid; }
+  .hx-workspace .hx-controls > .hx-ctl--text { display: none; }
+  .hx-workspace .hx-rail-wrap { position: relative; inset: auto; width: 100%; max-height: none; overflow: visible; border-left: 0; border-top: 1px solid var(--border); }
+  .hx-results-heading { padding: 18px 16px; }
+  .hx-workspace .hx-card { width: 100%; padding: 18px 16px; max-height: none; }
+  .hx-discover { padding: 20px 16px; }
+  .hx-workspace .hx-filter-options { top: 215px; }
+}
