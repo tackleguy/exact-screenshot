@@ -407,7 +407,8 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
 
   const chooseSection = (key: TrailSectionKey) => {
     storeSection(key);
-    setFilters((f) => ({ ...f, activity: TRAIL_SECTIONS.find((s) => s.key === key)!.activity }));
+    const next = TRAIL_SECTIONS.find((s) => s.key === key);
+    if (next) setFilters((f) => ({ ...f, activity: next.activity }));
   };
   const activeFilters = filters.difficulty.length + (filters.length ? 1 : 0) + (filters.routeType ? 1 : 0);
   const selectedCard = cards.find((t) => t[0] === selectedId);
@@ -467,6 +468,9 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
             )}
           </div>
 
+          <details className="hx-filter-menu">
+            <summary className="hx-chip">Filters{activeFilters ? ` (${activeFilters})` : ""} <Caret /></summary>
+            <div className="hx-filter-options">
           <div className="hx-pop-anchor">
             <button type="button" className="hx-chip" aria-pressed={filters.difficulty.length > 0} aria-expanded={open === "difficulty"} onClick={() => setOpen(open === "difficulty" ? null : "difficulty")}>
               {filters.difficulty.length ? filters.difficulty.map((d) => DIFFICULTY_LABELS[d === "expert" ? "x" : d[0]]).join(", ") : "Difficulty"}
@@ -488,7 +492,7 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
 
           <div className="hx-pop-anchor">
             <button type="button" className="hx-chip" aria-pressed={Boolean(filters.length)} aria-expanded={open === "length"} onClick={() => setOpen(open === "length" ? null : "length")}>
-              {LENGTHS.find((l) => l.key === filters.length)?.key ? LENGTHS.find((l) => l.key === filters.length)!.label : "Length"}
+              {filters.length ? LENGTHS.find((l) => l.key === filters.length)?.label ?? "Length" : "Length"}
               <Caret />
             </button>
             {open === "length" && (
@@ -524,6 +528,9 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
               Clear {activeFilters}
             </button>
           )}
+            </div>
+          </details>
+          <button type="button" className="hx-chip" onClick={locate}>Near me</button>
         </div>
       </div>
 
@@ -554,7 +561,7 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
           )}
         </div>
         <button type="button" className="hx-ctl hx-ctl--text" aria-pressed={is3d} aria-label={is3d ? "Show flat map" : "Show 3D terrain"} onClick={() => setIs3d((v) => !v)}>3D</button>
-        <button type="button" className="hx-ctl" aria-label="Center on my location" onClick={locate}>
+        <button type="button" className="hx-ctl hx-locate" aria-label="Center on my location" title="Center on my location" onClick={locate}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>
         </button>
         <div className="hx-ctl-group">
@@ -619,9 +626,8 @@ export function TrailExplorer({ start: initial }: { start: ExplorerStart }) {
                         <Link className="hx-btn hx-btn--primary" href={`/explore/trails/${encodeURIComponent(id)}`}>View trail</Link>
                         {start && (
                           <>
-                            <button type="button" className="hx-btn" onClick={driveHere}>Drive here</button>
-                            <a className="hx-btn" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer">Google Maps</a>
-                            <a className="hx-btn" href={appleMapsDirectionsUrl(start.latitude, start.longitude, start.name ?? name)} target="_blank" rel="noopener noreferrer">Apple Maps</a>
+                            <a className="hx-btn" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer">Directions</a>
+                            <details className="hx-direction-menu"><summary>More</summary><div className="hx-actions"><button type="button" className="hx-btn" onClick={driveHere}>Preview drive</button><a className="hx-btn" href={appleMapsDirectionsUrl(start.latitude, start.longitude, start.name ?? name)} target="_blank" rel="noopener noreferrer">Apple Maps</a><Link className="hx-btn" href={`/explore/trails/${encodeURIComponent(id)}#nearby`}>Nearby essentials & trails</Link></div></details>
                           </>
                         )}
                       </div>

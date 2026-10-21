@@ -33,6 +33,9 @@ const footerLinks = [
 ];
 
 const tools = [
+  { href: "/you", label: "Profile" },
+  { href: "/login", label: "Log in" },
+  { href: "/signup", label: "Create account" },
   { href: "/record", label: "Record activity", hint: "G then R" },
   { href: "/", label: "Activity log", hint: "G then A" },
   { href: "/pack-trails", label: "Route guides" },
@@ -83,7 +86,7 @@ function MoreTools({ collapsed }: { collapsed?: boolean }) {
       }}
     >
       <summary aria-label="More tools" title={collapsed ? "More tools" : undefined}>
-        {collapsed ? <NavIcon name="more" /> : "More tools"}
+        {collapsed ? <NavIcon name="more" /> : <>More <NavIcon name="more" /></>}
       </summary>
       <nav className="nav-tools-content" aria-label="Additional destinations">
         {tools.map((tool) => (
@@ -219,7 +222,7 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
   return (
     <>
       <header className="fieldbook-mobile-header">
-        <Link href="/explore/trails" className="fieldbook-brand">
+        <Link href="/" className="fieldbook-brand">
           <NavIcon name="mountain" />
           Hyked
         </Link>
@@ -241,7 +244,7 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
         </button>
         <div id="sidebar-content" className="fieldbook-nav-content">
           <Link
-            href="/explore/trails"
+            href="/"
             className="fieldbook-brand"
             aria-label="Hyked"
             title={collapsed ? "Hyked" : undefined}

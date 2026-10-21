@@ -409,3 +409,59 @@ html { scroll-padding-block:20px 100px; }
   .mountain-hero-title { font-size: 21px; }
   .mountain-hero .fieldbook-page-intro { font-size: 14px; }
 }
+
+/* Quiet shared layout: primary destinations first, secondary tools on demand. */
+.mountain-backdrop { opacity: .045; }
+.fieldbook-page,.catalog-shell,.planner-shell { max-width: 1200px; }
+.fieldbook-page h1,.catalog-shell h1,.planner-heading h1 { overflow-wrap: anywhere; }
+.fieldbook-page-toolbar { margin-bottom: 24px; }
+.fieldbook-nav-footer .fieldbook-record,.fieldbook-nav-footer .fieldbook-profile { display: none; }
+.fieldbook-auth > a[href="/signup"] { display: none; }
+.fieldbook-week { gap: 16px; margin-bottom: 28px; }
+.mountain-home .fieldbook-empty p { max-width: 52ch; }
+.catalog-quick-links { gap: 18px; }
+.catalog-quick-links .catalog-button { background: transparent; padding: 0; color: var(--sage); border-radius: 0; }
+.catalog-quick-links .catalog-button:hover { color: var(--accent); }
+.catalog-mobile-plan { display: none; }
+.catalog-section-note { max-width: 65ch; }
+.catalog-detail-grid { gap: 32px; }
+.catalog-disclosure { border-top: 1px solid var(--border); padding-block: 16px; }
+.catalog-disclosure > summary { min-height: 44px; font-size: 18px; font-family: var(--font-display); color: var(--foreground); }
+.catalog-disclosure > summary::marker { color: var(--accent); }
+.catalog-disclosure-content { padding-top: 12px; }
+.nearby-list { list-style: none; padding: 0; margin-top: 12px; }
+.nearby-list li { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--border); }
+.nearby-list li > div { min-width: 0; }
+.nearby-list a { overflow-wrap: anywhere; }
+.nearby-list small { display: block; color: var(--sage); margin-top: 4px; }
+.nearby-list .catalog-button { flex-shrink: 0; }
+.nearby-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.nearby-tabs a { min-height: 44px; display: inline-flex; align-items: center; padding-inline: 12px; border-bottom: 2px solid var(--border); color: var(--sage); }
+.nearby-tabs a:hover { color: var(--accent); border-color: var(--accent); }
+@media(min-width:768px) {
+  .fieldbook-nav { height: 68px; }
+  .fieldbook-nav-content { width: 100%; max-width: 1200px; margin-inline: auto; gap: 24px; }
+  .fieldbook-destinations a { padding-inline: 12px; }
+  .hx { height: calc(100dvh - 68px); }
+}
+@media(max-width:767px) {
+  .fieldbook-mobile-header { min-height: 56px; padding: 6px 16px; }
+  .fieldbook-mobile-header .nav-tools summary { padding: 8px; }
+  .fieldbook-mobile-header .nav-tools-content { top: 52px; }
+  .fieldbook-bottom-nav { padding: 4px 8px max(4px,env(safe-area-inset-bottom)); }
+  .fieldbook-bottom-nav a { min-height: 52px; font-size: 11px; }
+  .app-content { padding-bottom: 68px; }
+  .fieldbook-page,.catalog-shell,.planner-shell { padding: 24px 16px 32px; }
+  .fieldbook-page h1,.catalog-shell h1,.planner-heading h1 { font-size: 30px; }
+  .catalog-quick-links { gap: 8px 16px; }
+  .catalog-quick-links .catalog-button { font-size: 12px; }
+  .catalog-sections { gap: 4px; }
+  .catalog-section { flex: 1; justify-content: center; padding: 0 8px; font-size: 12px; border: 0; border-bottom: 2px solid var(--border); border-radius: 0; background: transparent; }
+  .catalog-section svg { width: 16px; }
+  .catalog-section[aria-current="page"] { box-shadow: none; background: transparent; }
+  .mountain-hero { margin-inline: -16px; min-height: 350px; }
+  .mountain-hero-content { padding-inline: 16px; }
+  .mountain-hero h1 { font-size: 48px; }
+  .nearby-list li { gap: 10px; }
+  .nearby-list .catalog-button { padding-inline: 10px; font-size: 12px; }
+}
