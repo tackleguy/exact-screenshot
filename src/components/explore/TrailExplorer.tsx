@@ -133,7 +133,8 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const skiCache = useRef(new Map<string, GeoJSON.Feature[]>());
   const [extras, setExtras] = useState<ExtraTrail[]>([]);
   const pointsRef = useRef<PointsResponse | null>(null); pointsRef.current = points;
-  const sectionRef = useRef(section); sectionRef.current = section;
+  const sectionKey = section.key as TrailSectionKey;
+  const sectionRef = useRef(sectionKey); sectionRef.current = sectionKey;
 
   const collectExtras = useCallback(() => {
     const map = mapRef.current;
@@ -361,8 +362,8 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
   useEffect(() => {
     const map = mapRef.current;
-    if (map && ready) { applySectionFilter(map, section); collectExtras(); }
-  }, [section, ready, collectExtras]);
+    if (map && ready) { applySectionFilter(map, sectionKey); collectExtras(); }
+  }, [sectionKey, ready, collectExtras]);
   useEffect(() => { collectExtras(); }, [points, collectExtras]);
 
   const is3dRef = useRef(is3d);

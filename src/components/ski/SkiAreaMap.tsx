@@ -56,7 +56,7 @@ export function SkiAreaMap({ geojson, center, className }: { geojson: FeatureCol
       map.on("click", "ski-hit", (e) => { const f = e.features?.[0]; if (f) openRef.current(f); });
       map.on("mouseenter", "ski-hit", () => { map.getCanvas().style.cursor = "pointer"; });
       map.on("mouseleave", "ski-hit", () => { map.getCanvas().style.cursor = ""; });
-      map.fire("hy-ready");
+      (map as any).fire("hy-ready");
     });
     return () => { map.remove(); mapRef.current = null; };
   }, [center]);
@@ -76,7 +76,7 @@ export function SkiAreaMap({ geojson, center, className }: { geojson: FeatureCol
         map.fitBounds(b, { padding: 30, maxZoom: 15, duration: 0 });
       }
     };
-    if (map.getSource("ski")) apply(); else map.once("hy-ready", apply);
+    if (map.getSource("ski")) apply(); else (map as any).once("hy-ready", apply);
   }, [geojson]);
 
   return <div ref={ref} className={className} />;

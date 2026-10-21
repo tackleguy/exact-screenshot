@@ -15,8 +15,7 @@ interface SkiAreaRow {
 const PAGE_SIZE = 24;
 const runTotal = (c: SkiAreaRow["counts"]) => (c ? Number(c.skiRuns ?? 0) + Number(c.nordicRuns ?? 0) : 0);
 
-type Q = ReturnType<NonNullable<ReturnType<typeof createClient>>["from"]>;
-function applyFilters<T extends { ilike: Q["ilike"] }>(r: any, f: { query: string; country: string; region: string; type: string; hiking: boolean; biking: boolean }): T {
+function applyFilters<T = any>(r: any, f: { query: string; country: string; region: string; type: string; hiking: boolean; biking: boolean }): T {
   const t = f.query.trim();
   if (t) r = r.ilike("name", `%${t}%`);
   if (f.country) r = r.eq("country_name", f.country);
@@ -87,7 +86,7 @@ export function SkiAreasPage() {
       map.addLayer({ id: "pin", type: "circle", source: "areas", filter: ["!", ["has", "point_count"]], paint: { "circle-color": "#ffffff", "circle-radius": 5, "circle-stroke-width": 2, "circle-stroke-color": "#2f7fd8" } });
       map.on("click", "pin", (e) => { const s = e.features?.[0]?.properties?.slug; if (s) navRef.current(`/ski-areas/${s}`); });
       map.on("click", "clusters", (e) => { const f = e.features?.[0]; if (f) map.easeTo({ center: (f.geometry as GeoJSON.Point).coordinates as [number, number], zoom: map.getZoom() + 2 }); });
-      map.fire("hy-ready");
+      (map as any).fire("hy-ready");
     });
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
@@ -108,7 +107,7 @@ export function SkiAreasPage() {
       }
       if (!live) return;
       const set = () => (map.getSource("areas") as maplibregl.GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: { slug: r.slug, name: r.name }, geometry: { type: "Point", coordinates: [r.longitude, r.latitude] } })) });
-      if (map.getSource("areas")) set(); else map.once("hy-ready", set);
+      if (map.getSource("areas")) set(); else (map as any).once("hy-ready", set);
     })();
     return () => { live = false; };
   }, [filters]);
