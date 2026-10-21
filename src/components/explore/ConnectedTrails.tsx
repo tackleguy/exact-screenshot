@@ -24,7 +24,15 @@ export function ConnectedTrails({ selected, onRoute }: { selected: RouteTrail | 
     if (!route) return; const url = URL.createObjectURL(new Blob([connectedGpx(route.coordinates)], { type: "application/gpx+xml" }));
     const a = document.createElement("a"); a.href = url; a.download = "connected-trails.gpx"; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  function loadSaved() {
+    try {
+      const value = JSON.parse(localStorage.getItem("hyked-connected-route") ?? "null");
+      if (!value || !Array.isArray(value.trails) || !value.route?.coordinates?.length) { setError("No route saved on this device yet."); return; }
+      setTrails(value.trails); setStart(value.start); setFinish(value.finish); setRoute(value.route); onRoute(value.route.coordinates); setError("");
+    } catch { setError("The saved route couldn’t be opened."); }
+  }
   return <details className="hx-connect"><summary>Connect trails <span>⇄</span></summary><div className="hx-connect-body">
+    <button className="hx-btn" type="button" onClick={loadSaved}>Open saved route</button>
     <button type="button" className="hx-btn" disabled={!selected?.lines.length || trails.some(t => t.id === selected?.id)} onClick={() => { if (!selected) return; reset(); setTrails(t => [...t, selected]); }}>＋ Add selected trail</button>
     <ol>{trails.map(t => <li key={t.id}><span>{t.name}</span><button className="hx-btn" type="button" aria-label={`Remove ${t.name}`} title={`Remove ${t.name}`} onClick={() => { reset(); setTrails(all => all.filter(x => x.id !== t.id)); }}>×</button></li>)}</ol>
     {trails.length > 0 && <><label>Start<select value={start} onChange={e => { reset(); setStart(e.target.value); }}><option value="">Choose trail endpoint</option>{ends.map(e => <option key={e.key} value={e.key}>{e.label}</option>)}</select></label><label>Finish<select value={finish} onChange={e => { reset(); setFinish(e.target.value); }}><option value="">Choose trail endpoint</option>{ends.map(e => <option key={e.key} value={e.key}>{e.label}</option>)}</select></label><button className="hx-btn hx-btn--primary" type="button" onClick={build}>Find point-to-point route</button></>}
