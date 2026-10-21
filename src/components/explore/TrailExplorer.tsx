@@ -12,6 +12,8 @@ import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { localTrailsVisible, TRAIL_DETAIL_ZOOM, MAP_TRAIL_LIMIT, TRAIL_CARD_LIMIT } from "@/lib/trail-catalog/discovery";
 import type { WeatherPeriod } from "@/lib/weather/types";
 import { SectionIcon } from "./SectionIcon";
+import { ConnectedTrails } from "./ConnectedTrails";
+import type { Point } from "@/lib/trail-catalog/quality";
 import { NearbyTrails } from "./NearbyTrails";
 import { DIFFICULTY_COLORS, DIFFICULTY_LABELS, EMPTY, explorerStyle, installOverlay, setSky, type Basemap } from "./explorer-map";
 import "./explorer.css";
@@ -81,7 +83,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const railRef = useRef<HTMLDivElement>(null);
-  const sourcesRef = useRef({ pins: EMPTY, grid: EMPTY, lines: EMPTY, selected: EMPTY, drive: EMPTY });
+  const sourcesRef = useRef({ pins: EMPTY, grid: EMPTY, lines: EMPTY, selected: EMPTY, drive: EMPTY, route: EMPTY });
   const fetchAbort = useRef<AbortController | null>(null);
   const hovered = useRef<number | string | null>(null);
 
@@ -121,6 +123,11 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     const source = mapRef.current?.getSource(`hy-${key}`) as maplibregl.GeoJSONSource | undefined;
     source?.setData(data);
   }, []);
+
+  const showConnectedRoute = useCallback((points: Point[]) => {
+    setSource("route", { type: "FeatureCollection", features: points.length ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: points } }] : [] });
+    if (mapRef.current?.getLayer("hy-route")) mapRef.current.moveLayer("hy-route");
+  }, [setSource]);
 
   const refresh = useCallback(() => {
     const map = mapRef.current;
@@ -608,6 +615,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
       <div className="hx-rail-wrap">
         <div className="hx-results-heading"><div><span className="hx-eyebrow">YOUR NEXT OUTING</span><h2>Trails nearby</h2></div><span className="hx-result-count">{cards.length}</span></div>
+        <ConnectedTrails selected={detail ? { id: detail.trail.id, name: detail.trail.name, lines: detail.lines } : null} onRoute={showConnectedRoute} />
         {cards.length > 0 ? (
           <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, nearest first">
             {cards.map((t) => {
@@ -625,7 +633,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                     </div>
                     {active && weather && (
                       <span className="hx-weather" title={weather.shortForecast}>
-                        {(weather.temperatureF ?? weather.lowF) !== undefined && <strong>{Math.round((weather.temperatureF ?? weather.lowF)!)}°F</strong>}
+                        {(weather.temperatureF ?? weather.lowF) !== undefined && <strong>{Math.round(weather.temperatureF ?? weather.lowF ?? 0)}°F</strong>}
                         <small>{weather.name}</small>
                       </span>
                     )}
@@ -647,8 +655,8 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                         <Link className="hx-btn hx-btn--primary" href={`/explore/trails/${encodeURIComponent(id)}`}>View trail</Link>
                         {start && (
                           <>
-                            <a className="hx-btn" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer">Directions</a>
-                            <details className="hx-direction-menu"><summary>More</summary><div className="hx-actions"><button type="button" className="hx-btn" onClick={driveHere}>Preview drive</button><a className="hx-btn" href={appleMapsDirectionsUrl(start.latitude, start.longitude, start.name ?? name)} target="_blank" rel="noopener noreferrer">Apple Maps</a><Link className="hx-btn" href={`/explore/trails/${encodeURIComponent(id)}#nearby`}>Nearby essentials & trails</Link></div></details>
+                            <a className="hx-btn" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer" aria-label={`Driving directions to ${name}`}>Drive to trailhead ↗</a>
+                            <details className="hx-direction-menu"><summary>More</summary><div className="hx-actions"><a className="hx-btn" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer">Open Google Maps ↗</a><a className="hx-btn" href={appleMapsDirectionsUrl(start.latitude, start.longitude, start.name ?? name)} target="_blank" rel="noopener noreferrer">Apple Maps</a><Link className="hx-btn" href={`/explore/trails/${encodeURIComponent(id)}#nearby`}>Nearby essentials & trails</Link></div></details>
                           </>
                         )}
                       </div>

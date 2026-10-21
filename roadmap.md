@@ -1,4 +1,7 @@
 # Lovable publishing and simpler discovery
+- [x] Add explicit Google Maps driving links and mapped point-to-point trail routing using parallel investigations; verified route creation, GPX export and save/reload, plus a real two-trail junction.
+- [x] Restore catalog filtering/pagination, through-hikes and community/GPX entry points, and mobile 3D controls without replacing existing trip tools.
+- [ ] Restore working hosted community records and GPX imports — original trail tables are absent from Lovable Cloud and the hosted service URL is missing.
 - [x] Restore the visible map and remake trail browsing as a compact chess.com-inspired workspace; verify search, map navigation, and directions.
 - [x] Wire Explore and Map to the source-backed local trail catalog, including names, nearby trails, and trailhead directions; verified Yosemite Falls through the UI.
 - [x] Limit displayed trails and load local trail details only when zoomed in; visibility tests passed and the initial zoomed-out screen has no local trail cards.

@@ -38,7 +38,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
   function pageHref(n: number) {
     const next = new URLSearchParams(params);
     next.set("page", String(n));
-    return `/explore/trails?${next}`;
+    return `/explore/trails/catalog?${next}`;
   }
   const intlCount = Object.entries(manifest.countries)
     .filter(([code]) => code !== "US" && code !== "CA")
@@ -53,16 +53,16 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
           States and Canada, plus curated through-hikes worldwide.
         </p>
         <div className="catalog-quick-links">
-          <Link className="catalog-button secondary" href="/explore/trails?kind=route">
+          <Link className="catalog-button secondary" href="/explore/trails/catalog?kind=route">
             Through-hikes
           </Link>
-          <Link className="catalog-button secondary" href="/explore/trails?country=intl&kind=route">
+          <Link className="catalog-button secondary" href="/explore/trails/catalog?country=intl&kind=route">
             International
           </Link>
           <Link className="catalog-button secondary" href="/explore/ski">
             Ski maps
           </Link>
-          <Link className="catalog-button secondary" href="/explore/trails?uniqueNames=true">
+          <Link className="catalog-button secondary" href="/explore/trails/catalog?uniqueNames=true">
             Unique names
           </Link>
         </div>
@@ -77,14 +77,14 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
           next.delete("includeWinter");
           next.set("activity", section.activity);
           return (
-            <Link key={section.key} href={`/explore/trails?${next}`} className="catalog-section" aria-current={sectionOf(activity === "all" ? "hike" : activity).key === section.key ? "page" : undefined}>
+            <Link key={section.key} href={`/explore/trails/catalog?${next}`} className="catalog-section" aria-current={sectionOf(activity === "all" ? "hike" : activity).key === section.key ? "page" : undefined}>
               <SectionIcon section={section.key} size={20} />
               {section.label}
             </Link>
           );
         })}
       </nav>
-      <form className="catalog-filters" action="/explore/trails">
+      <form className="catalog-filters" action="/explore/trails/catalog">
         {!preview && <input type="hidden" name="limit" value={limit} />}
         {filters.bbox && <input type="hidden" name="bbox" value={filters.bbox.join(",")} />}
         {activity !== "all" && (
@@ -222,11 +222,11 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
         tools={
           <>
             {hasFilters && (
-              <Link className="catalog-link" href="/explore/trails">
+              <Link className="catalog-link" href="/explore/trails/catalog">
                 Clear filters
               </Link>
             )}
-            <Link className="catalog-link" href="/explore/trails?collection=community">
+            <Link className="catalog-link" href="/explore/trails/catalog?collection=community">
               Community & GPX
             </Link>
           </>
@@ -275,7 +275,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                     {total === 1 ? "match" : "matches"}
                   </span>
                   {total > trails.length && (
-                    <Link className="catalog-button secondary" href={`/explore/trails?${allParams}`}>
+                    <Link className="catalog-button secondary" href={`/explore/trails/catalog?${allParams}`}>
                       More trails
                     </Link>
                   )}
@@ -317,12 +317,12 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                   <Link href="/explore/ski" className="catalog-button secondary">
                     Ski maps
                   </Link>
-                  <Link href="/explore/trails" className="catalog-button secondary">
+                  <Link href="/explore/trails/catalog" className="catalog-button secondary">
                     Show hiking trails
                   </Link>
                 </div>
               ) : (
-                <Link href="/explore/trails" className="catalog-button secondary">
+                <Link href="/explore/trails/catalog" className="catalog-button secondary">
                   Show all trails
                 </Link>
               )}

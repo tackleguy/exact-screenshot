@@ -117,7 +117,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       const t = d.trail;
       const { rows } = await select(new URLSearchParams({ lat: String(t.latitude), lng: String(t.longitude), radiusKm: "25" }), fetcher);
       const result = filterCatalog(rows.filter(r => r.id !== t.id), { lat: t.latitude, lng: t.longitude, radiusKm: 25, limit: TRAIL_CARD_LIMIT, uniqueNames: true });
-      return Response.json({ trails: result.trails.map(r => ({ ...r, distanceKm: distanceKm(t.latitude, t.longitude, r.latitude, r.longitude) })) });
+      return Response.json({ trails: await Promise.all(result.trails.map(async r => { const full = await detail(r.id, fetcher); return { ...r, trailhead: full?.trail.trailhead, distanceKm: distanceKm(t.latitude, t.longitude, r.latitude, r.longitude) }; })) });
     }
     if (suffix[1] === "gpx") return new Response(catalogGpx(d.trail, d.lines), { headers: { "Content-Type": "application/gpx+xml", "Content-Disposition": 'attachment; filename="trail.gpx"' } });
     return Response.json({ error: "This additional trip service needs the separately hosted service. Trail maps, nearby trails and directions are available." }, { status: 503 });

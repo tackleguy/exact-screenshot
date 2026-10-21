@@ -80,9 +80,12 @@ export async function explorerStyle(basemap: Basemap): Promise<maplibregl.StyleS
 export const EMPTY: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
 /** Hyked's own sources and layers; re-installed after every basemap switch. */
-export function installOverlay(map: maplibregl.Map, data: { pins: GeoJSON.FeatureCollection; grid: GeoJSON.FeatureCollection; lines: GeoJSON.FeatureCollection; selected: GeoJSON.FeatureCollection; drive: GeoJSON.FeatureCollection }) {
+export function installOverlay(map: maplibregl.Map, data: { pins: GeoJSON.FeatureCollection; grid: GeoJSON.FeatureCollection; lines: GeoJSON.FeatureCollection; selected: GeoJSON.FeatureCollection; drive: GeoJSON.FeatureCollection; route: GeoJSON.FeatureCollection }) {
   if (map.getSource("hy-pins")) return;
   map.addSource("hy-lines", { type: "geojson", data: data.lines });
+  map.addSource("hy-route", { type: "geojson", data: data.route });
+  const routeColor = getComputedStyle(map.getContainer()).getPropertyValue("--accent").trim() || SELECTED_COLOR;
+  map.addLayer({ id: "hy-route", type: "line", source: "hy-route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": routeColor, "line-width": 7 } });
   map.addSource("hy-drive", { type: "geojson", data: data.drive });
   map.addSource("hy-selected", { type: "geojson", data: data.selected });
   map.addSource("hy-grid", { type: "geojson", data: data.grid });
