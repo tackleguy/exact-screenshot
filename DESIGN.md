@@ -1,13 +1,13 @@
 ---
-name: "Hyked Fieldbook"
-description: "The implemented light workspace connecting trail discovery, personal packing, and recording."
+name: "Hyked Mountain Night"
+description: "Restored dark outdoor appearance; the original Fieldbook record below is historical."
 colors:
-  background: "#f6f7f4"
-  foreground: "#18251f"
-  surface: "#ffffff"
-  surface-muted: "#e9efe9"
-  accent: "#245b47"
-  accent-dim: "#173f35"
+  background: "#141814"
+  foreground: "#ece8df"
+  surface: "#1e241e"
+  surface-muted: "#323a32"
+  accent: "#c8f04a"
+  accent-dim: "#b4dc3f"
   pine-light: "#36745b"
   sage: "#59665e"
   border: "#d9e1d9"
@@ -97,7 +97,13 @@ components:
     padding: "24px"
 ---
 
-# Design System: Hyked Fieldbook
+# Design System: Hyked Mountain Night
+
+## Current appearance
+
+The user requested restoration of the old dark outdoor UI. Shared global CSS is authoritative: forest-charcoal surfaces, warm cream text, lime actions, Playfair Display headings, DM Sans body text, and JetBrains Mono measurements. Desktop navigation is a horizontal glass header; mobile retains all five destinations and More tools. Routes, catalog sources, saved gear, trip planning, recording, and account logic are unchanged.
+
+Generated alpine dusk imagery is atmospheric illustration only, never a photo of a selected trail. It lives at `src/assets/mountain-night.jpg`, imported through the shared layout and public home. Keep source labels and unknown-weight states visible. The Fieldbook documentation below is a historical record, superseded wherever it conflicts with this section.
 
 ## Overview
 

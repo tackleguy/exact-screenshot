@@ -1,4 +1,4 @@
-.planner-shell { --plan-muted: var(--sage); --plan-line: var(--border); max-width: 1500px; margin: 0 auto; padding: 32px 32px 64px 48px; font-size: 14px; line-height: 1.6; color: var(--cream); color-scheme: light; accent-color: var(--accent); }
+.planner-shell { --plan-muted: var(--sage); --plan-line: var(--border); max-width: 1500px; margin: 0 auto; padding: 32px 32px 64px 48px; font-size: 14px; line-height: 1.6; color: var(--cream); color-scheme: dark; accent-color: var(--accent); }
 .planner-shell a { color: var(--accent); text-underline-offset: 4px; }
 .planner-shell p a { text-decoration: underline; }
 .planner-memory > p > a { display: inline-flex; align-items: center; min-height: 44px; }
@@ -11,11 +11,11 @@
 .planner-topline > a { color: var(--cream); font-weight: 600; }
 .planner-topline > div { display: flex; gap: 24px; }
 .planner-heading { margin: 36px 0 32px; }
-.planner-heading h1 { font-family: var(--font-inter), sans-serif; font-weight: 600; font-size: clamp(28px, 3vw, 40px); letter-spacing: -.025em; line-height: 1.15; text-wrap: balance; }
+.planner-heading h1 { font-family: var(--font-display); font-weight: 500; font-size: 40px; letter-spacing: 0; line-height: 1.15; text-wrap: balance; }
 .planner-heading p { font-size: 16px; margin-top: 14px; color: var(--plan-muted); }
 .planner-layout { display: grid; grid-template-columns: minmax(0, 1.87fr) minmax(290px, 1fr); gap: 24px; align-items: start; }
 .planner-workspace, .planner-sidebar { min-width: 0; }
-.planner-shell h2 { font-family: var(--font-inter), sans-serif; font-weight: 600; font-size: 24px; line-height: 1.25; margin-bottom: 12px; letter-spacing: -.02em; }
+.planner-shell h2 { font-family: var(--font-display); font-weight: 600; font-size: 24px; line-height: 1.25; margin-bottom: 12px; letter-spacing: 0; }
 .planner-shell h3 { font-size: 17px; line-height: 1.35; font-weight: 600; margin-bottom: 10px; }
 .planner-shell h4 { font-weight: 600; overflow-wrap: anywhere; }
 .planner-shell p { max-width: 72ch; }
@@ -24,7 +24,7 @@
 .planner-prompt textarea { border: 0!important; background: transparent!important; border-radius: 0!important; padding: 16px 0!important; font-family: var(--font-inter), sans-serif; font-weight: 600; font-size: 26px!important; line-height: 1.35; resize: vertical; min-height: 100px; }
 .planner-prompt textarea::placeholder { color: var(--plan-muted); }
 .planner-prompt-footer { display: flex; gap: 18px; align-items: center; justify-content: space-between; padding-top: 12px; border-top: 1px solid var(--plan-line); }
-.planner-button { display: inline-flex; align-items: center; justify-content: center; gap: 18px; min-height: 44px; border-radius: 8px; background: var(--accent); color: #fff!important; padding: 11px 18px; font-size: 13px; font-weight: 650; line-height: 1.4; text-align: center; text-decoration: none!important; transition: background .15s; }
+.planner-button { display: inline-flex; align-items: center; justify-content: center; gap: 18px; min-height: 44px; border-radius: 8px; background: var(--accent); color: var(--on-accent)!important; padding: 11px 18px; font-size: 13px; font-weight: 650; line-height: 1.4; text-align: center; text-decoration: none!important; transition: background .15s; }
 .planner-button:hover { background: var(--accent-dim); }
 .planner-button.secondary { background: var(--surface-elevated); color: var(--cream)!important; border: 1px solid var(--plan-line); }
 .planner-button.secondary:hover { background: var(--surface-muted); }
@@ -156,8 +156,8 @@
 .planner-heading p { margin-top: 12px; }
 .planner-topline { border: 0; padding: 0 0 20px; }
 .planner-save-state { color: var(--plan-muted); font-size: 12px; flex-shrink: 0; }
-.planner-workspace { padding: 24px; background: var(--surface); border-radius: 8px; }
-.planner-sidebar { padding: 24px; background: var(--surface-muted); border-radius: 8px; }
+.planner-workspace { padding: 24px 0; background: transparent; border-radius: 0; }
+.planner-sidebar { padding: 24px; background: var(--glass-background); border: 1px solid var(--border); border-radius: 8px; }
 .planner-sidebar h2 { max-width: none; }
 .planner-sidebar .planner-memory { padding-bottom: 0; }
 .planner-sidebar .planner-memory p { font-size: 14px; }
@@ -223,7 +223,8 @@
   .planner-heading { align-items: flex-start; flex-direction: column; gap: 10px; margin-bottom: 24px; }
   .planner-heading h1 { font-size: 28px; }
   .planner-heading p { font-size: 14px; }
-  .planner-workspace,.planner-sidebar { padding: 20px; }
+  .planner-workspace { padding: 0; }
+  .planner-sidebar { padding: 20px; }
   .planner-steps { gap: 10px; margin: 20px 0 24px; }
   .planner-steps button { align-items: flex-start; flex-direction: column; gap: 8px; font-size: 12px; }
   .planner-steps button span { width: 28px; height: 28px; flex-basis: 28px; }
