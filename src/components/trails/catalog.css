@@ -222,3 +222,21 @@
 .catalog-section:hover { border-color: var(--accent); }
 .catalog-section[aria-current="page"] { border-color: var(--accent); background: var(--surface-muted); color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
 @media (prefers-reduced-motion: reduce) { .catalog-section { transition: none; } }
+
+/* AllTrails-style trail header */
+.trail-hero { display: grid; gap: 1rem; margin: 0.75rem 0 1.25rem; }
+.trail-hero-photo { position: relative; min-height: clamp(220px, 38vw, 380px); border-radius: var(--radius-lg, 16px); background-size: cover; background-position: center; overflow: hidden; display: flex; align-items: flex-end; }
+.trail-hero-photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 35%, color-mix(in srgb, var(--background, #141813) 88%, transparent)); }
+.trail-hero-text { position: relative; z-index: 1; padding: 1.25rem 1.4rem; }
+.trail-hero-text h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); line-height: 1.1; color: var(--cream); margin: 0.4rem 0 0.25rem; }
+.trail-hero-text p { color: var(--cream); opacity: 0.85; margin: 0; }
+.trail-hero-credit { position: absolute; z-index: 1; right: 0.75rem; top: 0.6rem; font-size: 0.7rem; color: var(--cream); opacity: 0.75; max-width: 60%; text-align: right; }
+.trail-chip { display: inline-block; padding: 0.2rem 0.7rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; text-transform: capitalize; background: var(--surface-muted); color: var(--cream); }
+.trail-chip.easy { background: #2f9e5b; } .trail-chip.moderate { background: #2f7fd8; } .trail-chip.hard { background: #d8452f; } .trail-chip.expert { background: #1d1d1d; }
+.trail-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius-lg, 16px); background: var(--surface-elevated); margin: 0; }
+.trail-stats > div { padding: 0.8rem 1rem; border-left: 1px solid var(--border); }
+.trail-stats > div:first-child { border-left: 0; }
+.trail-stats dt { font-size: 0.75rem; color: var(--mist); }
+.trail-stats dd { margin: 0.15rem 0 0; font-weight: 700; color: var(--cream); font-size: 1.05rem; }
+.trail-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+@media (max-width: 640px) { .trail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .trail-stats > div:nth-child(3) { border-left: 0; } .trail-stats > div:nth-child(n+3) { border-top: 1px solid var(--border); } }

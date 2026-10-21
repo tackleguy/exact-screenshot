@@ -1,56 +1,50 @@
-import Image from "next/image";
+"use client";
+
 import Link from "next/link";
-import type { Trail, TrailPhoto } from "@/lib/types";
-import { PhotoAttribution } from "./TrailPhotoGallery";
+import { useEffect, useState } from "react";
+import type { CatalogPhoto } from "@/lib/trail-catalog/photos";
+import type { CatalogTrail } from "@/lib/trail-catalog/types";
+import { countryName } from "@/lib/trail-catalog/types";
+import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
+import { ROUTE_TYPE_LABELS } from "@/lib/trail-catalog/quality";
+import fallback from "@/assets/trail-discovery.jpg";
 
-interface TrailHeroProps {
-  trail: Trail;
-  heroPhoto?: TrailPhoto | null;
-}
+const CHIP: Record<string, string> = { easy: "easy", moderate: "moderate", hard: "hard", expert: "expert" };
 
-export function TrailHero({ trail, heroPhoto }: TrailHeroProps) {
-  const imageUrl = heroPhoto?.url ?? trail.image_url;
-
+/** AllTrails-style header: photo, name, difficulty chip, key stats and primary actions. */
+export function TrailHero({ trail: t, difficulty, distance, hasLines }: { trail: CatalogTrail; difficulty: string; distance: string; hasLines: boolean }) {
+  const [photo, setPhoto] = useState<CatalogPhoto | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/photos`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (live && d?.photos?.[0]) setPhoto(d.photos[0]); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [t.id]);
+  const head = t.trailhead ?? { latitude: t.latitude, longitude: t.longitude };
+  const img = photo?.url ?? (typeof fallback === "string" ? fallback : (fallback as { src: string }).src);
+  const hours = t.miles ? t.miles / 2 : null;
+  const time = hours ? (hours < 1 ? `${Math.max(10, Math.round(hours * 60 / 5) * 5)} min` : `${Math.floor(hours)} h ${Math.round((hours % 1) * 60 / 5) * 5} min`) : "—";
   return (
-    <div className="relative h-72 overflow-hidden bg-stone-800 sm:h-96">
-      {imageUrl ? (
-        <Image
-          src={imageUrl}
-          alt={trail.trail_name}
-          fill
-          className="object-cover"
-          priority
-          sizes="100vw"
-        />
-      ) : (
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-900 via-stone-800 to-stone-900" />
-      )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-10">
-        <div className="mx-auto max-w-7xl">
-          {trail.park && (
-            <Link
-              href={`/parks/${trail.park.id}`}
-              className="text-sm font-medium text-emerald-300 hover:underline"
-            >
-              {trail.park.park_name}
-            </Link>
-          )}
-          <h1 className="mt-1 text-3xl font-bold text-white sm:text-4xl">
-            {trail.trail_name}
-          </h1>
-          {trail.confidence_score && trail.confidence_score !== "verified" && (
-            <p className="mt-2 text-xs text-stone-300">
-              Data confidence: {trail.confidence_score.replace("_", " ")}
-            </p>
-          )}
-          {heroPhoto && (
-            <div className="mt-3 max-w-xl rounded-lg bg-black/40 p-2 backdrop-blur">
-              <PhotoAttribution photo={heroPhoto} className="!text-stone-200" />
-            </div>
-          )}
+    <header className="trail-hero">
+      <div className="trail-hero-photo" style={{ backgroundImage: `url("${img}")` }}>
+        <div className="trail-hero-text">
+          <span className={`trail-chip ${CHIP[difficulty] ?? ""}`}>{difficulty}</span>
+          <h1>{t.name}</h1>
+          <p>{[t.park ?? t.forest, t.region, countryName(t.country)].filter(Boolean).join(" · ")}</p>
         </div>
+        {photo && <a className="trail-hero-credit" href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">Photo: {photo.artist} · {photo.license}</a>}
       </div>
-    </div>
+      <dl className="trail-stats">
+        <div><dt>Length</dt><dd>{distance}</dd></div>
+        <div><dt>Est. time</dt><dd>{time}</dd></div>
+        <div><dt>Route type</dt><dd>{t.routeType ? ROUTE_TYPE_LABELS[t.routeType] : t.kind === "route" ? "Long-distance" : "—"}</dd></div>
+        <div><dt>Difficulty</dt><dd className="capitalize">{difficulty}</dd></div>
+      </dl>
+      <div className="trail-actions">
+        <a className="catalog-button" href={googleMapsDirectionsUrl(head.latitude, head.longitude)} target="_blank" rel="noopener noreferrer">Directions to trailhead</a>
+        {hasLines && <a className="catalog-button secondary" href={`/api/trail-catalog/${encodeURIComponent(t.id)}/gpx`} download>Download GPX</a>}
+        <Link className="catalog-button secondary" href={`/explore/trails?trail=${encodeURIComponent(t.id)}&lat=${t.latitude}&lng=${t.longitude}&z=13`}>View on map</Link>
+        <Link className="catalog-button secondary" href={`/plan?prompt=${encodeURIComponent(t.name)}`}>Plan a trip</Link>
+      </div>
+    </header>
   );
 }
