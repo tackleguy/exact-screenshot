@@ -17,6 +17,13 @@ import type { Point } from "@/lib/trail-catalog/quality";
 import { NearbyTrails } from "./NearbyTrails";
 import { DIFFICULTY_COLORS, DIFFICULTY_LABELS, EMPTY, explorerStyle, installOverlay, setSky, type Basemap } from "./explorer-map";
 import "./explorer.css";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { installExtras, applySectionFilter } from "./map-extras";
+import { useOpenSkiFeature } from "@/components/ski/SkiAreaMap";
+import { buildFromTiles, featureKey, lengthKm, geometryLines, normalizeName, osmSections, osmTrailHref, saveOsmTrail } from "@/lib/osm-trail";
+
+interface ExtraTrail { key: string; name: string; km: number; lengthKm: number; open: () => void; kind: "osm" | "ski" }
 
 type Bounds = [number, number, number, number];
 interface PointsResponse { total: number; trails: ExplorePointTrail[]; clusters: ExploreCluster[] }
@@ -117,6 +124,63 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const [mapError, setMapError] = useState<string | null>(null);
 
   const section = sectionOf(filters.activity);
+  const router = useRouter();
+  const routerRef = useRef(router); routerRef.current = router;
+  const openSki = useOpenSkiFeature();
+  const openSkiRef = useRef(openSki); openSkiRef.current = openSki;
+  const extrasRef = useRef({ skiPins: EMPTY, skiLines: EMPTY });
+  const skiAreas = useRef<{ slug: string; lng: number; lat: number }[]>([]);
+  const skiCache = useRef(new Map<string, GeoJSON.Feature[]>());
+  const [extras, setExtras] = useState<ExtraTrail[]>([]);
+  const pointsRef = useRef<PointsResponse | null>(null); pointsRef.current = points;
+  const sectionRef = useRef(section); sectionRef.current = section;
+
+  const collectExtras = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || map.getZoom() < LINE_ZOOM) { setExtras([]); return; }
+    const c = map.getCenter(); const here: [number, number] = [c.lng, c.lat];
+    const taken = new Set((pointsRef.current?.trails ?? []).map((t) => normalizeName(t[1])));
+    const groups = new Map<string, ExtraTrail>();
+    const sec = sectionRef.current;
+    const add = (name: string, kind: ExtraTrail["kind"], lines: [number, number][][], open: () => void) => {
+      const n = normalizeName(name); if (!n || taken.has(n)) return;
+      const len = lengthKm(lines); const mid = lines[0]?.[0]; if (!mid) return;
+      const km = distanceKm(here, mid);
+      const prev = groups.get(n);
+      if (prev) { prev.lengthKm += len; prev.km = Math.min(prev.km, km); return; }
+      groups.set(n, { key: `${kind}:${n}`, name, km, lengthKm: len, open, kind });
+    };
+    for (const f of extrasRef.current.skiLines.features) {
+      const p = f.properties ?? {}; if (!p.name || !p.id) continue;
+      const k = p.kind === "ski-run" ? "snow" : p.kind === "mountain-biking" ? "bike" : "foot";
+      if (k !== sec) continue;
+      add(String(p.name), "ski", geometryLines(f.geometry), () => openSkiRef.current(f as never));
+    }
+    if (map.getSource("trails")) {
+      for (const f of map.querySourceFeatures("trails", { sourceLayer: "trail" })) {
+        const name = f.properties?.name; if (!name) continue;
+        if (!osmSections(f.properties ?? {}).includes(sec)) continue;
+        add(String(name), "osm", geometryLines(f.geometry), () => { const t = buildFromTiles(map, f); saveOsmTrail(t); routerRef.current.push(osmTrailHref(t)); });
+      }
+    }
+    const list = [...groups.values()].sort((a, b) => a.km / Math.min(3, 0.4 + Math.sqrt(a.lengthKm)) - b.km / Math.min(3, 0.4 + Math.sqrt(b.lengthKm)));
+    setExtras(list.slice(0, 30));
+  }, []);
+
+  const refreshSki = useCallback(async () => {
+    const map = mapRef.current; const client = createClient();
+    const setLines = (fc: GeoJSON.FeatureCollection) => { extrasRef.current.skiLines = fc; (map?.getSource("hy-ski-lines") as maplibregl.GeoJSONSource | undefined)?.setData(fc); };
+    if (!map || !client || map.getZoom() < 12) { setLines(EMPTY); return; }
+    const b = map.getBounds();
+    const inView = skiAreas.current.filter((a) => b.contains([a.lng, a.lat])).slice(0, 8);
+    const need = inView.filter((a) => !skiCache.current.has(a.slug)).map((a) => a.slug);
+    if (need.length) {
+      const { data } = await client.from("ski_area_details").select("slug,data").in("slug", need);
+      for (const row of data ?? []) skiCache.current.set(row.slug, ((row.data as { geojson?: GeoJSON.FeatureCollection })?.geojson?.features ?? []));
+    }
+    setLines({ type: "FeatureCollection", features: inView.flatMap((a) => skiCache.current.get(a.slug) ?? []) });
+    collectExtras();
+  }, [collectExtras]);
 
   const setSource = useCallback((key: keyof typeof sourcesRef.current, data: GeoJSON.FeatureCollection) => {
     sourcesRef.current[key] = data;
@@ -193,7 +257,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       mapRef.current = map;
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "imperial", maxWidth: 90 }), "bottom-left");
-      map.on("style.load", () => installOverlay(map, sourcesRef.current));
+      map.on("style.load", () => { installOverlay(map, sourcesRef.current); installExtras(map, extrasRef.current); applySectionFilter(map, sectionRef.current); });
       map.on("load", () => {
         setReady(true);
         refresh();
@@ -215,13 +279,25 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         params.set("z", map.getZoom().toFixed(1));
         window.history.replaceState(null, "", `?${params}`);
         clearTimeout(timer);
-        timer = setTimeout(refresh, 220);
+        timer = setTimeout(() => { refresh(); void refreshSki(); }, 220);
       });
       map.on("rotate", () => setBearing(map.getBearing()));
 
       const select = (id: string) => setSelectedId(id);
       map.on("click", "hy-pin", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
       map.on("click", "hy-lines", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
+      const tappedOwn = (e: maplibregl.MapMouseEvent) => map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-ski-hit", "hy-ski-pin"].filter((l) => map.getLayer(l)) }).length > 0;
+      map.on("click", "hy-osm-hit", (e) => {
+        if (tappedOwn(e)) return;
+        const f = e.features?.[0]; if (!f || !featureKey(f)) return;
+        const t = buildFromTiles(map, f); saveOsmTrail(t); routerRef.current.push(osmTrailHref(t));
+      });
+      map.on("click", "hy-ski-hit", (e) => {
+        if (map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines"] }).length) return;
+        const f = e.features?.[0]; if (f) openSkiRef.current(f);
+      });
+      map.on("click", "hy-ski-pin", (e) => { const s = e.features?.[0]?.properties?.slug; if (s) routerRef.current.push(`/ski-areas/${s}`); });
+      map.on("sourcedata", (e) => { if (e.sourceId === "trails" && e.isSourceLoaded) collectExtras(); });
       map.on("click", "hy-pins-cluster", async (e) => {
         const f = e.features?.[0];
         const source = map.getSource("hy-pins") as maplibregl.GeoJSONSource | undefined;
@@ -234,7 +310,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         const [w, s, ea, n] = raw.split(",").map(Number);
         if ([w, s, ea, n].every(Number.isFinite)) map.fitBounds([[w, s], [ea, n]], { padding: 60, maxZoom: 11, duration: 600 });
       });
-      for (const layer of ["hy-pin", "hy-lines", "hy-pins-cluster", "hy-grid-cluster"]) {
+      for (const layer of ["hy-pin", "hy-lines", "hy-pins-cluster", "hy-grid-cluster", "hy-osm-hit", "hy-ski-hit", "hy-ski-pin"]) {
         map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
       }
@@ -262,6 +338,32 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     // The camera starts from the server-read URL once; later moves are the map's own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh]);
+
+  // Pins for every ski area (requires sign-in to read).
+  useEffect(() => {
+    const client = createClient(); if (!client) return;
+    let live = true;
+    void (async () => {
+      const rows: { slug: string; name: string; latitude: number; longitude: number }[] = [];
+      for (let i = 0; i < 7; i++) {
+        const { data } = await client.from("ski_areas").select("slug,name,latitude,longitude").range(i * 1000, i * 1000 + 999);
+        if (!data?.length) break; rows.push(...data); if (data.length < 1000) break;
+      }
+      if (!live) return;
+      skiAreas.current = rows.map((r) => ({ slug: r.slug, lng: r.longitude, lat: r.latitude }));
+      const fc: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: { slug: r.slug, name: r.name }, geometry: { type: "Point", coordinates: [r.longitude, r.latitude] } })) };
+      extrasRef.current.skiPins = fc;
+      (mapRef.current?.getSource("hy-ski-pins") as maplibregl.GeoJSONSource | undefined)?.setData(fc);
+      void refreshSki();
+    })();
+    return () => { live = false; };
+  }, [refreshSki]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && ready) { applySectionFilter(map, section); collectExtras(); }
+  }, [section, ready, collectExtras]);
+  useEffect(() => { collectExtras(); }, [points, collectExtras]);
 
   const is3dRef = useRef(is3d);
   const selectedIdRef = useRef(selectedId);
@@ -615,6 +717,18 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
       <div className="hx-rail-wrap">
         <div className="hx-results-heading"><div><span className="hx-eyebrow">YOUR NEXT OUTING</span><h2>Trails nearby</h2></div><span className="hx-result-count">{cards.length}</span></div>
+        {extras.length > 0 && (
+          <div className="hx-extras" aria-label="More trails in view">
+            <p className="hx-eyebrow">ALSO IN VIEW · OPENSTREETMAP &amp; SKI AREAS</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {extras.map((x) => (
+                <button key={x.key} type="button" onClick={x.open} className="shrink-0 rounded-full border border-[var(--border)] bg-surface-elevated px-3 py-1.5 text-xs text-cream">
+                  {x.name}{x.lengthKm >= 0.05 ? ` · ${(x.lengthKm * 0.621371).toFixed(1)} mi` : ""}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <ConnectedTrails selected={detail ? { id: detail.trail.id, name: detail.trail.name, lines: detail.lines } : null} onRoute={showConnectedRoute} />
         {cards.length > 0 ? (
           <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, nearest first">
