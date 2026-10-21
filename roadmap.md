@@ -14,4 +14,4 @@
 - [ ] Finish nearby essential directions and on-map driving routes — waiting on the separately hosted API's real HTTPS URL.
 - [x] Ski areas tabs/map, every map line tappable (OSM trail pages), verify all flows work
 - [ ] Polish UI, improve Gear page, AllTrails-style trail view page; test before finishing
-- [ ] Maximize US trail coverage, then add international trails
+- [~] Trail coverage: 15 more through-trails added; bulk US/intl import needs a new data source
