@@ -10,7 +10,7 @@ const PROGRESS = "/tmp/osm-routes-progress.json";
 type Row = { id: number; n: string; lat: number; lon: number; km: number | null; d: string | null; net: string | null; op: string | null; w: string | null };
 
 async function query(s: number, w: number, n: number, e: number): Promise<Row[]> {
-  const q = `[out:json][timeout:170];relation["route"~"^(hiking|foot)$"]["name"](${s},${w},${n},${e});out center tags;`;
+  const q = `[out:json][timeout:170];relation["route"="hiking"]["name"](${s},${w},${n},${e});out center tags;`;
   const res = await fetch(`${ENDPOINT}?data=${encodeURIComponent(q)}`, { headers: { "User-Agent": "HykedTrailImport/1.0 (hyked.lovable.app)" } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const text = await res.text();
