@@ -6,10 +6,11 @@
   },
   "scripts": {
     "predev": "node scripts/prepare-map-assets.mjs",
-    "dev": "next dev",
+    "dev": "vite --config vite.config.ts",
+    "dev:server": "next dev",
     "prebuild": "node scripts/prepare-map-assets.mjs",
     "build": "next build",
-    "build:dev": "bun run build",
+    "build:dev": "node scripts/prepare-map-assets.mjs && vite build --config vite.config.ts",
     "start": "next start",
     "lint": "eslint",
     "db:migrate": "tsx scripts/apply-migrations.ts",
