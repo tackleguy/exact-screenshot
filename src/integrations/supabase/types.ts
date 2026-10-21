@@ -278,6 +278,32 @@ export type Database = {
         }
         Relationships: []
       }
+      ski_area_details: {
+        Row: {
+          created_at: string
+          data: Json
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          data: Json
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          data?: Json
+          slug?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ski_area_details_slug_fkey"
+            columns: ["slug"]
+            isOneToOne: true
+            referencedRelation: "ski_areas"
+            referencedColumns: ["slug"]
+          },
+        ]
+      }
       ski_areas: {
         Row: {
           bounds: Json | null
