@@ -11,5 +11,5 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Keep cross-app appearance in semantic tokens and shared presentation rules in global CSS; preserve route, data, auth, and map logic during visual changes.
 - Load display, body, and measurement fonts through the shared layout so all pages inherit consistent typography.
 - Keep static image type references in a tracked declaration file so clean builds retain image typing.
-- Use the Vite entry in src/web for Lovable preview and build:dev output in dist; keep next build and dev:server for the separately hosted API, because static hosting cannot execute Next.js server routes.
+- Use the Vite entry in src/web for Lovable preview and build/build:dev output in dist; keep build:server and dev:server for the separately hosted API with Vercel's explicit buildCommand, because static hosting cannot execute Next.js server routes.
 - The static client reuses presentation with small Next navigation/image adapters and routes only same-origin /api requests to VITE_HYKED_API_URL; expose only explicitly allowlisted public environment values, never server secrets.

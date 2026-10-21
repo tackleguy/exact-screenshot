@@ -1,1 +1,7 @@
 :root { --font-inter: "DM Sans", sans-serif; --font-playfair: "Playfair Display", serif; --font-data: "JetBrains Mono", monospace; }
+.mountain-hero h1 { font-family: var(--font-display); }
+.mountain-hero-intro { color: var(--cream); margin-bottom: 20px; }
+.mountain-hero-links { display: flex; gap: 24px; margin-top: 20px; color: var(--cream); }
+.mountain-hero-links a:hover { color: var(--accent); }
+.fieldbook-trail-paths { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 24px; }
+@media (max-width: 640px) { .fieldbook-trail-paths { grid-template-columns: 1fr; gap: 16px; } }
