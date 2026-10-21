@@ -126,6 +126,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
   const showConnectedRoute = useCallback((points: Point[]) => {
     setSource("route", { type: "FeatureCollection", features: points.length ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: points } }] : [] });
+    if (mapRef.current?.getLayer("hy-route")) mapRef.current.moveLayer("hy-route");
   }, [setSource]);
 
   const refresh = useCallback(() => {

@@ -76,6 +76,7 @@ function TrailDetail() {
 }
 function MapPage({ workspace = false }: { workspace?: boolean }) {
   const { search } = useLocation(); const params = new URLSearchParams(search);
+  if (params.get("collection") === "community") return <CommunityTrails />;
   const candidate = params.get("activity");
   const activity: CatalogActivity = candidate && (CATALOG_ACTIVITIES as readonly string[]).includes(candidate) ? candidate as CatalogActivity : "hike";
   const lat = params.has("lat") ? Number(params.get("lat")) : NaN; const lng = params.has("lng") ? Number(params.get("lng")) : NaN;
