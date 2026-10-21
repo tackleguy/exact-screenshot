@@ -5,10 +5,10 @@
     "node": ">=20.9.0"
   },
   "scripts": {
-    "predev": "node scripts/prepare-map-assets.mjs",
+    "predev": "node scripts/prepare-map-assets.mjs && tsx scripts/prepare-trail-assets.ts",
     "dev": "vite --config vite.config.ts",
     "dev:server": "next dev",
-    "prebuild": "node scripts/prepare-map-assets.mjs",
+    "prebuild": "node scripts/prepare-map-assets.mjs && tsx scripts/prepare-trail-assets.ts",
     "build": "vite build --config vite.config.ts",
     "build:dev": "bun run build",
     "build:server": "node scripts/prepare-map-assets.mjs && next build",
