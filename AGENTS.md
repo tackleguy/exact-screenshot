@@ -16,3 +16,4 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Trail discovery uses the shared MapLibre workspace; static hosting prepares source-backed catalog cells and geometry at startup/build, with hosted API services retaining precedence when configured.
 - Connected hiking routes use geojson-path-finder on selected source geometries with shared-vertex topology; never fabricate connectors across gaps, and keep this builder separate from trip preparation.
 - Trail catalog navigation and forms target /explore/trails/catalog so filters, collections and pagination do not accidentally open the map workspace.
+- Keep homepage promotion isolated from account activity views in a shared presentation component so appearance updates preserve signed-in history and trail navigation.
