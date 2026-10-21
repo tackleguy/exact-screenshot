@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { DM_Sans, Playfair_Display, JetBrains_Mono } from "next/font/google";
+import Image from "next/image";
+import mountainNight from "@/assets/mountain-night.jpg";
 import { AppShell } from "@/components/nav/AppShell";
 import { DeployBanner } from "@/components/nav/DeployBanner";
 import "./globals.css";
 
-const inter = Inter({
+const bodyFont = DM_Sans({
   variable: "--font-inter",
   subsets: ["latin"],
 });
+const displayFont = Playfair_Display({ variable: "--font-playfair", subsets: ["latin"] });
+const dataFont = JetBrains_Mono({ variable: "--font-data", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Hyked — Trails, Maps & Adventure",
@@ -21,9 +25,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} h-full`}>
+    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable} ${dataFont.variable} h-full`}>
       <body className="min-h-full font-sans text-[var(--foreground)] antialiased">
-        <div hidden dangerouslySetInnerHTML={{ __html: "<!-- THESIS: Fieldbook makes finding a trail, preparing a pack and recording an outing one task. OWN-WORLD: mineral #f6f7f4, evergreen #173f35 navigation, Inter, ruled lists, green actions, 8px controls. STORY: real trail sections lead to personal routes and gear, then recording. FIRST VIEWPORT: 240px rail; 48px workspace inset; trail search, source rows and planning sidebar. FORM: approved-fieldbook-figma; comp-led Operate. FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance -->" }} />
+        <Image src={mountainNight} alt="" aria-hidden="true" className="mountain-backdrop" priority sizes="100vw" />
         <AppShell notice={<DeployBanner />}>{children}</AppShell>
       </body>
     </html>

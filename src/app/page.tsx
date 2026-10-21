@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
+import mountainNight from "@/assets/mountain-night.jpg";
 import { getActivities, getWeeklyStats } from "@/lib/activities";
 import { formatDistance, formatDuration } from "@/lib/gps";
 import { ActivityListRow } from "@/components/activities/ActivityListRow";
@@ -15,12 +17,15 @@ async function Landing() {
     ["Plan and pack", "Build a trip around your own gear, see your pack weight, and get a packing checklist."],
     ["Take it with you", "Download a GPX with water and town waypoints, or a printable trip packet."],
   ];
-  return <div className="fieldbook-page">
-    <header className="fieldbook-page-toolbar"><div><h1>Find, plan and pack your next hike.</h1><p className="fieldbook-page-intro">Real trails from official sources, with the water, towns and gear to get you through them.</p></div></header>
-    <form action="/explore/trails" className="mt-6 flex max-w-2xl gap-3" role="search"><label htmlFor="home-search" className="sr-only">Search trails or places</label><input id="home-search" name="q" placeholder="Search a trail, park or town" className="min-w-0 flex-1 rounded-xl border border-stone-300 bg-white px-4 py-3 text-base" /><button className="btn-primary" type="submit">Search</button></form>
+  return <div className="fieldbook-page mountain-home">
+    <header className="mountain-hero">
+      <Image src={mountainNight} alt="Alpine peaks above a lake at dusk" priority sizes="100vw" className="mountain-hero-image" />
+      <div className="mountain-hero-content"><p className="section-label">TRAILS · GEAR · ADVENTURE</p><h1>Hyked</h1><p className="mountain-hero-title">Find, plan and pack your next hike.</p><p className="fieldbook-page-intro">Real trails from official sources, with the water, towns and gear to get you through them.</p>
+      <form action="/explore/trails" className="mountain-search" role="search"><label htmlFor="home-search" className="sr-only">Search trails or places</label><input id="home-search" name="q" placeholder="Search a trail, park or town" /><button className="btn-primary" type="submit">Search</button></form></div>
+    </header>
     <div className="mt-4 flex flex-wrap gap-3"><Link href="/map" className="btn-ghost">Open the trail map</Link><Link href="/plan" className="btn-ghost">Plan a trip</Link></div>
     <ul className="mt-10 grid gap-4 sm:grid-cols-2">{features.map(([title, body]) => <li key={title} className="fieldbook-empty"><h3>{title}</h3><p>{body}</p></li>)}</ul>
-    <p className="mt-8 text-sm text-stone-600">Have an account? <Link href="/login" className="underline">Sign in</Link> to record hikes and keep your gear and trips in sync. New here? <Link href="/signup" className="underline">Create an account</Link>.</p>
+    <p className="mt-8 text-sm text-sage">Have an account? <Link href="/login" className="underline">Sign in</Link> to record hikes and keep your gear and trips in sync. New here? <Link href="/signup" className="underline">Create an account</Link>.</p>
   </div>;
 }
 

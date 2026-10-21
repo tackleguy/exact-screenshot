@@ -1,6 +1,6 @@
 .catalog-shell { max-width: 1120px; margin: 0 auto; padding: 48px 24px 100px; color: var(--foreground); }
-.catalog-shell h1 { font-family: var(--font-inter), sans-serif; font-weight: 600; font-size: clamp(2rem,4vw,3.25rem); line-height: 1.15; text-wrap: balance; }
-.catalog-shell h2 { font-family: var(--font-inter), sans-serif; font-weight: 600; font-size: 1.25rem; line-height: 1.35; }
+.catalog-shell h1 { font-family: var(--font-display); font-weight: 500; font-size: 40px; line-height: 1.15; text-wrap: balance; }
+.catalog-shell h2 { font-family: var(--font-display); font-weight: 600; font-size: 1.25rem; line-height: 1.35; }
 .catalog-shell p { max-width: 72ch; line-height: 1.65; }
 .catalog-shell a { text-underline-offset: 4px; }
 .catalog-shell a:focus-visible,.catalog-shell button:focus-visible,.catalog-shell summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
@@ -16,7 +16,7 @@
 .catalog-filters input,.catalog-filters select { width: 100%; min-width: 0; height: 46px; background: var(--background); color: var(--foreground); border: 1px solid var(--border-strong); border-radius: 6px; padding: 0 12px; font: inherit; font-size: 1rem; caret-color: var(--accent); }
 .catalog-filters input::placeholder { color: var(--sage); }
 .catalog-filters input:focus,.catalog-filters select:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
-.catalog-button { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 10px 18px; border-radius: 6px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; text-decoration: none; }
+.catalog-button { display: inline-flex; align-items: center; justify-content: center; min-height: 46px; padding: 10px 18px; border-radius: 6px; background: var(--accent); color: var(--on-accent); font-weight: 600; cursor: pointer; text-decoration: none; }
 .catalog-button:hover { background: var(--accent-dim); }
 .catalog-button.secondary { color: var(--foreground); background: var(--surface-elevated); }
 .catalog-button.secondary:hover { background: var(--surface-muted); }
@@ -82,7 +82,7 @@
 
 /* Fieldbook: Figma TXdEs8S62B0WxXXLJqovWc, desktop Explore 7:59. */
 .catalog-shell { max-width:1500px; padding:32px 32px 64px 48px; }
-.catalog-shell h1 { font-size:clamp(28px,3vw,40px); font-weight:600; letter-spacing:-.025em; line-height:1.2; }
+.catalog-shell h1 { font-size:40px; font-weight:500; letter-spacing:0; line-height:1.2; }
 .catalog-heading { display:block; margin-bottom:24px; }.catalog-heading p { margin-top:12px; font-size:16px; }
 .catalog-quick-links { display:flex; flex-wrap:wrap; gap:10px; margin-top:16px; }
 .catalog-quick-links .catalog-button { min-height:40px; padding-inline:16px; font-size:13px; }
@@ -145,7 +145,7 @@
 .catalog-discovery-canvas { height:clamp(340px,58vh,560px); }
 .catalog-map-canvas .maplibregl-ctrl-group button { width:40px; height:40px; }
 .catalog-map-canvas .maplibregl-ctrl-attrib { font-size:12px; color:#18251f; background:#ffffffed; }
-.catalog-cluster { min-width:44px; min-height:44px; padding:8px; border-radius:50%; border:2px solid white; background:var(--accent); color:white; font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; box-shadow:0 2px 5px #173f3533; }
+.catalog-cluster { min-width:44px; min-height:44px; padding:8px; border-radius:50%; border:2px solid var(--cream); background:var(--accent); color:var(--on-accent); font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; box-shadow:var(--overlay-shadow); }
 .catalog-cluster:hover { background:var(--accent-dim); }
 .catalog-trail-pin { width:36px; height:36px; border-radius:50%; border:3px solid white; background:var(--accent); box-shadow:0 2px 5px #173f3540; }
 .catalog-trail-pin::after { content:""; display:block; width:8px; height:8px; background:white; border-radius:50%; margin:auto; }
