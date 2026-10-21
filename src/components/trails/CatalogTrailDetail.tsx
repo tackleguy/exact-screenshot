@@ -10,7 +10,7 @@ import { countryName, sourceName, trailPlace } from "@/lib/trail-catalog/types";
 import { CONFIDENCE_LABELS, SOURCE_TYPE_LABELS, TRAIL_TYPE_LABELS } from "@/lib/trail-catalog/agencies";
 import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, ROUTE_TYPE_LABELS, formatDistance } from "@/lib/trail-catalog/quality";
 import { resolveDifficulty } from "@/lib/trail-difficulty";
-import { TrailHero } from "./TrailHero";
+import { CatalogTrailHero } from "./CatalogTrailHero";
 import "./catalog.css";
 
 export function CatalogTrailDetail({
@@ -48,7 +48,7 @@ export function CatalogTrailDetail({
       <Link className="catalog-link" href={`/explore/trails?${browse}`}>
         ← Browse {isRoute ? "through-hikes" : (t.region ?? countryName(t.country))}
       </Link>
-      <TrailHero trail={t} difficulty={difficulty.difficulty} distance={distance.primary} hasLines={hasLines} />
+      <CatalogTrailHero trail={t} difficulty={difficulty.difficulty} distance={distance.primary} hasLines={hasLines} />
       {isRoute && <span className="catalog-badge">Through-hike</span>}
       {t.winterUse && (
         <div className="catalog-quality-note" role="note">
