@@ -13,56 +13,74 @@ const m = (x: number, y: number): LngLat => [O[0] + x / KX, O[1] + y / KY];
 const line = (...pts: [number, number][]) => pts.map(([x, y]) => m(x, y));
 const trail = (id: string, lines: LngLat[][], quality = 50, tier = "verified"): NetworkTrail => ({ id, name: id, quality, tier, lines });
 
-test("routes the shortest way along trails and lists the trails used with switch miles", () => {
+test("routes the shortest way along trails and lists the trails used with switch miles", async () => {
   // A: west–east 0→4000; B: north from A's middle (shares the vertex at 2000,0) up to 2000,3000.
   const g = buildGraph([trail("A", [line([0, 0], [2000, 0], [4000, 0])]), trail("B", [line([2000, 0], [2000, 3000])])]);
-  const r = routeThrough(g, [m(0, 0), m(2000, 3000)]);
+  const r = await routeThrough(g, [m(0, 0), m(2000, 3000)]);
   assert.ok(Math.abs(r.meters - 5000) < 20, `meters ${r.meters}`);
   assert.deepEqual(r.trails.map((t) => t.id), ["A", "B"]);
   assert.ok(Math.abs(r.trails[0].toMile - 2000 / 1609.344) < 0.02);
   assert.equal(r.usesConnectors, false);
 });
 
-test("splits lines where they cross without a shared vertex", () => {
+test("splits lines where they cross without a shared vertex", async () => {
   const g = buildGraph([trail("A", [line([0, 0], [4000, 0])]), trail("B", [line([2000, -1500], [2000, 1500])])]);
-  const r = routeThrough(g, [m(0, 0), m(2000, 1500)]);
+  const r = await routeThrough(g, [m(0, 0), m(2000, 1500)]);
   assert.ok(Math.abs(r.meters - 3500) < 20, `meters ${r.meters}`);
 });
 
-test("joins a trail end that stops just short of another trail (within 30 m)", () => {
+test("joins a trail end that stops just short of another trail (within 25 m), but not farther", async () => {
   const g = buildGraph([trail("A", [line([0, 0], [4000, 0])]), trail("B", [line([1000, 20], [1000, 2000])])]);
-  const r = routeThrough(g, [m(0, 0), m(1000, 2000)]);
+  const r = await routeThrough(g, [m(0, 0), m(1000, 2000)]);
   assert.ok(Math.abs(r.meters - 3000) < 30, `meters ${r.meters}`);
+  const far = buildGraph([trail("A", [line([0, 0], [4000, 0])]), trail("B", [line([1000, 60], [1000, 2000])])]);
+  await assert.rejects(routeThrough(far, [m(0, 0), m(1000, 2000)]), /No trail connection/);
 });
 
-test("prefers a higher-quality verified trail over a slightly shorter low-quality one", () => {
+test("prefers a higher-quality verified trail over a slightly shorter low-quality one", async () => {
   const good = trail("Good", [line([0, 0], [1000, 600], [2000, 0])], 100, "verified");
   const poor = trail("Poor", [line([0, 0], [1000, 400], [2000, 0])], 0, "mapped");
-  const r = routeThrough(buildGraph([good, poor]), [m(0, 0), m(2000, 0)]);
+  const r = await routeThrough(buildGraph([good, poor]), [m(0, 0), m(2000, 0)]);
   assert.deepEqual(r.trails.map((t) => t.id), ["Good"]);
 });
 
-test("snaps tapped points to the nearest trail and reports how far off they were", () => {
+test("snaps tapped points to the nearest trail and reports how far off they were", async () => {
   const g = buildGraph([trail("A", [line([0, 0], [3000, 0])])]);
-  const r = routeThrough(g, [m(500, 120), m(2500, -80)]);
+  const r = await routeThrough(g, [m(500, 120), m(2500, -80)]);
   assert.equal(r.snapped[0].offTrailMeters, 120);
   assert.equal(r.snapped[1].offTrailMeters, 80);
   assert.ok(Math.abs(r.meters - 2000) < 10);
-  assert.throws(() => routeThrough(g, [m(0, 5000), m(3000, 0)]), RouteError);
+  await assert.rejects(routeThrough(g, [m(0, 5000), m(3000, 0)]), RouteError);
 });
 
-test("never crosses a gap unless connectors are allowed, and labels connectors", () => {
-  const trails = [trail("A", [line([0, 0], [1000, 0])]), trail("B", [line([1200, 0], [2500, 0])])];
-  assert.throws(() => routeThrough(buildGraph(trails), [m(0, 0), m(2500, 0)]), /No mapped trail connects/);
-  const r = routeThrough(buildGraph(trails, { connectors: true }), [m(0, 0), m(2500, 0)]);
+test("snaps to the nearby trail that connects, not an isolated stub that is slightly closer", async () => {
+  // A short stub 60 m north of the main trail's start; the tap is right on the stub.
+  const g = buildGraph([trail("Main", [line([100, 0], [3000, 0])]), trail("Stub", [line([0, 60], [60, 60])])]);
+  const r = await routeThrough(g, [m(30, 60), m(3000, 0)]);
+  assert.deepEqual(r.trails.map((t) => t.id), ["Main"]);
+  assert.ok(r.snapped[0].offTrailMeters > 60);
+});
+
+test("never crosses a gap: only a real road route (when allowed) connects separate trails", async () => {
+  const g = buildGraph([trail("A", [line([0, 0], [1000, 0])]), trail("B", [line([1200, 0], [2500, 0])])]);
+  await assert.rejects(routeThrough(g, [m(0, 0), m(2500, 0)]), /No trail connection/);
+  // The road service finds nothing: still no line across the gap.
+  await assert.rejects(routeThrough(g, [m(0, 0), m(2500, 0)], { connect: async () => null }), /No trail or walking road connection/);
+  const calls: [LngLat, LngLat][] = [];
+  const bend = m(1100, 80);
+  const road = async (a: LngLat, b: LngLat) => { calls.push([a, b]); return { coordinates: [a, bend, b], meters: 260 }; };
+  const r = await routeThrough(g, [m(0, 0), m(2500, 0)], { connect: road });
+  assert.equal(calls.length, 1);
   assert.equal(r.usesConnectors, true);
   assert.deepEqual(r.trails.map((t) => t.id), ["A", null, "B"]);
   assert.equal(r.trails[1].connector, true);
+  assert.ok(Math.abs(r.meters - (1000 + 260 + 1300)) < 15, `meters ${r.meters}`);
+  assert.ok(r.coordinates.some((p) => p[0] === bend[0] && p[1] === bend[1]), "the road geometry is used");
 });
 
-test("routes through waypoints in order and records leg ends", () => {
+test("routes through waypoints in order and records leg ends", async () => {
   const g = buildGraph([trail("A", [line([0, 0], [4000, 0])])]);
-  const r = routeThrough(g, [m(0, 0), m(3000, 0), m(1000, 0)]);
+  const r = await routeThrough(g, [m(0, 0), m(3000, 0), m(1000, 0)]);
   assert.ok(Math.abs(r.meters - 5000) < 10);
   assert.equal(r.legEndsMile.length, 2);
 });

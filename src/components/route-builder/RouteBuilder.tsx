@@ -212,7 +212,7 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
         <button type="button" className="hx-btn" disabled={!start || !end} onClick={reverse}>Reverse</button>
         <button type="button" className="hx-btn" disabled={!start && !end} onClick={clear}>Clear</button>
       </div>
-      <label className="hx-check rb-check"><input type="checkbox" checked={connectors} onChange={(e) => apply({ connectors: e.target.checked })} /> Allow road connectors <small>(short unmapped links up to 300 m, marked on the route)</small></label>
+      <label className="hx-check rb-check"><input type="checkbox" checked={connectors} onChange={(e) => apply({ connectors: e.target.checked })} /> Allow road connectors <small>(walk roads between trail networks, routed on OpenStreetMap roads)</small></label>
       {picking && <p className="rb-picking" role="status">Tap the map to set the {picking === "via" ? "waypoint" : picking}.</p>}
       {busy && <p className="rb-status" role="status"><span className="hx-spinner" aria-hidden="true" /> Finding the best trails…</p>}
       {error && <p className="rb-error" role="alert">{error}</p>}
@@ -231,7 +231,7 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
               <figcaption>{route.elevation.minFt.toLocaleString("en-US")}–{route.elevation.maxFt.toLocaleString("en-US")} ft{route.elevation.partial ? " · partial elevation data" : ""}</figcaption>
             </figure>
           )}
-          {route.usesConnectors && <p className="rb-warn">This route uses unmapped connectors (dashed in the list). Check they’re legal and passable.</p>}
+          {route.usesConnectors && <p className="rb-warn">Part of this route follows roads between trails (marked in the list). Watch for traffic and check access.</p>}
           {route.snapped.some((s) => s.offTrailMeters > 100) && <p className="rb-warn">{route.snapped.filter((s) => s.offTrailMeters > 100).length === 1 ? "One point is" : "Some points are"} more than 100 m from the nearest trail; the route starts and ends on the trail.</p>}
 
           <h3>Trails, in order</h3>
@@ -314,7 +314,7 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
           )}
         </div>
       )}
-      <p className="rb-attrib">Routes are computed in your browser over OpenStreetMap (© contributors, ODbL) and official agency trail data. Elevation: AWS Terrain Tiles. Always check conditions, closures and access.</p>
+      <p className="rb-attrib">Routes are computed in your browser over OpenStreetMap (© contributors, ODbL) and official agency trail data. Road connectors: OSRM foot routing (FOSSGIS), © OpenStreetMap contributors. Elevation: AWS Terrain Tiles. Always check conditions, closures and access.</p>
     </section>
   );
 }

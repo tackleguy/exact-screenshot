@@ -1,5 +1,5 @@
 import { metersBetween, MILE_METERS } from "@/lib/geo/line";
-import { CONNECTOR, JUNCTION, snapToGraph, type LngLat, type Snap, type TrailGraph } from "./graph";
+import { CONNECTOR, JUNCTION, snapCandidates, type LngLat, type Snap, type TrailGraph } from "./graph";
 
 export class RouteError extends Error {}
 
@@ -90,7 +90,7 @@ function leg(g: TrailGraph, a: Snap, b: Snap): Part[] {
   }
   if (bestNode < 0) {
     if (sameEdge) return [{ trail: ea.trail, meters: metersBetween(a.point, b.point), coords: [a.point, b.point] }];
-    throw new RouteError("No mapped trail connects these points. Add a waypoint on a connecting trail, or turn on road connectors.");
+    throw new RouteError(NO_CONNECTION);
   }
 
   // Walk back from the exit node to a seed node.
@@ -110,19 +110,94 @@ function leg(g: TrailGraph, a: Snap, b: Snap): Part[] {
   return parts;
 }
 
-/** Route through the points in order (start, waypoints…, end) along the trail graph. */
-export function routeThrough(g: TrailGraph, points: LngLat[], maxSnap = MAX_SNAP_M): TrailRoute {
-  if (points.length < 2) throw new RouteError("Choose a start and an end.");
-  const snaps = points.map((p, i) => {
-    const s = snapToGraph(g, p, maxSnap);
-    if (!s) throw new RouteError(`${i === 0 ? "The start" : i === points.length - 1 ? "The end" : `Waypoint ${i}`} is more than ${Math.round(maxSnap / 160.9) / 10} mi from a mapped trail. Choose a point on or near a trail.`);
-    return s;
+/** A walking route between two points over real roads and paths (OSRM foot profile), or null when there is none. */
+export type RoadConnector = (from: LngLat, to: LngLat) => Promise<{ coordinates: LngLat[]; meters: number } | null>;
+
+export interface RouteOptions {
+  maxSnap?: number;
+  /** "Allow road connectors": bridges gaps between trail networks with this walking road route. */
+  connect?: RoadConnector;
+}
+
+/** Longest straight-line gap a road connector may bridge. */
+export const MAX_CONNECTOR_M = 5000;
+
+const NO_CONNECTION = "No trail connection between these points. Add a waypoint on a trail that links them, or turn on road connectors.";
+
+/** A snap sitting exactly on a node, for joining a road connector to the trail network. */
+function snapAtNode(g: TrailGraph, n: number): Snap {
+  return { u: n, v: g.adj[n][0]?.to ?? n, t: 0, point: g.nodes[n], meters: 0 };
+}
+
+/** The closest pair of nodes between two connected pieces: dead ends and junctions of one, any node of the other. */
+function closestBetween(g: TrailGraph, fromComp: number, toComp: number, near: LngLat): [number, number] | null {
+  const CELL = 0.01; // ~1 km
+  const grid = new Map<string, number[]>();
+  const ends: number[] = [];
+  for (let n = 0; n < g.nodes.length; n++) {
+    if (g.comp[n] === toComp) {
+      const k = `${Math.floor(g.nodes[n][0] / CELL)}:${Math.floor(g.nodes[n][1] / CELL)}`;
+      const list = grid.get(k);
+      if (list) list.push(n); else grid.set(k, [n]);
+    } else if (g.comp[n] === fromComp && g.adj[n].length !== 2) ends.push(n);
+  }
+  let best: [number, number] | null = null, bestM = MAX_CONNECTOR_M, bestScore = Infinity;
+  const rings = Math.ceil(MAX_CONNECTOR_M / 550);
+  for (const u of ends) {
+    const p = g.nodes[u], cx = Math.floor(p[0] / CELL), cy = Math.floor(p[1] / CELL);
+    for (let x = cx - rings; x <= cx + rings; x++) for (let y = cy - rings; y <= cy + rings; y++)
+      for (const v of grid.get(`${x}:${y}`) ?? []) {
+        const m = metersBetween(p, g.nodes[v]);
+        // Shortest gap first; among similar gaps, the one closer to where the hiker is heading.
+        const score = m + 0.1 * metersBetween(g.nodes[v], near);
+        if (m <= bestM * 1.5 && score < bestScore) { bestScore = score; bestM = Math.min(bestM, m); best = [u, v]; }
+      }
+  }
+  return best;
+}
+
+async function connectedLeg(g: TrailGraph, a: Snap, b: Snap, connect?: RoadConnector): Promise<Part[]> {
+  if (g.comp[a.u] === g.comp[b.u]) return leg(g, a, b);
+  if (!connect) throw new RouteError(NO_CONNECTION);
+  const pair = closestBetween(g, g.comp[a.u], g.comp[b.u], b.point);
+  if (!pair) throw new RouteError("These trails are more than 3 mi apart with no trail between them. Add a closer waypoint.");
+  const road = await connect(g.nodes[pair[0]], g.nodes[pair[1]]);
+  if (!road || road.coordinates.length < 2) throw new RouteError("No trail or walking road connection was found between these points.");
+  return [...leg(g, a, snapAtNode(g, pair[0])), { trail: CONNECTOR, meters: road.meters, coords: road.coordinates }, ...leg(g, snapAtNode(g, pair[1]), b)];
+}
+
+/**
+ * Snaps each point to the trail network. Every point goes on the same connected piece when one lies within
+ * reach of all of them (the nearest such piece); otherwise each takes its nearest trail and the gaps need road
+ * connectors.
+ */
+function chooseSnaps(g: TrailGraph, points: LngLat[], maxSnap: number): Snap[] {
+  const options = points.map((p, i) => {
+    const list = snapCandidates(g, p, maxSnap);
+    if (!list.length) throw new RouteError(`${i === 0 ? "The start" : i === points.length - 1 ? "The end" : `Waypoint ${i}`} is more than ${Math.round(maxSnap / 160.9) / 10} mi from a mapped trail. Choose a point on or near a trail.`);
+    return list;
   });
+  let best: Snap[] | null = null, bestM = Infinity;
+  for (const first of options[0]) {
+    const comp = g.comp[first.u];
+    const pick = options.map((list) => list.find((s) => g.comp[s.u] === comp));
+    if (pick.every(Boolean)) {
+      const m = pick.reduce((t, s) => t + s!.meters, 0);
+      if (m < bestM) { bestM = m; best = pick as Snap[]; }
+    }
+  }
+  return best ?? options.map((list) => list[0]);
+}
+
+/** Route through the points in order (start, waypoints…, end) along the trail graph. */
+export async function routeThrough(g: TrailGraph, points: LngLat[], options: RouteOptions = {}): Promise<TrailRoute> {
+  if (points.length < 2) throw new RouteError("Choose a start and an end.");
+  const snaps = chooseSnaps(g, points, options.maxSnap ?? MAX_SNAP_M);
   const parts: Part[] = [];
   const legEnds: number[] = [];
   let total = 0;
   for (let i = 0; i + 1 < snaps.length; i++) {
-    for (const p of leg(g, snaps[i], snaps[i + 1])) {
+    for (const p of await connectedLeg(g, snaps[i], snaps[i + 1], options.connect)) {
       const last = parts[parts.length - 1];
       if (last && last.trail === p.trail) { last.meters += p.meters; last.coords.push(...p.coords.slice(1)); }
       else parts.push(p);
@@ -142,7 +217,7 @@ export function routeThrough(g: TrailGraph, points: LngLat[], maxSnap = MAX_SNAP
     for (const c of p.coords) { const last = coordinates[coordinates.length - 1]; if (!last || last[0] !== c[0] || last[1] !== c[1]) coordinates.push(c); }
     if (p.trail === JUNCTION || p.meters < 1) { if (uses.length) uses[uses.length - 1].toMile = to; continue; }
     const t = p.trail >= 0 ? g.trails[p.trail] : null;
-    const id = t?.id ?? null, name = t?.name ?? "Connector (not a mapped trail)";
+    const id = t?.id ?? null, name = t?.name ?? "Road connector (walking route on roads)";
     const last = uses[uses.length - 1];
     if (last && last.id === id && !(p.trail === CONNECTOR)) { last.toMile = to; continue; }
     uses.push({ id, name, fromMile: from, toMile: to, ...(p.trail === CONNECTOR ? { connector: true } : {}) });
