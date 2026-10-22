@@ -268,3 +268,20 @@ The browser is only a thin cache: nothing a person makes is written to the devic
    `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the static app (or `NEXT_PUBLIC_SUPABASE_URL` /
    `NEXT_PUBLIC_SUPABASE_ANON_KEY`, which both apps read). `SUPABASE_SERVICE_ROLE_KEY` is only for server-side
    ingestion scripts and must stay out of the static build.
+
+## Summary (October 2026 build, `snapshot-1792668360205`)
+
+| | trails |
+|---|---|
+| U.S. and Canada | 349,363 (144,754 verified + 204,609 mapped) |
+| Worldwide (232 more countries, plus Alaska and Hawaii) | 869,547 (371,534 route relations + 498,013 mapped) |
+| **Total shown** | **1,218,910** |
+
+- Most worldwide trails: Germany 153,944 · France 123,767 · Netherlands 94,993 · Italy 71,651 · Spain 55,741 ·
+  Belgium 40,156 · Switzerland 32,769 · Sweden 30,812 · Austria 29,872 · Australia 27,688 · UK 24,789.
+- Hike features on or near trails: 2,706,017 (drinking water 207,963, springs 85,396, campsites 59,146, huts
+  16,321, shelters 285,239, peaks 192,623, trailheads 15,982, …).
+- Every shown trail has a mapped line; lengths are measured along it. Long-distance guides draw their OSM relation
+  (John Muir 206 of 211 mi mapped, Appalachian 2,100, Pacific Crest 2,609, Continental Divide 3,022, Colorado 476).
+- Sizes: the snapshot is 729 MB (U.S./Canada 180 MB, worldwide 438 MB, hike features 111 MB); the app's generated
+  `public/trail-data` is ~0.9 GB in ~13,000 files. The QA checklist (`scripts/qa-catalog.ts`) passes 20 of 20.

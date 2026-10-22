@@ -22,40 +22,55 @@ test("search handles accents, combined geography and unknown measurements",()=>{
   const end = filterCatalog(rows,{page:99999,limit:2});assert.equal(end.page,2);assert.deepEqual(end.trails.map(t=>t.id),["three"]);
   assert.equal(filterCatalog(rows,{lat:0,lng:0,radiusKm:10}).total,0);
 });
-test("bundled snapshot contains whole merged trails with complete map geometry",async()=>{
+test("bundled snapshot contains whole trails with complete map geometry",async()=>{
   const root = path.join(process.cwd(),"data/trail-catalog");
   const pointer = JSON.parse(await readFile(path.join(root,"current.json"),"utf8"));
   const dir = path.join(root,pointer.directory);
-  const manifest = JSON.parse(await readFile(path.join(dir,"manifest.json"),"utf8")) as CatalogManifest;
+  const manifest = JSON.parse(await readFile(path.join(dir,"manifest.json"),"utf8")) as CatalogManifest & { world?: { files: Record<string,{ rows: number; sha256: string }>; countries: Record<string,number>; verified: number; mapped: number } };
   const raw = await readFile(path.join(dir,"index.json.gz"));
   assert.equal(createHash("sha256").update(raw).digest("hex"),manifest.indexSha256);
   const rows = JSON.parse(gunzipSync(raw).toString()) as CatalogTrail[];
   assert.ok(rows.length>100000);assert.equal(manifest.total,rows.length);assert.equal(new Set(rows.map(r=>r.id)).size,rows.length);
-  assert.equal(Object.values(manifest.countries).reduce((a,b)=>a+b,0),rows.length);
-  assert.ok(manifest.sectionTotal! >= rows.length);
-  assert.equal(manifest.sources.reduce((a,b)=>a+b.count,0),manifest.sectionTotal);
-  assert.equal(rows.reduce((a,r)=>a+(r.sectionCount ?? 1),0),manifest.sectionTotal);
-  const at = rows.filter(r=>/^appalachian (national scenic )?trail$/i.test(r.name));
-  assert.equal(at.length,1,"the Appalachian Trail is one merged trail");assert.ok(at[0].sectionCount!>1000);
+  const worldTotal = Object.values(manifest.world?.countries ?? {}).reduce((a,b)=>a+b,0);
+  // Country counts cover every U.S./Canada record that isn't merged into another, plus the worldwide trails.
+  assert.equal(Object.values(manifest.countries).reduce((a,b)=>a+b,0),rows.filter(r=>!r.mergedInto).length+worldTotal);
   assert.ok(manifest.countries.CA>1000);assert.ok(manifest.countries.US>1000);
+  const shown = rows.filter(r=>r.tier && !r.mergedInto && r.confidence!=="REJECTED" && r.quality!=="fragment");
+  assert.ok(shown.length>200000);
+  const ids = new Set(rows.map(r=>r.id));
   const mapped = new Set<string>();
+  const validLines = (lines: [number,number][][]) => {
+    assert.ok(lines.length>0);
+    for (const line of lines) {
+      assert.ok(line.length>=2);
+      assert.ok(line.every(p=>Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0])<=180 && Math.abs(p[1])<=90));
+    }
+  };
   for (const file of (await readdir(dir)).filter(f=>f.startsWith("geometry-"))) {
     const geometry = JSON.parse(gunzipSync(await readFile(path.join(dir,file))).toString()) as Record<string,[number,number][][]>;
-    for (const [id,lines] of Object.entries(geometry)) {
-      assert.ok(!mapped.has(id));mapped.add(id);
-      assert.ok(lines.length>0);
-      for (const line of lines) {
-        assert.ok(line.length>=2);
-        assert.ok(line.every(p=>Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0])<=180 && Math.abs(p[1])<=90));
-      }
-    }
+    for (const [id,lines] of Object.entries(geometry)) { assert.ok(ids.has(id));assert.ok(!mapped.has(id));mapped.add(id);validLines(lines); }
   }
-  assert.equal(mapped.size,rows.length);
-  for (const row of rows) {
-    assert.ok(mapped.has(row.id));assert.equal(row.kind,"segment");assert.ok(row.name.trim());
-    assert.ok(Number.isFinite(row.miles) && row.miles!>=0.05);
-    assert.ok(["carto.nationalmap.gov","services2.arcgis.com","ws.lioservices.lrc.gov.on.ca","mapservices.nps.gov","apps.fs.usda.gov","gis.blm.gov"].includes(new URL(row.sourceUrl).hostname));
+  // Every shown trail has its line; lengths are measured, never a placeholder.
+  for (const row of shown) {
+    assert.ok(mapped.has(row.id),`${row.id} has no line`);assert.equal(row.kind,"segment");assert.ok(row.name.trim());
+    assert.ok(Number.isFinite(row.miles) && row.miles!>=0.05,`${row.id} ${row.miles} mi`);
+    assert.ok(["carto.nationalmap.gov","services2.arcgis.com","ws.lioservices.lrc.gov.on.ca","mapservices.nps.gov","apps.fs.usda.gov","gis.blm.gov","www.openstreetmap.org"].includes(new URL(row.sourceUrl).hostname));
     if (row.source==="usgs") assert.equal(row.difficulty,null);
+  }
+  // Long-distance guides draw the real OpenStreetMap relation: the Appalachian Trail's line is the whole trail.
+  const curated = JSON.parse(gunzipSync(await readFile(path.join(dir,"curated.json.gz"))).toString()) as { lines: Record<string,[number,number][][]> };
+  const atLine = curated.lines["route-at"];
+  assert.ok(atLine && atLine.flat().length>10000,"the Appalachian Trail guide has its mapped line");
+  // Worldwide country files match the manifest.
+  if (manifest.world) {
+    let total = 0;
+    for (const [code,info] of Object.entries(manifest.world.files)) {
+      const buf = await readFile(path.join(dir,"world",`index-${code}.json.gz`));
+      assert.equal(createHash("sha256").update(buf).digest("hex"),info.sha256,code);
+      total += info.rows;
+    }
+    assert.equal(total,manifest.world.verified+manifest.world.mapped);
+    assert.equal(total,worldTotal);
   }
 });
 test("server catalog paginates, isolates countries, and rejects invalid detail IDs",async()=>{
