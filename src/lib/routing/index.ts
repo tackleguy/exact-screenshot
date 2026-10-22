@@ -29,8 +29,8 @@ export function networkBox(points: LngLat[]): Box {
 
 const within = (inner: Box, outer: Box) => inner[0] >= outer[0] && inner[1] >= outer[1] && inner[2] <= outer[2] && inner[3] <= outer[3];
 
-async function loadNetwork(box: Box, signal?: AbortSignal): Promise<NetworkTrail[]> {
-  const res = await fetch(`/api/trail-catalog/network?bbox=${box.map((v) => v.toFixed(4)).join(",")}`, { signal });
+async function loadNetwork(box: Box): Promise<NetworkTrail[]> {
+  const res = await fetch(`/api/trail-catalog/network?bbox=${box.map((v) => v.toFixed(4)).join(",")}`);
   const data = (await res.json().catch(() => null)) as (GeoJSON.FeatureCollection & { error?: string }) | null;
   if (!res.ok || !data) throw new RouteError(data?.error ?? "Trails for this area couldn’t load. Try again.");
   return data.features.flatMap((f) => {
@@ -40,15 +40,37 @@ async function loadNetwork(box: Box, signal?: AbortSignal): Promise<NetworkTrail
   });
 }
 
-export function graphFor(points: LngLat[], signal?: AbortSignal): Promise<TrailGraph> {
+/** Forget the loaded network (tests). */
+export function resetNetworkCache() { cached = null; }
+
+export function graphFor(points: LngLat[], signal?: AbortSignal, load: (box: Box) => Promise<NetworkTrail[]> = loadNetwork): Promise<TrailGraph> {
   const need = networkBox(points);
-  if (cached && within(need, cached.box)) return cached.graph;
-  // Load a little more than needed so small edits (moving a waypoint) reuse the same network.
-  const box: Box = [need[0] - 0.05, need[1] - 0.05, need[2] + 0.05, need[3] + 0.05];
-  const graph = loadNetwork(box, signal).then((trails) => buildGraph(trails));
-  cached = { box, graph };
-  graph.catch(() => { if (cached?.graph === graph) cached = null; });
-  return graph;
+  let graph: Promise<TrailGraph>;
+  if (cached && within(need, cached.box)) graph = cached.graph;
+  else {
+    // Load a little more than needed so small edits (moving a waypoint) reuse the same network. The shared load
+    // isn't tied to one request's signal: a newer request reusing it must not fail because an older one was
+    // cancelled. Each caller stops waiting on its own signal instead.
+    const box: Box = [need[0] - 0.05, need[1] - 0.05, need[2] + 0.05, need[3] + 0.05];
+    const loading = load(box).then((trails) => buildGraph(trails));
+    cached = { box, graph: loading };
+    loading.catch(() => { if (cached?.graph === loading) cached = null; });
+    graph = loading;
+  }
+  return untilAborted(graph, signal);
+}
+
+function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException("Aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(
+      (value) => { signal.removeEventListener("abort", onAbort); resolve(value); },
+      (error) => { signal.removeEventListener("abort", onAbort); reject(error); },
+    );
+  });
 }
 
 /**

@@ -123,9 +123,10 @@ export function useLocalModel() {
       ], temperature: 0, max_tokens: 1200, response_format: { type: "json_object", schema: JSON.stringify(PRODUCT_AI_SCHEMA) } });
       return applyProductAI(response.choices[0]?.message.content ?? "", product, variantIndex);
     }, "Reading product text on this device…", 120_000, "Local reading timed out. Try again or use the available source details.", "Eco AI could not read this page. Try again.");
-  }, [runJson]);
+  }, [runJson, load]);
   const researchQueries = useCallback(async (query: string) => {
-    if (!engine.current) return [query];
+    // Without the model: one plain rephrase (no AI) so the lookup still widens its search.
+    if (!engine.current) return [`${query} specs weight`];
     return runJson(async () => {
       const response = await engine.current!.chat.completions.create({ messages: [{ role: "system", content: PRODUCT_QUERY_SYSTEM }, { role: "user", content: query.slice(0, 180) }], temperature: 0, max_tokens: 160, response_format: { type: "json_object", schema: JSON.stringify(PRODUCT_QUERY_SCHEMA) } });
       return validateProductQueries(response.choices[0]?.message.content ?? "", query);
@@ -133,7 +134,8 @@ export function useLocalModel() {
   }, [runJson]);
   const selectLinks = useCallback(async (query: string, sources: WebSource[]) => {
     if (!sources.length) return [];
-    if (!engine.current) throw new Error("Turn on Eco AI to choose product pages, or open a link manually.");
+    // Without the model: the top search results, in their original order (no AI choice).
+    if (!engine.current) return sources.slice(0, 3);
     return runJson(async () => {
       const response = await engine.current!.chat.completions.create({
         messages: [

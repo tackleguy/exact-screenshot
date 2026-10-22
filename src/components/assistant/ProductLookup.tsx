@@ -96,7 +96,7 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
         try {
           const queries = await model.researchQueries(value.trim());
           if (request.current !== controller) return;
-          setStatus("Eco AI planned another search. Reading matching public sources…");
+          setStatus(model.status === "ready" ? "Eco AI planned another search. Reading matching public sources…" : "Searching public sources again…");
           const retried = await Promise.allSettled(queries.map(async q => {
             const retry = await fetch(`/api/assistant/research?kind=product&q=${encodeURIComponent(q)}`, { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(55_000)]) });
             if (!retry.ok) throw new Error("Product research is unavailable.");
@@ -115,11 +115,12 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
       if (!page && !data.product && data.sources?.length && localEnabled) {
         clearTimeout(timer);
         try {
-          setStatus("Eco AI is choosing product pages to open…");
+          const ai = model.status === "ready";
+          setStatus(ai ? "Eco AI is choosing product pages to open…" : "Opening the top matching product pages…");
           const picks = await model.selectLinks(value.trim(), data.sources as WebSource[]);
           if (request.current !== controller) return;
           if (picks.length) {
-            setStatus(`Opening ${picks.length === 1 ? "a product page" : `${picks.length} product pages`} chosen by Eco AI…`);
+            setStatus(`Opening ${picks.length === 1 ? "a product page" : `${picks.length} product pages`}${ai ? " chosen by Eco AI" : ""}…`);
             const opened = await Promise.allSettled(picks.map(async source => {
               const pageResponse = await fetch("/api/assistant/product", {
                 method: "POST",

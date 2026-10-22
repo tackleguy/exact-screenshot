@@ -111,3 +111,22 @@ test("GPX has a waypoint per feature and escapes names", () => {
   assert.match(gpx, /<name>A &amp; B<\/name>/);
   assert.equal((gpx.match(/<trkpt/g) ?? []).length, 2);
 });
+
+test("a cancelled request doesn't break a newer one that reuses the same network load", async () => {
+  const { graphFor, resetNetworkCache } = await import("./index");
+  resetNetworkCache();
+  let release!: (trails: NetworkTrail[]) => void;
+  let loads = 0;
+  const load = () => { loads++; return new Promise<NetworkTrail[]>((resolve) => { release = resolve; }); };
+  const points: LngLat[] = [[-119.55, 37.73], [-119.5, 37.75]];
+  const first = new AbortController();
+  const a = graphFor(points, first.signal, load);
+  first.abort();
+  await assert.rejects(a, (e: Error) => e.name === "AbortError");
+  const b = graphFor(points, new AbortController().signal, load);
+  release([{ id: "t1", name: "Trail", quality: 50, tier: "verified", lines: [[[-119.55, 37.73], [-119.5, 37.75]]] }]);
+  const graph = await b;
+  assert.equal(loads, 1);
+  assert.ok(graph.nodes.length >= 2);
+  resetNetworkCache();
+});

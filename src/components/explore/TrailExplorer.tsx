@@ -317,6 +317,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     } else {
       setSource("lines", EMPTY);
       setSource("pois", EMPTY);
+      setViewFeatures([]);
     }
   }, [setSource]);
 
