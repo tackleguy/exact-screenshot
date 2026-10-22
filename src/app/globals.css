@@ -150,7 +150,6 @@ input,textarea { caret-color: var(--accent); }
   .app-shell--collapsed .fieldbook-nav-footer { width: 100%; padding-top: 16px; }
 }
 .fieldbook-mobile-header,.fieldbook-bottom-nav { display: none; }
-.local-preview-note { font-size: 12px; color: var(--sage); border-top: 1px solid var(--border); padding: 16px 32px; margin: 0 32px; line-height: 1.5; }
 .fieldbook-page { padding: 32px 32px 64px 48px; max-width: 1500px; margin-inline: auto; }
 .fieldbook-page h1 { font-size: clamp(28px,3vw,40px); font-weight: 600; letter-spacing: -.025em; line-height: 1.2; }
 .fieldbook-page h2 { font-size: 24px; font-weight: 600; line-height: 1.35; }
@@ -171,7 +170,7 @@ input,textarea { caret-color: var(--accent); }
   .fieldbook-bottom-nav a { min-height:50px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; color:var(--sage); font-size:12px; border-radius:8px; }
   .fieldbook-bottom-nav a[aria-current] { color:var(--accent); background:var(--surface-muted); font-weight:600; }.fieldbook-bottom-nav svg { width:20px; height:20px; }
   .fieldbook-page { padding:24px 20px 40px; }.fieldbook-page-toolbar { align-items:flex-start; flex-wrap:wrap; }.fieldbook-page h1 { font-size:30px; }.fieldbook-page h2 { font-size:22px; }
-  .local-preview-note { margin:0 20px; padding:16px 0; }.skip-link { left:12px; }
+  .skip-link { left:12px; }
 }
 @media(prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; animation-duration:.01ms!important; animation-iteration-count:1!important; transition-duration:.01ms!important; } }
 .fieldbook-log-layout { display: grid; grid-template-columns: minmax(0,1.87fr) minmax(290px,1fr); gap: 24px; align-items: start; }

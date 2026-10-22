@@ -8,6 +8,7 @@ import type { ElevationProfile } from "@/lib/trip/elevation";
 import type { TownDayPlan } from "@/lib/trip/town-days";
 import type { TownWithServices } from "@/lib/trip/trail-trip";
 import { SERVICE_LABELS, type ServiceKey } from "@/lib/trip/services";
+import { feet, isNum, join } from "@/lib/display";
 
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; data: T };
 const WATER = { tap: "Tap", spring: "Spring", river: "River", stream: "Stream", lake: "Lake" } as const;
@@ -74,7 +75,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
           {elevation.state === "error" && <p className="catalog-muted">{elevation.message}</p>}
           {elevation.state === "ready" && (
             <>
-              <p><strong>+{elevation.data.gainFt.toLocaleString()} ft</strong> climb · −{elevation.data.lossFt.toLocaleString()} ft descent · {elevation.data.minFt.toLocaleString()}–{elevation.data.maxFt.toLocaleString()} ft</p>
+              <p>{join([feet(elevation.data.gainFt) && `+${feet(elevation.data.gainFt)} climb`, feet(elevation.data.lossFt) && `−${feet(elevation.data.lossFt)} descent`, feet(elevation.data.minFt) && feet(elevation.data.maxFt) && `${elevation.data.minFt.toLocaleString("en-US")}–${feet(elevation.data.maxFt)}`])} <small className="catalog-muted">(in the direction the trail is mapped)</small></p>
               <TrailElevationProfile samples={elevation.data.profile.map(([mi, ft]) => ({ distance_m: mi * 1609.344, elevation_ft: ft }))} />
               <p className="catalog-muted">{elevation.data.partial ? "Part of the elevation data couldn’t be loaded, so these totals cover only part of the trail. Reload to try again." : "Estimated from sampled ground elevation along the mapped line."}</p>
             </>
@@ -93,7 +94,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
               {water.data.sources.length > 0 && (
                 <ol className="catalog-trip-list">
                   {water.data.sources.slice(0, 40).map((s, i) => (
-                    <li key={i}><span className="catalog-trip-mile">Mi {s.mile}</span> {WATER[s.kind]}{s.crossing ? " crossing" : ""}{s.name ? ` · ${s.name}` : ""} <small>{RELIABILITY[s.reliability]}{s.offTrailMeters ? ` · ${s.offTrailMeters} m off trail` : ""}</small></li>
+                    <li key={i}>{isNum(s.mile) && <span className="catalog-trip-mile">Mi {s.mile}</span>} {WATER[s.kind]}{s.crossing ? " crossing" : ""}{s.name ? ` · ${s.name}` : ""} <small>{RELIABILITY[s.reliability]}{s.offTrailMeters ? ` · ${s.offTrailMeters} m off trail` : ""}</small></li>
                   ))}
                 </ol>
               )}
@@ -110,14 +111,14 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
         {towns.state === "ready" && (towns.data.towns.length ? (
           <ul className="catalog-trip-list">
             {towns.data.towns.map((t) => (
-              <li key={t.id}><strong>{t.name}, {t.state}</strong> <small>{t.milesOffTrail} mi off trail{hasLine ? ` near mile ${t.trailMile}` : ""}</small><br /><small>{services(t).map((k) => SERVICE_LABELS[k]).join(" · ") || "No services mapped"}</small></li>
+              <li key={t.id}><strong>{join([t.name, t.state], ", ")}</strong> <small>{join([isNum(t.milesOffTrail) && `${t.milesOffTrail} mi off trail`, hasLine && isNum(t.trailMile) && `near mile ${t.trailMile}`], " ")}</small><br /><small>{services(t).map((k) => SERVICE_LABELS[k]).join(" · ") || "No services mapped"}</small></li>
             ))}
           </ul>
         ) : <p className="catalog-muted">No towns within 15 miles.</p>)}
         {towns.state === "ready" && <p className="catalog-muted">{towns.data.attribution}</p>}
       </div>
 
-      {hasLine && (
+      {hasLine && (miles ?? 0) >= 20 && (
         <div className="catalog-trip-block">
           <h3>Town days</h3>
           <p className="catalog-muted">Plan resupply stops: which town on which day, and what to buy and do there.</p>

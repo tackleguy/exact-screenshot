@@ -3,7 +3,6 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import Link from "./compat/link";
 import { AppShell } from "@/components/nav/AppShell";
-import { DeployBanner } from "@/components/nav/DeployBanner";
 import { GuestSaveBanner } from "@/components/nav/GuestSaveBanner";
 import { HomePromotion } from "@/components/home/HomePromotion";
 import { TrailExplorer } from "@/components/explore/TrailExplorer";
@@ -166,10 +165,10 @@ function Home() {
   const { user } = useAccount();
   return <><HomePromotion signedIn={Boolean(user)} />{user && <ActivityFeed />}</>;
 }
-function BackendPage() { const location = useLocation(); return <Status title="This page needs live trail services">{apiOrigin ? <a className="btn-primary" href={`${apiOrigin}${location.pathname}${location.search}`}>Open this page</a> : "Live trail services are not connected yet."}</Status>; }
+function BackendPage() { const location = useLocation(); return <Status title="This page is unavailable right now">{apiOrigin ? <a className="btn-primary" href={`${apiOrigin}${location.pathname}${location.search}`}>Open this page</a> : "Please try again later."}</Status>; }
 function App() {
   const { user } = useAccount();
-  return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><AppShell notice={<DeployBanner />}><Routes>
+  return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><AppShell><Routes>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<Navigate to="/explore/trails" replace />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} />

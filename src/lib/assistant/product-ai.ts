@@ -24,9 +24,9 @@ export function productReading(html: string, title: string, url: string): Produc
 }
 export function productAIInput(product: ProductResearch, variantIndex: string) {
   const variant = variantIndex !== "" ? product.variants[Number(variantIndex)] : undefined;
-  if (product.variants.length && !variant) throw new Error("Choose your exact size before asking local AI to read the page.");
+  if (product.variants.length && !variant) throw new Error("Choose your exact size before asking Eco AI to read the page.");
   const readings = (product.readings ?? []).slice(0, 2).map(r => ({ ...r, text: r.text.slice(0, 3500) }));
-  if (!readings.length) throw new Error("The source did not provide readable page text. Local AI cannot read a page the retailer has blocked.");
+  if (!readings.length) throw new Error("The source did not provide readable page text. Eco AI cannot read a page the retailer has blocked.");
   return { product: product.title, size: variant?.name ?? null, existingFields: [...new Set((variant?.facts ?? product.facts).map(f => f.kind))], pages: readings };
 }
 
@@ -34,7 +34,7 @@ export function productAIInput(product: ProductResearch, variantIndex: string) {
 export function applyProductAI(raw: string, product: ProductResearch, variantIndex: string): ProductResearch {
   const input = productAIInput(product, variantIndex);
   const data = JSON.parse(raw);
-  if (!data || !Array.isArray(data.fields) || data.fields.length > 12) throw new Error("Local AI returned an unreadable answer. Try reading the page again.");
+  if (!data || !Array.isArray(data.fields) || data.fields.length > 12) throw new Error("Eco AI returned an unreadable answer. Try reading the page again.");
   const facts: ProductFact[] = (data.fields as unknown[]).flatMap((f: unknown) => {
     if (!f || typeof f !== "object") return [];
     const v = f as Record<string, unknown>;
@@ -50,11 +50,11 @@ export function applyProductAI(raw: string, product: ProductResearch, variantInd
     const parsed = productFromPastedSpecs(`${labels[kind]}: ${v.value}`, product.title, source.url);
     // Local price extraction still requires an explicit currency; numbers alone
     // cannot turn a "$" amount into USD or CAD.
-    return parsed.facts.filter(fact => fact.kind === kind).map(fact => ({ ...fact, label: labels[kind], evidence: `Local AI · source quote: “${v.quote}” · ${source.url}`, sourceUrl: source.url, ...(product.variants.length ? { requiresChoice: true } : {}) }));
+    return parsed.facts.filter(fact => fact.kind === kind).map(fact => ({ ...fact, label: labels[kind], evidence: `Eco AI · source quote: “${v.quote}” · ${source.url}`, sourceUrl: source.url, ...(product.variants.length ? { requiresChoice: true } : {}) }));
   });
   const existing = variantIndex !== "" ? product.variants[Number(variantIndex)].facts : product.facts;
   const added = facts.filter((f, i, all) => !existing.some(e => e.kind === f.kind) && all.findIndex(e => e.kind === f.kind && e.value === f.value) === i);
-  if (!added.length) throw new Error("Local AI found no additional specifications supported by the readable page. Existing details are unchanged.");
+  if (!added.length) throw new Error("Eco AI found no additional specifications supported by the readable page. Existing details are unchanged.");
   const combined = [...existing, ...added];
-  return { ...product, ...(product.variants.length ? { variants: product.variants.map((v, i) => i === Number(variantIndex) ? { ...v, facts: combined } : v) } : { facts: combined }), recovery: { method: "local-ai", requestedUrl: product.recovery?.requestedUrl ?? product.url, sources: product.recovery?.sources ?? [], notice: "Local AI extracted details on this device and matched each value to a page quote. Confirm the item, size and values, then fill out parameters." } };
+  return { ...product, ...(product.variants.length ? { variants: product.variants.map((v, i) => i === Number(variantIndex) ? { ...v, facts: combined } : v) } : { facts: combined }), recovery: { method: "local-ai", requestedUrl: product.recovery?.requestedUrl ?? product.url, sources: product.recovery?.sources ?? [], notice: "Eco AI extracted details on this device and matched each value to a page quote. Confirm the item, size and values, then fill out parameters." } };
 }

@@ -39,7 +39,7 @@ export function makeProductDraft(product: ProductResearch, variantIndex: string,
   if (Object.keys(draft).length > 3 && product.recovery) draft.sourceNote = product.recovery.method === "alternate-page"
     ? "Specifications recovered from another public page. Check the model, size and included parts."
     : product.recovery.method === "catalog" ? "Published specification snapshot from Hyked’s public catalog. Check the source date and exact item; the recorded price may have changed."
-    : product.recovery.method === "local-ai" ? "Local AI extracted specifications from page quotes. Confirm the exact item and size before relying on them."
+    : product.recovery.method === "local-ai" ? "Eco AI extracted specifications from page quotes. Confirm the exact item and size before relying on them."
     : "Unverified specifications from a search excerpt or pasted text. Verify values against the exact product or a scale.";
   if (draft.sourceNote && supplementSources.size) draft.sourceNote = `${draft.sourceNote} Sources: ${[...supplementSources].join("; ")}`.slice(0, 1000);
   return draft;

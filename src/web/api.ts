@@ -7,7 +7,7 @@ export const apiOrigin = (import.meta.env.VITE_HYKED_API_URL ?? "").replace(/\/+
 
 async function accountActivities(request: Request): Promise<Response> {
   const client = createClient();
-  if (!client) return Response.json({ error: "Account saving is not connected." }, { status: 503 });
+  if (!client) return Response.json({ error: "Sign-in is unavailable right now." }, { status: 503 });
   const { data: identity } = await client.auth.getUser();
   if (!identity.user) return Response.json({ error: "Sign in to save activities." }, { status: 401 });
   if (request.method === "POST") {
@@ -94,7 +94,7 @@ export function installApiBridge() {
 
     // 4. Trail Service (Catalog, Peaks, Thru-Hikes, Sections, Elevation, Water, Towns, GPX)
     if (!target && isTrailServicePath(reqUrl.pathname)) return trailService(request, original);
-    if (!target) return Response.json({ error: "Live trail services are not connected yet." }, { status: 503 });
+    if (!target) return Response.json({ error: "This feature is unavailable right now. Please try again later." }, { status: 503 });
 
     const headers = new Headers(request.headers);
     return original(new Request(target, request), { headers });
@@ -132,7 +132,7 @@ export function installApiBridge() {
         });
       } else if (target === "") {
         event.preventDefault();
-        window.alert("Live trail services are not connected yet.");
+        window.alert("This feature is unavailable right now. Please try again later.");
       }
     },
     true,

@@ -9,7 +9,7 @@ export function CommunityTrails() {
   const [trails, setTrails] = useState<Trail[]>([]); const [query, setQuery] = useState("");
   const [error, setError] = useState(""); const [loading, setLoading] = useState(true);
   useEffect(() => {
-    const client = createClient(); if (!client) { setError("Community trails are not connected."); setLoading(false); return; }
+    const client = createClient(); if (!client) { setError("Community trails are unavailable right now."); setLoading(false); return; }
     let live = true;
     client.from("trails").select("*, park:parks(*)").order("trail_name").limit(100).then(({ data, error }) => {
       if (!live) return; setTrails((data ?? []) as Trail[]); setError(error ? "Community trail records need the original hosted service connected to this site." : ""); setLoading(false);

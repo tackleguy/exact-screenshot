@@ -48,7 +48,7 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
     request.current?.abort();
     const controller = new AbortController(); request.current = controller;
     setRetryTask(null);
-    setBusy(true); onBusyChange?.(true); setStatus("Reading the product page with local AI…");
+    setBusy(true); onBusyChange?.(true); setStatus("Reading the product page with Eco AI…");
     try {
       const result = await model.extractProduct(product, variantIndex);
       if (request.current !== controller) return;
@@ -62,7 +62,7 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
       setStatus(result.recovery!.notice);
     } catch (error) {
       if (request.current === controller) {
-        setStatus(error instanceof Error ? error.message : "Local AI could not read this page. Your existing details are unchanged.");
+        setStatus(error instanceof Error ? error.message : "Eco AI could not read this page. Your existing details are unchanged.");
         setRetryTask({ kind: "reading", autoFill: fillAfterReading });
       }
     } finally {
@@ -96,7 +96,7 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
         try {
           const queries = await model.researchQueries(value.trim());
           if (request.current !== controller) return;
-          setStatus("Local AI planned another search. Reading matching public sources…");
+          setStatus("Eco AI planned another search. Reading matching public sources…");
           const retried = await Promise.allSettled(queries.map(async q => {
             const retry = await fetch(`/api/assistant/research?kind=product&q=${encodeURIComponent(q)}`, { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(55_000)]) });
             if (!retry.ok) throw new Error("Product research is unavailable.");
@@ -115,11 +115,11 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
       if (!page && !data.product && data.sources?.length && localEnabled) {
         clearTimeout(timer);
         try {
-          setStatus("Local AI is choosing product pages to open…");
+          setStatus("Eco AI is choosing product pages to open…");
           const picks = await model.selectLinks(value.trim(), data.sources as WebSource[]);
           if (request.current !== controller) return;
           if (picks.length) {
-            setStatus(`Opening ${picks.length === 1 ? "a product page" : `${picks.length} product pages`} chosen by local AI…`);
+            setStatus(`Opening ${picks.length === 1 ? "a product page" : `${picks.length} product pages`} chosen by Eco AI…`);
             const opened = await Promise.allSettled(picks.map(async source => {
               const pageResponse = await fetch("/api/assistant/product", {
                 method: "POST",
@@ -143,7 +143,7 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
           if (request.current !== controller) return;
           // Keep the source list so the user can open a page manually.
           setSources(data.sources as WebSource[]);
-          setStatus(error instanceof Error ? `${error.message} Choose a matching product below.` : "Local AI could not open a product page. Choose a matching product below.");
+          setStatus(error instanceof Error ? `${error.message} Choose a matching product below.` : "Eco AI could not open a product page. Choose a matching product below.");
           return;
         }
       }
@@ -162,9 +162,9 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
         let aiNotice = "";
         if (localEnabled && result.recovery?.method === "not-found" && result.readings?.length && (!result.variants.length || selected !== "")) {
           clearTimeout(timer);
-          setStatus("Standard lookup finished. Local AI is reading the page text…");
+          setStatus("Standard lookup finished. Eco AI is reading the page text…");
           try { result = await model.extractProduct(result, selected); }
-          catch (error) { aiNotice = error instanceof Error ? error.message : "Local AI could not complete the reading. Available source details are still shown."; }
+          catch (error) { aiNotice = error instanceof Error ? error.message : "Eco AI could not complete the reading. Available source details are still shown."; }
           if (request.current !== controller) return;
           setProduct(result);
         }
@@ -206,18 +206,18 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
       <button className="planner-button secondary" disabled={busy}>{busy ? "Looking up…" : "Find product details"}</button>
       {busy && <button type="button" className="planner-link" onClick={() => { request.current?.abort(); request.current = null; model.stop(); setBusy(false); onBusyChange?.(false); setStatus("Lookup cancelled. You can enter details manually."); }}>Cancel lookup</button>}
     </form>
-    <label className="planner-check"><input type="checkbox" checked={localEnabled} disabled={busy} onChange={e => setLocalEnabled(e.target.checked)} aria-describedby={`${id}-local-help`} />Use local AI to research missing details</label>
-    <p id={`${id}-local-help`} className="planner-help">Llama 3.2 on this device can rephrase searches, pick product links to open, and extract specs from page text the app already fetched. On by default for missing details. First use downloads the browser model (~2 GB); WebGPU Chrome or Edge required.</p>
-    <div ref={resultRef}><p id={`${id}-status`} role="status" className="planner-help">{busy ? model.status === "loading" ? "Loading local AI on this device…" : model.status === "thinking" ? model.message : "Checking the product page and alternate public sources…" : status}</p>
+    <label className="planner-check"><input type="checkbox" checked={localEnabled} disabled={busy} onChange={e => setLocalEnabled(e.target.checked)} aria-describedby={`${id}-local-help`} />Use Eco AI to research missing details</label>
+    <p id={`${id}-local-help`} className="planner-help">Hyked Eco AI (Llama 3.2, running on this device instead of a data center) can rephrase searches, pick product links to open, and extract specs from page text the app already fetched. On by default for missing details. First use downloads the browser model (~2 GB); WebGPU Chrome or Edge required.</p>
+    <div ref={resultRef}><p id={`${id}-status`} role="status" className="planner-help">{busy ? model.status === "loading" ? "Loading Eco AI on this device…" : model.status === "thinking" ? model.message : "Checking the product page and alternate public sources…" : status}</p>
     {retryTask && !busy && <div className="planner-actions"><button type="button" className="planner-button secondary" aria-describedby={`${id}-status`} onClick={() => {
       if (retryTask.kind === "reading") void readPageWithAI(retryTask.autoFill);
       else { autoFill.current = retryTask.autoFill; void lookup(retryTask.value, retryTask.isPage, retryTask.sourceName); }
     }}>{retryTask.kind === "reading" ? "Retry AI reading" : "Retry lookup"}</button><span className="planner-help">{retryTask.kind === "reading" ? "Try the failed AI step again with the same product and size." : "Search again and check public sources for this product."}</span></div>}
-    {model.status === "loading" && <progress aria-label="Local AI download progress" value={model.progress} max={1} />}
+    {model.status === "loading" && <progress aria-label="Eco AI download progress" value={model.progress} max={1} />}
     {model.message && <p className="planner-help planner-model-message" role="status">{model.message}</p>}
     {product && product.recovery?.method !== "catalog" && <div className="planner-local">
-      {product.readings?.length ? <><button type="button" className="planner-button secondary" disabled={busy || !hasVariant} onClick={() => void readPageWithAI()}>{model.status === "ready" ? "Read page with local AI" : "Enable local AI & read page"}</button><p>{hasVariant ? "Extract missing details from the readable source text, then review the quoted evidence." : "Choose your exact size below before reading with local AI."}</p></> : <p>No readable page text was returned for local AI. Try another source link below. A local model cannot bypass a retailer’s access block.</p>}
-      {model.status === "ready" && <button type="button" className="planner-link" disabled={busy} onClick={() => { model.stop(); setLocalEnabled(false); }}>Turn off local AI</button>}
+      {product.readings?.length ? <><button type="button" className="planner-button secondary" disabled={busy || !hasVariant} onClick={() => void readPageWithAI()}>{model.status === "ready" ? "Read page with Eco AI" : "Enable Eco AI & read page"}</button><p>{hasVariant ? "Extract missing details from the readable source text, then review the quoted evidence." : "Choose your exact size below before reading with Eco AI."}</p></> : <p>No readable page text was returned for Eco AI. Try another source link below. A local model cannot bypass a retailer’s access block.</p>}
+      {model.status === "ready" && <button type="button" className="planner-link" disabled={busy} onClick={() => { model.stop(); setLocalEnabled(false); }}>Turn off Eco AI</button>}
     </div>}
     {status && !busy && !product && sources.length === 0 && query.trim().length >= 3 && <p className="planner-help"><a href={`https://www.google.com/search?q=${encodeURIComponent(`${query} product specifications`)}`} target="_blank" rel="noopener noreferrer">Find the exact product page</a>, then paste its link above. Some retailers block automated lookup.</p>}
     {sources.length > 0 && <details open={!product || !facts.length}><summary>{product?.recovery ? "Other possible product matches" : "Matching products"}</summary><ul className="planner-sources product-matches">{sources.map((s, i) => <li key={`${s.url}-${i}`}><div><a href={s.url} target="_blank" rel="noopener noreferrer">{s.title}</a><small>{new URL(s.url).hostname}</small></div><button className="planner-button secondary" type="button" disabled={busy} aria-label={`Read details for ${s.title}`} onClick={() => void lookup(s.url, true, s.title)}>Read details</button></li>)}</ul></details>}
@@ -225,7 +225,7 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
       <h4>{product.title}</h4>
       {product.recovery?.method === "search-excerpt" && <p><strong>Unverified · search excerpt</strong></p>}
       {product.recovery?.method === "catalog" && <p><strong>Public catalog · dated source specifications</strong></p>}
-      {product.recovery?.method === "local-ai" && <p><strong>Local AI · verify source quotes</strong></p>}
+      {product.recovery?.method === "local-ai" && <p><strong>Eco AI · verify source quotes</strong></p>}
       {product.recovery?.method === "alternate-page" && <p><strong>Alternate source · confirm the model</strong></p>}
       <p>Listed prices may change and exclude tax or delivery. Check what is included in each weight.</p>
       {product.variants.length > 0 && <label className="product-variant">Size / variant<select disabled={busy} value={variantIndex} onChange={e => { setVariantIndex(e.target.value); setRetryTask(null); setSelections(defaultSelections(e.target.value === "" ? [] : product.variants[Number(e.target.value)].facts)); }}><option value="">Choose your exact variant</option>{product.variants.map((v, i) => <option key={v.id} value={i}>{v.name}</option>)}</select></label>}

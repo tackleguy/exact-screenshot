@@ -121,3 +121,12 @@ export const DIFFICULTY_OPTIONS: { value: TrailDifficulty; label: string }[] = [
 ];
 
 export { COMMUNITY_THRESHOLD };
+
+/**
+ * Climb that counts for effort: a loop's gain; for a line, whichever direction climbs more (data often runs
+ * downhill, while hikers usually walk up it first).
+ */
+export function effortClimbFt(profile: { gainFt: number; lossFt: number } | null | undefined, routeType?: string | null) {
+  if (!profile || !Number.isFinite(profile.gainFt)) return null;
+  return routeType === "loop" ? profile.gainFt : Math.max(profile.gainFt, Number.isFinite(profile.lossFt) ? profile.lossFt : 0);
+}

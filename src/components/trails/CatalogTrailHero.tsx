@@ -7,7 +7,7 @@ import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { countryName } from "@/lib/trail-catalog/types";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { ROUTE_TYPE_LABELS } from "@/lib/trail-catalog/quality";
-import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, naismithHours, resolveDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
+import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, effortClimbFt, naismithHours, resolveDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
 import { duration as displayDuration, feet, join, miles as displayMiles, text } from "@/lib/display";
 import { SOURCE_TYPE_LABELS } from "@/lib/trail-catalog/agencies";
 import { trailSacScale } from "@/lib/trail-catalog/types";
@@ -22,7 +22,7 @@ export function CatalogTrailHero({ trail: t, difficulty, distance, hasLines }: {
     let live = true;
     fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/photos`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (live && d?.photos?.[0]) setPhoto(d.photos[0]); }).catch(() => undefined);
     // Measured climb (DEM) for difficulty and Naismith time; the profile itself is drawn further down.
-    if (hasLines) fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/elevation`).then((r) => (r.ok ? r.json() : null)).then((e) => { if (live && Number.isFinite(e?.gainFt)) setGainFor({ id: t.id, gainFt: e.gainFt }); }).catch(() => undefined);
+    if (hasLines) fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/elevation`).then((r) => (r.ok ? r.json() : null)).then((e) => { if (live && Number.isFinite(e?.gainFt)) setGainFor({ id: t.id, gainFt: effortClimbFt(e, t.routeType) ?? e.gainFt }); }).catch(() => undefined);
     return () => { live = false; };
   }, [t.id, hasLines]);
   const gainFt = gainFor?.id === t.id ? gainFor.gainFt : null;
@@ -48,7 +48,7 @@ export function CatalogTrailHero({ trail: t, difficulty, distance, hasLines }: {
       <dl className="trail-stats">
         {text(distance) && <div><dt>Length</dt><dd>{distance}</dd></div>}
         {time && <div><dt>Est. time</dt><dd title="Naismith's rule: 3 mph plus 1 hour per 2,000 ft of climb">{time}</dd></div>}
-        {feet(gainFt) && <div><dt>Elevation gain</dt><dd>{feet(gainFt)}</dd></div>}
+        {feet(gainFt) && <div><dt>{t.routeType === "loop" ? "Elevation gain" : "Climb"}</dt><dd title={t.routeType === "loop" ? undefined : "The larger of the climb in either direction along the trail"}>{feet(gainFt)}</dd></div>}
         {(t.routeType || t.kind === "route") && <div><dt>Route type</dt><dd>{t.routeType ? ROUTE_TYPE_LABELS[t.routeType] : "Long-distance"}</dd></div>}
         <div><dt>Difficulty</dt><dd title={DIFFICULTY_FORMULA}>{DIFFICULTY_LABELS[level] ?? level}<small className="trail-stat-note">How it’s rated: distance{gainFt !== null ? ", climb" : ""}{trailSacScale(t) ? " and terrain" : ""}</small></dd></div>
         {(t.sectionCount ?? 0) > 1 && <div><dt>Sections</dt><dd>{t.sectionCount!.toLocaleString("en-US")} joined</dd></div>}

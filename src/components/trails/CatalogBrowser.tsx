@@ -285,7 +285,7 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
               {preview ? (
                 <div className="catalog-preview-footer">
                   <span>
-                    Showing a preview of {total.toLocaleString("en-US")}{" "}
+                    Showing {trails.length.toLocaleString("en-US")} of {total.toLocaleString("en-US")}{" "}
                     {total === 1 ? "match" : "matches"}
                   </span>
                   {total > trails.length && (

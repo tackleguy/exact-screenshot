@@ -415,16 +415,20 @@ export function CatalogTrailDetail({
           {t.sources && t.sources.length > 0 && (
             <p className="catalog-muted">
               {t.source === "osm" ? "Official records:" : "Also mapped in:"}{" "}
-              {t.sources.map((ref, i) => (
-                <span key={`${ref.type}-${ref.id}`}>
-                  {i > 0 && " · "}
-                  <a href={ref.url} target="_blank" rel="noopener noreferrer">
-                    {SOURCE_TYPE_LABELS[ref.type]}
-                    {ref.officialTrailId ? ` trail #${ref.officialTrailId}` : ""}
-                    {ref.name !== t.name ? ` (“${ref.name}”)` : ""}
-                  </a>
-                </span>
-              ))}
+              {/* One link per distinct source, with a count when an agency mapped several pieces. */}
+              {[...new Map(t.sources.map((ref) => [`${ref.type}:${ref.officialTrailId ?? ""}`, ref])).values()].map((ref, i) => {
+                const pieces = t.sources!.filter((x) => x.type === ref.type && (x.officialTrailId ?? "") === (ref.officialTrailId ?? "")).length;
+                return (
+                  <span key={`${ref.type}-${ref.id}`}>
+                    {i > 0 && " · "}
+                    <a href={ref.url} target="_blank" rel="noopener noreferrer">
+                      {SOURCE_TYPE_LABELS[ref.type]}
+                      {ref.officialTrailId ? ` trail #${ref.officialTrailId}` : ""}
+                      {pieces > 1 ? ` (${pieces} sections)` : ref.name !== t.name ? ` (“${ref.name}”)` : ""}
+                    </a>
+                  </span>
+                );
+              })}
             </p>
           )}
           <p>

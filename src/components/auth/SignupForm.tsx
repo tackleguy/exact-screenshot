@@ -29,7 +29,7 @@ export function SignupForm() {
 
     const supabase = createClient();
     if (!supabase) {
-      setError("Account sign-in is not connected in this preview. You can still explore trails and plan trips as a guest.");
+      setError("Sign-in is unavailable right now. You can still explore trails and plan trips as a guest; your plans are saved on this device.");
       setLoading(false);
       return;
     }

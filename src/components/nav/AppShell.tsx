@@ -6,7 +6,7 @@ import { NavBar } from "./NavBar";
 import { BottomNav } from "./BottomNav";
 import { AccessibilityAudit } from "@/components/dev/AccessibilityAudit";
 
-export function AppShell({ children, notice }: { children: ReactNode; notice: ReactNode }) {
+export function AppShell({ children, notice }: { children: ReactNode; notice?: ReactNode }) {
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const recording = pathname.startsWith("/record/live");

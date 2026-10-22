@@ -29,7 +29,7 @@ import {
 import { snapPointToNearestLine } from "@/lib/geo/snap";
 import "./explorer.css";
 import { duration as displayDuration, feet, join as joinParts, miles as displayMiles } from "@/lib/display";
-import { naismithHours } from "@/lib/trail-difficulty";
+import { effortClimbFt, naismithHours } from "@/lib/trail-difficulty";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { installExtras, applySectionFilter } from "./map-extras";
@@ -628,7 +628,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   };
   const activeFilters = filters.difficulty.length + (filters.length ? 1 : 0) + (filters.routeType ? 1 : 0);
   const selectedCard = cards.find((t) => t[0] === selectedId);
-  const gain = elevation && elevation !== "none" ? elevation.gainFt : null;
+  const gain = elevation && elevation !== "none" ? effortClimbFt(elevation, detail?.trail.routeType) : null;
 
   const zoomedOut = !localTrailsVisible(zoom);
   const total = points?.total ?? null;
@@ -654,13 +654,15 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   return (
     <div ref={shellRef} className={`hx${workspace ? " hx-workspace" : " hx-workspace hx-workspace--map"}`} onKeyDown={(e) => { if (e.key === "Escape") { setOpen(null); setQuery(""); setSearchOpen(false); } }}>
       <header className="hx-workspace-header"><div><h1>{workspace ? "Explore trails" : "Trail map"}</h1><p>Find a route. Make it your next adventure.</p></div><nav aria-label="Trail workspace"><Link className="hx-btn" href="/explore/trails/catalog">Browse list</Link><Link className="hx-btn hx-btn--primary" href="/plan">Plan a trip</Link></nav></header>
-      <div ref={containerRef} className="hx-map" role="region" aria-label="Trail map" />
-      {(firstLoad || !ready) && (
-        <div className="hx-loading" role="status">
-          <div className="hx-loading-sheen" aria-hidden="true" />
-          <p>Loading the map and trails…</p>
-        </div>
-      )}
+      <div className="hx-map">
+        <div ref={containerRef} className="hx-map-canvas" role="region" aria-label="Trail map" />
+        {(firstLoad || !ready) && (
+          <div className="hx-loading" role="status">
+            <div className="hx-loading-sheen" aria-hidden="true" />
+            <p>Loading the map and trails…</p>
+          </div>
+        )}
+      </div>
 
       <div className="hx-stack" role="toolbar" aria-label="Map controls">
         <button type="button" className="hx-ctl" aria-label="Search trails" aria-expanded={searchOpen} onClick={() => setSearchOpen((v) => !v)}>

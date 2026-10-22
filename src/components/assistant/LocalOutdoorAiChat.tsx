@@ -173,7 +173,7 @@ export function LocalOutdoorAiChat({
     {
       id: "welcome",
       sender: "ai",
-      text: "👋 Welcome to the **Hyked Local Outdoor AI Assistant**! Running on your device for fast, private trip research. Ask about Colorado 14ers, 8,000m summits, through-hike resupplies, pack weight reduction, or high-altitude safety.",
+      text: "👋 Welcome to **Hyked Eco AI**, an eco-friendly outdoor assistant that runs entirely on your device: no data-center servers, no cloud compute per answer, and your questions stay private. Ask about Colorado 14ers, 8,000m summits, through-hike resupplies, pack weight reduction, or high-altitude safety.",
       timestamp: "Ready",
     },
   ]);
@@ -239,11 +239,11 @@ export function LocalOutdoorAiChat({
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
             <span style={{ fontSize: "1.25rem" }}>🧭</span>
             <strong style={{ fontSize: "1.05rem", color: "var(--cream, #f8fafc)" }}>
-              Local Outdoor AI Intelligence
+              Hyked Eco AI
             </strong>
           </div>
           <div style={{ fontSize: "0.78rem", color: "var(--plan-muted, #94a3b8)", marginTop: "0.2rem" }}>
-            On-device outdoor expertise · 14ers, 8,000m summits, through-hikes & pack weight
+            Eco-friendly on-device model · 14ers, 8,000m summits, through-hikes & pack weight
           </div>
         </div>
 
@@ -438,7 +438,7 @@ export function LocalOutdoorAiChat({
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask local AI about 14ers, 8,000m giants, thru-hikes, altitude, gear..."
+          placeholder="Ask Eco AI about 14ers, 8,000m giants, thru-hikes, altitude, gear..."
           style={{
             flex: 1,
             background: "var(--surface, #0f172a)",

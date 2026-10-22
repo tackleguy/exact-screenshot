@@ -15,6 +15,7 @@
   font-variant-numeric: tabular-nums;
 }
 .hx-map { position: absolute; inset: 0; }
+.hx-map-canvas { position: absolute; inset: 0; }
 .hx :focus-visible { outline: 2px solid var(--hx-hi); outline-offset: 2px; }
 :where(.hx) button { font: inherit; color: inherit; cursor: pointer; }
 .hx ::selection { background: var(--hx-hi); color: var(--hx-ink); }

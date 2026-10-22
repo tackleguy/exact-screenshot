@@ -19,7 +19,7 @@ export function useLocalModel() {
   const pending = useRef<((error: Error) => void) | null>(null);
   const dispose = useCallback(() => {
     generation.current++;
-    pending.current?.(new Error("Local AI stopped. You can continue with the planning tools.")); pending.current = null;
+    pending.current?.(new Error("Eco AI stopped. You can continue with the planning tools.")); pending.current = null;
     worker.current?.terminate(); worker.current = null; engine.current = null;
   }, []);
   useEffect(() => () => dispose(), [dispose]);
@@ -32,7 +32,7 @@ export function useLocalModel() {
       if (!("gpu" in navigator)) {
         hybridEngine.current = true;
         setStatus("ready");
-        setMessage("Running on this device (Local AI Active)");
+        setMessage("Running on this device · Eco AI on");
         return true;
       }
       const { CreateWebWorkerMLCEngine } = await import("@mlc-ai/web-llm");
@@ -48,7 +48,7 @@ export function useLocalModel() {
       if (run === generation.current) {
         hybridEngine.current = true;
         setStatus("ready");
-        setMessage("Running on this device (Local AI Active)");
+        setMessage("Running on this device · Eco AI on");
         return true;
       }
       return false;
@@ -61,8 +61,8 @@ export function useLocalModel() {
     timeoutMessage: string,
     fallback: string,
   ): Promise<T> => {
-    if (!engine.current && !await load()) throw new Error("Local AI could not start. See the browser model status below.");
-    if (!engine.current || pending.current) throw new Error("Local AI is busy. Try again when it finishes.");
+    if (!engine.current && !await load()) throw new Error("Eco AI could not start. See the browser model status below.");
+    if (!engine.current || pending.current) throw new Error("Eco AI is busy. Try again when it finishes.");
     const run = generation.current;
     setStatus("thinking"); setMessage(busyMessage);
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -138,7 +138,7 @@ export function useLocalModel() {
         { role: "system", content: PRODUCT_AI_SYSTEM }, { role: "user", content: JSON.stringify(input) },
       ], temperature: 0, max_tokens: 1200, response_format: { type: "json_object", schema: JSON.stringify(PRODUCT_AI_SCHEMA) } });
       return applyProductAI(response.choices[0]?.message.content ?? "", product, variantIndex);
-    }, "Reading product text on this device…", 120_000, "Local reading timed out. Try again or use the available source details.", "Local AI could not read this page. Try again.");
+    }, "Reading product text on this device…", 120_000, "Local reading timed out. Try again or use the available source details.", "Eco AI could not read this page. Try again.");
   }, [runJson]);
   const researchQueries = useCallback(async (query: string) => {
     if (hybridEngine.current || !engine.current) {
@@ -147,7 +147,7 @@ export function useLocalModel() {
     return runJson(async () => {
       const response = await engine.current!.chat.completions.create({ messages: [{ role: "system", content: PRODUCT_QUERY_SYSTEM }, { role: "user", content: query.slice(0, 180) }], temperature: 0, max_tokens: 160, response_format: { type: "json_object", schema: JSON.stringify(PRODUCT_QUERY_SCHEMA) } });
       return validateProductQueries(response.choices[0]?.message.content ?? "", query);
-    }, "Planning another product search on this device…", 60_000, "AI search planning timed out. Try a more specific name or product link.", "Local AI could not plan another search. Try again.");
+    }, "Planning another product search on this device…", 60_000, "AI search planning timed out. Try a more specific name or product link.", "Eco AI could not plan another search. Try again.");
   }, [runJson]);
   const selectLinks = useCallback(async (query: string, sources: WebSource[]) => {
     if (!sources.length) return [];
@@ -165,7 +165,7 @@ export function useLocalModel() {
         response_format: { type: "json_object", schema: JSON.stringify(PRODUCT_LINK_SCHEMA) },
       });
       return validateProductLinks(response.choices[0]?.message.content ?? "", sources);
-    }, "Choosing product pages to open on this device…", 60_000, "AI link selection timed out. Choose a product link manually.", "Local AI could not choose a product page. Try again or open a link manually.");
+    }, "Choosing product pages to open on this device…", 60_000, "AI link selection timed out. Choose a product link manually.", "Eco AI could not choose a product page. Try again or open a link manually.");
   }, [runJson]);
   return { status, message, progress, load, stop, explain, extractProduct, researchQueries, selectLinks };
 }
