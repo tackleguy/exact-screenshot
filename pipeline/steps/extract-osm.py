@@ -248,7 +248,7 @@ def run(region: tuple) -> str:
     feature_target = os.path.join(FEATURES, f"{name}.json.gz")
     if os.path.exists(target) and os.path.exists(feature_target):
         return f"{name}: cached"
-    pbf = os.path.join(scratch(), f"{name}.osm.pbf")
+    pbf = os.path.join(scratch(), f"{name}.{os.getpid()}.osm.pbf")
     url = f"https://download.geofabrik.de/north-america/{country}/{name}-latest.osm.pbf"
     started = time.time()
     try:
@@ -300,6 +300,9 @@ def main():
     os.makedirs(FEATURES, exist_ok=True)
     # Largest first, so the long downloads overlap with everything else.
     order = sorted(REGIONS, key=lambda r: r[1] not in ("california", "ontario", "quebec", "british-columbia", "texas", "new-york", "florida", "pennsylvania"))
+    # --reverse lets a second run work from the other end of the list at the same time (finished regions are skipped).
+    if "--reverse" in sys.argv:
+        order.reverse()
     scratch()
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
