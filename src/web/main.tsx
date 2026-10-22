@@ -6,6 +6,7 @@ import { AppShell } from "@/components/nav/AppShell";
 import { GuestSaveBanner } from "@/components/nav/GuestSaveBanner";
 import { HomePromotion } from "@/components/home/HomePromotion";
 import { TrailExplorer } from "@/components/explore/TrailExplorer";
+import { PersonalTrailPage } from "@/components/route-builder/PersonalTrailPage";
 import { OsmTrailRedirect } from "./OsmTrailRedirect";
 import { CatalogTrailDetail } from "@/components/trails/CatalogTrailDetail";
 import { CatalogPresentation, type CatalogResult } from "./CatalogPresentation";
@@ -118,8 +119,18 @@ function MapPage({ workspace = false }: { workspace?: boolean }) {
   const activity: CatalogActivity = candidate && (CATALOG_ACTIVITIES as readonly string[]).includes(candidate) ? candidate as CatalogActivity : "hike";
   const lat = params.has("lat") ? Number(params.get("lat")) : NaN; const lng = params.has("lng") ? Number(params.get("lng")) : NaN;
   const zoom = params.has("z") ? Number(params.get("z")) : NaN;
-  return <TrailExplorer workspace={workspace} start={{ activity, trail: params.get("trail"), center: Number.isFinite(lat) && lat >= -85 && lat <= 85 && Number.isFinite(lng) && lng >= -180 && lng <= 180 ? [lng, lat] : null, zoom: Number.isFinite(zoom) && zoom >= 1 && zoom <= 20 ? zoom : null }} />;
+  // "Build a route from here": ?routeFrom=<lat>,<lng>&routeFromName=<name> opens the route builder with that start.
+  const [fromLat, fromLng] = (params.get("routeFrom") ?? "").split(",").map(Number);
+  const routeFrom = Number.isFinite(fromLat) && Number.isFinite(fromLng) && Math.abs(fromLat) <= 85 && Math.abs(fromLng) <= 180 && params.get("routeFrom") ? { point: [fromLng, fromLat] as [number, number], name: (params.get("routeFromName") ?? "").slice(0, 120) || "Trail start" } : null;
+  const center: [number, number] | null = Number.isFinite(lat) && lat >= -85 && lat <= 85 && Number.isFinite(lng) && lng >= -180 && lng <= 180 ? [lng, lat] : routeFrom?.point ?? null;
+  return <TrailExplorer workspace={workspace} start={{ activity, trail: params.get("trail"), center, zoom: Number.isFinite(zoom) && zoom >= 1 && zoom <= 20 ? zoom : routeFrom ? 13 : null, routeFrom }} />;
 }
+function PersonalTrailRoute({ shared = false }: { shared?: boolean }) {
+  const { id, token } = useParams();
+  return shared ? <PersonalTrailPage key={token} token={token ?? ""} /> : <PersonalTrailPage key={id} id={id ?? ""} />;
+}
+/** Explore links keep their query (e.g. ?routeFrom=… from a trail page) when they redirect to the map. */
+function ExploreRedirect() { const { search } = useLocation(); return <Navigate to={`/explore/trails${search}`} replace />; }
 function Gear() { const { user, loading } = useAccount(); if (loading) return <Status title="Loading gear…" />; return user ? <div className="fieldbook-page"><GearPageClient userId={user.id} /></div> : <LocalGear />; }
 const GUEST_PLANNER: PlannerContext = { userId: null, gear: [], activities: [], routes: [...REFERENCE_ROUTES], messages: [] };
 function Planner() {
@@ -169,7 +180,7 @@ function BackendPage() { const location = useLocation(); return <Status title="T
 function App() {
   const { user } = useAccount();
   return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><AppShell><Routes>
-    <Route path="/" element={<Home />} /><Route path="/explore" element={<Navigate to="/explore/trails" replace />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
+    <Route path="/" element={<Home />} /><Route path="/explore" element={<ExploreRedirect />} /><Route path="/my/trails/:id" element={<PersonalTrailRoute />} /><Route path="/shared/trails/:token" element={<PersonalTrailRoute shared />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />

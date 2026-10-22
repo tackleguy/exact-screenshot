@@ -305,6 +305,36 @@ export async function tripPacket(body: Record<string, unknown>, fetcher: typeof 
   return packetResponse(await tripBundle(d, chainLines(d.lines as LngLat[][]), townDayOptions(body), pack, fetcher), String(body.format ?? "html"));
 }
 
+/**
+ * Trail lines for routing inside a bounding box: verified and mapped trails (no winter-only routes), full
+ * resolution so junctions line up. Trails are found by their pin within 0.25° of the box, then kept when a
+ * line actually enters it.
+ */
+async function routingNetwork(box: [number, number, number, number], fetcher: typeof fetch): Promise<GeoJSON.FeatureCollection> {
+  const m = await meta(fetcher);
+  const pad = 0.25;
+  const keys = m.cells.filter((key) => {
+    const [x, y] = key.split("_").map(Number);
+    const w = x * 2 - 180, s = y * 2 - 90;
+    return w <= box[2] + pad && w + 2 >= box[0] - pad && s <= box[3] + pad && s + 2 >= box[1] - pad;
+  });
+  const rows = (await cells(keys, m, fetcher)).filter((t) =>
+    !t.mergedInto && !t.winterUse && t.source !== "resort" && t.geometryShard && t.geometryShard !== "route" &&
+    t.longitude >= box[0] - pad && t.longitude <= box[2] + pad && t.latitude >= box[1] - pad && t.latitude <= box[3] + pad,
+  ).sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0));
+  const shards = new Map<string, Promise<Record<string, Lines>>>();
+  for (const t of rows) if (!shards.has(t.geometryShard)) shards.set(t.geometryShard, asset<Record<string, Lines>>(`${m.directory}/geometry-${t.geometryShard}.json.gz`, fetcher).catch(() => ({})));
+  const inside = ([x, y]: [number, number]) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3];
+  const features: GeoJSON.Feature[] = [];
+  for (const t of rows) {
+    const lines = ((await shards.get(t.geometryShard)!)[t.id] ?? []).filter((line) => line.length > 1 && line.some(inside));
+    if (!lines.length) continue;
+    features.push({ type: "Feature", id: t.id, properties: { id: t.id, name: t.name, q: t.qualityScore ?? 0, tier: t.tier ?? (t.sourceType ? "verified" : "mapped") }, geometry: { type: "MultiLineString", coordinates: lines } });
+    if (features.length >= 4000) break;
+  }
+  return { type: "FeatureCollection", features };
+}
+
 export function isTrailServicePath(path: string) {
   return path === "/api/trail-catalog" || path.startsWith("/api/trail-catalog/");
 }
@@ -394,6 +424,27 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
         original: [lng, lat],
         isSnapped: false,
       });
+    }
+
+    // Route builder network: every shown trail whose line enters the box, at full resolution (src/lib/routing).
+    if (suffix[0] === "network") {
+      const box = parseCatalogFilters(params).bbox;
+      if (!box || box[2] - box[0] > 3.2 || box[3] - box[1] > 3.2) return Response.json({ error: "Choose points closer together (within about 150 miles)." }, { status: 400 });
+      return Response.json(await routingNetwork(box, fetcher));
+    }
+
+    // Towns by name (GeoNames) for the route builder's start and end search; bigger places first.
+    if (suffix[0] === "places") {
+      const q = normalize(params.get("q") ?? "");
+      if (q.length < 2) return Response.json({ places: [] });
+      const near = [Number(params.get("lng")), Number(params.get("lat"))];
+      const places = (await allTowns(fetcher))
+        .filter((t) => normalize(t.name).startsWith(q))
+        .map((t) => ({ t, km: Number.isFinite(near[0]) && Number.isFinite(near[1]) ? distanceKm(near[1], near[0], t.latitude, t.longitude) : 0 }))
+        .sort((a, b) => a.km - b.km || (b.t.population ?? 0) - (a.t.population ?? 0))
+        .slice(0, 6)
+        .map(({ t }) => ({ name: t.name, region: t.state, country: t.country, lat: t.latitude, lng: t.longitude }));
+      return Response.json({ places, attribution: "GeoNames (CC BY 4.0)" });
     }
 
     // Zoomed-out count bubbles: build-time totals per grid cell and section (see scripts/prepare-trail-assets.ts).

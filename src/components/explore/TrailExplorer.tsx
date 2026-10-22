@@ -12,7 +12,9 @@ import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { localTrailsVisible, TRAIL_DETAIL_ZOOM, MAP_TRAIL_LIMIT, TRAIL_CARD_LIMIT } from "@/lib/trail-catalog/discovery";
 import type { WeatherPeriod } from "@/lib/weather/types";
 import { SectionIcon } from "./SectionIcon";
-import { ConnectedTrails } from "./ConnectedTrails";
+import { RouteBuilder } from "@/components/route-builder/RouteBuilder";
+import { FEATURE_LABELS, featureGroup, featureName, fetchFeatures, type HikeFeature } from "@/lib/routing/features";
+import { usePersonalTrails } from "@/lib/personal-trails";
 import type { Point } from "@/lib/trail-catalog/quality";
 import { NearbyTrails } from "./NearbyTrails";
 import {
@@ -22,6 +24,7 @@ import {
   explorerStyle,
   installOverlay,
   setSky,
+  setFeatureLabelGroups,
   setLayerGroupVisibility,
   type Basemap,
   type OverlayData,
@@ -85,7 +88,14 @@ function distanceKm(a: [number, number], b: [number, number]) {
   return Math.sqrt(x * x + y * y) * 6371;
 }
 
-export interface ExplorerStart { activity: CatalogActivity; trail: string | null; center: [number, number] | null; zoom: number | null }
+export interface ExplorerStart {
+  activity: CatalogActivity;
+  trail: string | null;
+  center: [number, number] | null;
+  zoom: number | null;
+  /** Opens the route builder with this start (the trail page's "Build a route from here"). */
+  routeFrom?: { point: [number, number]; name: string } | null;
+}
 
 export function TrailExplorer({ start: initial, workspace = false }: { start: ExplorerStart; workspace?: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -102,6 +112,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     pistes: EMPTY,
     lifts: EMPTY,
     pois: EMPTY,
+    myTrails: EMPTY,
   });
   const fetchAbort = useRef<AbortController | null>(null);
   const hovered = useRef<number | string | null>(null);
@@ -113,8 +124,20 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     thruHikes: true,
     dayTrails: true,
     ski: initial.activity === "ski",
-    pois: true,
+    water: true,
+    camping: true,
+    other: false,
+    myTrails: true,
   });
+  const [routeOpen, setRouteOpen] = useState(Boolean(initial.routeFrom));
+  // The map instance as state, so the route builder renders once the map exists.
+  const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
+  const [viewFeatures, setViewFeatures] = useState<HikeFeature[]>([]);
+  // While the route builder waits for a tap, map taps set route points instead of selecting trails.
+  const pickingRef = useRef(false);
+  const onPickingChange = useCallback((picking: boolean) => { pickingRef.current = picking; }, []);
+  const layersRef = useRef(layers);
+  const { trails: myTrails } = usePersonalTrails();
   const [is3d, setIs3d] = useState(false);
   const [bearing, setBearing] = useState(0);
   const [ready, setReady] = useState(false);
@@ -188,6 +211,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       pistes: "hy-ski-pistes",
       lifts: "hy-ski-lifts",
       pois: "hy-pois",
+      myTrails: "hy-mytrails",
     };
     const source = mapRef.current?.getSource(idMap[key]) as maplibregl.GeoJSONSource | undefined;
     source?.setData(data);
@@ -197,14 +221,17 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    setLayerGroupVisibility(map, "thru-hikes", layers.thruHikes);
-    setLayerGroupVisibility(map, "day-trails", layers.dayTrails);
-    setLayerGroupVisibility(map, "ski", layers.ski);
-    setLayerGroupVisibility(map, "pois", layers.pois);
+    layersRef.current = layers;
+    applyLayers(map, layers);
   }, [layers, ready]);
 
+  // The visitor's saved trails as a map layer.
+  useEffect(() => {
+    setSource("myTrails", { type: "FeatureCollection", features: myTrails.filter((t) => t.geometry.length > 1).map((t) => ({ type: "Feature", properties: { id: t.id, name: t.name }, geometry: { type: "LineString", coordinates: t.geometry } })) });
+  }, [myTrails, setSource]);
 
-  const showConnectedRoute = useCallback((points: Point[]) => {
+
+  const showRoute = useCallback((points: Point[]) => {
     setSource("route", { type: "FeatureCollection", features: points.length ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: points } }] : [] });
     if (mapRef.current?.getLayer("hy-route")) mapRef.current.moveLayer("hy-route");
   }, [setSource]);
@@ -281,13 +308,12 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         .then((data: GeoJSON.FeatureCollection) => { if (!signal.aborted) setSource("lines", { ...data, features: data.features.slice(0, MAP_TRAIL_LIMIT) }); })
         .catch(() => undefined);
 
-      // Stream Mountain POIs (Trailheads, Water, Camps, Summits)
-      const poiParams = new URLSearchParams();
-      poiParams.set("bbox", [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(4)).join(","));
-      void fetch(`/api/trail-catalog/pois?${poiParams}`, { signal })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((fc) => { if (fc && !signal.aborted) setSource("pois", fc); })
-        .catch(() => undefined);
+      // Hike features in view (water, camping, trailheads, viewpoints…); the layer toggles decide what shows.
+      void fetchFeatures([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], undefined, signal).then((list) => {
+        if (signal.aborted) return;
+        setViewFeatures(list);
+        setSource("pois", { type: "FeatureCollection", features: list.map((f) => ({ type: "Feature", properties: { id: f.id, type: f.type, group: featureGroup(f.type), name: f.name ?? "", label: featureName(f), source: f.source || "OpenStreetMap" }, geometry: { type: "Point", coordinates: [f.lon, f.lat] } })) });
+      });
     } else {
       setSource("lines", EMPTY);
       setSource("pois", EMPTY);
@@ -311,9 +337,10 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       map.addControl(geolocate, "bottom-right");
       geolocate.on("error", () => setLoadError("Location is off for this site. Allow it in your browser to see trails near you."));
       geolocateRef.current = geolocate;
-      map.on("style.load", () => { installOverlay(map, sourcesRef.current); installExtras(map, extrasRef.current); applySectionFilter(map, sectionRef.current); });
+      map.on("style.load", () => { installOverlay(map, sourcesRef.current); installExtras(map, extrasRef.current); applySectionFilter(map, sectionRef.current); applyLayers(map, layersRef.current); });
       map.on("load", () => {
         setReady(true);
+        setMapInstance(map);
         refresh();
         // Start the compact attribution folded; the (i) button still opens it.
         containerRef.current?.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
@@ -337,13 +364,24 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       });
       map.on("rotate", () => setBearing(map.getBearing()));
 
-      const select = (id: string) => setSelectedId(id);
+      // While the route builder waits for a tap, the tap belongs to it.
+      const select = (id: string) => { if (!pickingRef.current) setSelectedId(id); };
       map.on("click", "hy-pin", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
       map.on("click", "hy-lines", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
       map.on("click", "hy-thru-hikes", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
-      map.on("click", "hy-pois-circle", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
+      for (const layer of ["hy-feat-water", "hy-feat-camping", "hy-feat-other"]) {
+        map.on("click", layer, (e) => {
+          const f = e.features?.[0];
+          if (!f || pickingRef.current || f.geometry.type !== "Point") return;
+          new maplibregl.Popup({ closeButton: false, offset: 10, className: "hx-popup" })
+            .setLngLat(f.geometry.coordinates as [number, number])
+            .setDOMContent(featurePopup({ name: String(f.properties?.label ?? ""), type: String(f.properties?.type ?? ""), source: String(f.properties?.source ?? "OpenStreetMap") }))
+            .addTo(map);
+        });
+      }
+      map.on("click", "hy-mytrails", (e) => { const id = e.features?.[0]?.properties?.id; if (id && !pickingRef.current) routerRef.current.push(`/my/trails/${encodeURIComponent(String(id))}`); });
       map.on("click", "hy-ski-pistes", (e) => { const f = e.features?.[0]; if (f) openSkiRef.current(f); });
-      const tappedOwn = (e: maplibregl.MapMouseEvent) => map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-thru-hikes", "hy-ski-pistes", "hy-pois-circle", "hy-ski-hit", "hy-ski-pin"].filter((l) => map.getLayer(l)) }).length > 0;
+      const tappedOwn = (e: maplibregl.MapMouseEvent) => pickingRef.current || map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-thru-hikes", "hy-ski-pistes", "hy-feat-water", "hy-feat-camping", "hy-feat-other", "hy-mytrails", "hy-ski-hit", "hy-ski-pin"].filter((l) => map.getLayer(l)) }).length > 0;
       map.on("click", "hy-ski-hit", (e) => {
         if (map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-thru-hikes"] }).length) return;
         const f = e.features?.[0]; if (f) openSkiRef.current(f);
@@ -390,7 +428,10 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         "hy-lines",
         "hy-thru-hikes",
         "hy-ski-pistes",
-        "hy-pois-circle",
+        "hy-feat-water",
+        "hy-feat-camping",
+        "hy-feat-other",
+        "hy-mytrails",
         "hy-pins-cluster",
         "hy-grid-cluster",
         "hy-osm-hit",
@@ -684,6 +725,9 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
         </button>
         <button type="button" className="hx-ctl hx-ctl--text" aria-pressed={is3d} aria-label={is3d ? "Show flat map" : "Show 3D terrain"} onClick={() => setIs3d((v) => !v)}>3D</button>
+        <button type="button" className="hx-ctl" aria-label="Build a route" title="Build a route" aria-pressed={routeOpen} onClick={() => { setRouteOpen((v) => !v); setSearchOpen(false); setSelectedId(null); }}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.2" /><circle cx="18" cy="5" r="2.2" /><path d="M8 18.5h7.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H16" /></svg>
+        </button>
         <div className="hx-pop-anchor">
           <button type="button" className="hx-ctl hx-ctl--text" aria-expanded={open === "layers"} onClick={() => setOpen(open === "layers" ? null : "layers")}>Maps</button>
           {open === "layers" && (
@@ -698,8 +742,13 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                 <label className="hx-check"><input type="checkbox" checked={layers.thruHikes} onChange={(e) => setLayers((l) => ({ ...l, thruHikes: e.target.checked }))} /> Long-distance trails</label>
                 <label className="hx-check"><input type="checkbox" checked={layers.dayTrails} onChange={(e) => setLayers((l) => ({ ...l, dayTrails: e.target.checked }))} /> Day trails</label>
                 <label className="hx-check"><input type="checkbox" checked={layers.ski} onChange={(e) => setLayers((l) => ({ ...l, ski: e.target.checked }))} /> Ski runs and lifts</label>
-                <label className="hx-check"><input type="checkbox" checked={layers.pois} onChange={(e) => setLayers((l) => ({ ...l, pois: e.target.checked }))} /> Trailheads, water, camps</label>
+                <label className="hx-check"><input type="checkbox" checked={layers.water} onChange={(e) => setLayers((l) => ({ ...l, water: e.target.checked }))} /><span className="hx-dot" style={{ background: "#0284c7" }} /> Water</label>
+                <label className="hx-check"><input type="checkbox" checked={layers.camping} onChange={(e) => setLayers((l) => ({ ...l, camping: e.target.checked }))} /><span className="hx-dot" style={{ background: "#d97706" }} /> Campsites and shelters</label>
+                <label className="hx-check"><input type="checkbox" checked={layers.other} onChange={(e) => setLayers((l) => ({ ...l, other: e.target.checked }))} /><span className="hx-dot" style={{ background: "#475569" }} /> Trailheads, viewpoints, peaks, toilets</label>
+                <label className="hx-check"><input type="checkbox" checked={layers.myTrails} onChange={(e) => setLayers((l) => ({ ...l, myTrails: e.target.checked }))} /><span className="hx-dot" style={{ background: "#8b5cf6" }} /> My trails</label>
               </div>
+              {zoomedOut && (layers.water || layers.camping || layers.other) && <p className="hx-pop-note">Zoom in to see water and campsites.</p>}
+              <p className="hx-pop-note">Features © OpenStreetMap contributors (ODbL).</p>
             </div>
           )}
         </div>
@@ -728,6 +777,18 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
             </ul>
           )}
         </div>
+      )}
+
+      {routeOpen && (
+        <RouteBuilder
+          map={mapInstance}
+          initialFrom={initial.routeFrom ?? null}
+          center={center}
+          viewFeatures={viewFeatures}
+          onClose={() => setRouteOpen(false)}
+          onRoute={showRoute}
+          onPickingChange={onPickingChange}
+        />
       )}
 
       <div className="hx-top">
@@ -827,7 +888,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         ))}
       </div>
 
-      <div className={`hx-rail-wrap${sheetOpen ? " is-open" : ""}`}>
+      <div className={`hx-rail-wrap${sheetOpen ? " is-open" : ""}${routeOpen ? " hx-rail-wrap--routing" : ""}`}>
         <button type="button" className="hx-sheet-handle" aria-expanded={sheetOpen} onClick={(e) => { setSheetOpen((v) => !v); e.currentTarget.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
           <span className="hx-sheet-grip" aria-hidden="true" />
           <span>{countLabel}</span>
@@ -837,7 +898,14 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
           <div><h2>{countLabel}</h2>{countDetail && <p>{countDetail}</p>}</div>
           {loading && <span className="hx-spinner" aria-hidden="true" />}
         </div>
-        <ConnectedTrails selected={detail ? { id: detail.trail.id, name: detail.trail.name, lines: detail.lines } : null} onRoute={showConnectedRoute} />
+        {myTrails.length > 0 && (
+          <nav className="hx-mytrails" aria-label="My trails">
+            <span>My trails</span>
+            {myTrails.slice(0, 8).map((t) => (
+              <Link key={t.id} className="hx-mytrail" href={`/my/trails/${encodeURIComponent(t.id)}`}>{t.name}<small>{fmtMiles(t.stats.miles)}</small></Link>
+            ))}
+          </nav>
+        )}
         {cards.length > 0 ? (
           <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, best-documented first">
             {cards.map((t) => {
@@ -905,6 +973,32 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       </div>
     </div>
   );
+}
+
+type LayerToggles = { thruHikes: boolean; dayTrails: boolean; ski: boolean; water: boolean; camping: boolean; other: boolean; myTrails: boolean };
+
+/** Applies the layer toggles to the map (again after every basemap switch, which re-creates Hyked's layers). */
+function applyLayers(map: maplibregl.Map, layers: LayerToggles) {
+  setLayerGroupVisibility(map, "thru-hikes", layers.thruHikes);
+  setLayerGroupVisibility(map, "day-trails", layers.dayTrails);
+  setLayerGroupVisibility(map, "ski", layers.ski);
+  setLayerGroupVisibility(map, "water", layers.water);
+  setLayerGroupVisibility(map, "camping", layers.camping);
+  setLayerGroupVisibility(map, "other", layers.other);
+  setLayerGroupVisibility(map, "my-trails", layers.myTrails);
+  setFeatureLabelGroups(map, (["water", "camping", "other"] as const).filter((g) => layers[g]));
+}
+
+/** Feature popups: name, type and source, as plain text nodes. */
+function featurePopup(f: { name: string; type: string; source: string }) {
+  const el = document.createElement("div");
+  el.className = "hx-feature-pop";
+  const strong = document.createElement("strong");
+  strong.textContent = f.name;
+  const small = document.createElement("small");
+  small.textContent = `${FEATURE_LABELS[f.type] ?? f.type} · ${f.source}`;
+  el.append(strong, small);
+  return el;
 }
 
 function Caret() {

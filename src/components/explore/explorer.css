@@ -225,3 +225,15 @@
   .hx-rail-wrap .hx-results-heading h2 { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .hx-loading-sheen { animation: none; } }
+
+/* Route builder open: the route panel replaces the trail list. */
+.hx-rail-wrap--routing { display: none; }
+/* My trails: saved personal routes, above the list. */
+.hx-mytrails { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 16px 8px; pointer-events: auto; }
+.hx-mytrails > span { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--hx-muted); }
+.hx-mytrail { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--hx-ink); box-shadow: var(--hx-shadow); color: var(--hx-text); font-size: 13px; font-weight: 600; text-decoration: none; border-left: 3px solid #8b5cf6; }
+.hx-mytrail small { font-weight: 500; color: var(--hx-muted); }
+.hx-popup .maplibregl-popup-content { padding: 8px 10px; border-radius: 8px; background: #10201a; color: #f4f2ec; box-shadow: 0 6px 20px rgb(6 14 11 / 0.28); }
+.hx-popup .maplibregl-popup-tip { border-top-color: #10201a; border-bottom-color: #10201a; }
+.hx-feature-pop { display: grid; gap: 2px; font: 13px/1.35 system-ui, sans-serif; }
+.hx-feature-pop small { color: #b6c3ba; }
