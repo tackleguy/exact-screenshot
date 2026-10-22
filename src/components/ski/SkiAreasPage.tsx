@@ -15,7 +15,11 @@ interface SkiAreaRow {
 const PAGE_SIZE = 24;
 const runTotal = (c: SkiAreaRow["counts"]) => (c ? Number(c.skiRuns ?? 0) + Number(c.nordicRuns ?? 0) : 0);
 
-function applyFilters<T = any>(r: any, f: { query: string; country: string; region: string; type: string; hiking: boolean; biking: boolean }): T {
+/** The PostgREST filter methods used here (each returns the builder). */
+interface FilterBuilder { ilike(column: string, pattern: string): FilterBuilder; eq(column: string, value: string): FilterBuilder; contains(column: string, value: string[]): FilterBuilder; or(filters: string): FilterBuilder }
+
+function applyFilters<B>(query: B, f: { query: string; country: string; region: string; type: string; hiking: boolean; biking: boolean }): B {
+  let r = query as unknown as FilterBuilder;
   const t = f.query.trim();
   if (t) r = r.ilike("name", `%${t}%`);
   if (f.country) r = r.eq("country_name", f.country);
@@ -23,7 +27,7 @@ function applyFilters<T = any>(r: any, f: { query: string; country: string; regi
   if (f.type) r = r.contains("ski_types", [f.type]);
   if (f.hiking) r = r.or("counts->>hikingOnMountain.gt.0,counts->>hikingNearby.gt.0");
   if (f.biking) r = r.or("counts->>mountainBikingOnMountain.gt.0,counts->>mountainBikingNearby.gt.0");
-  return r;
+  return r as unknown as B;
 }
 
 export function SkiAreasPage() {
@@ -37,12 +41,13 @@ export function SkiAreasPage() {
   const [areas, setAreas] = useState<SkiAreaRow[]>([]);
   const [total, setTotal] = useState(0);
   const [places, setPlaces] = useState<{ country_name: string; region: string }[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadedKey, setLoadedKey] = useState("");
   const [error, setError] = useState("");
   const mapEl = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const navigate = useNavigate();
-  const navRef = useRef(navigate); navRef.current = navigate;
+  const navRef = useRef(navigate);
+  useEffect(() => { navRef.current = navigate; }, [navigate]);
   const filters = useMemo(() => ({ query, country, region, type, hiking, biking }), [query, country, region, type, hiking, biking]);
 
   useEffect(() => {
@@ -65,12 +70,12 @@ export function SkiAreasPage() {
     const client = createClient();
     if (!client) return;
     let active = true;
-    setLoading(true);
-    const req = applyFilters<any>(client.from("ski_areas").select("id,slug,name,country_name,region,locality,lifts,ski_types,elevation_max_ft,counts", { count: "exact" }), filters)
+    const key = JSON.stringify([filters, page]);
+    const req = applyFilters(client.from("ski_areas").select("id,slug,name,country_name,region,locality,lifts,ski_types,elevation_max_ft,counts", { count: "exact" }), filters)
       .order("lifts", { ascending: false }).range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
-    req.then(({ data, count, error: err }: any) => {
+    req.then(({ data, count, error: err }) => {
       if (!active) return;
-      setAreas((data ?? []) as SkiAreaRow[]); setTotal(count ?? 0); setError(err ? "Sign in to browse ski areas." : ""); setLoading(false);
+      setAreas((data ?? []) as SkiAreaRow[]); setTotal(count ?? 0); setError(err ? "Sign in to browse ski areas." : ""); setLoadedKey(key);
     });
     return () => { active = false; };
   }, [filters, page]);
@@ -86,7 +91,6 @@ export function SkiAreasPage() {
       map.addLayer({ id: "pin", type: "circle", source: "areas", filter: ["!", ["has", "point_count"]], paint: { "circle-color": "#ffffff", "circle-radius": 5, "circle-stroke-width": 2, "circle-stroke-color": "#2f7fd8" } });
       map.on("click", "pin", (e) => { const s = e.features?.[0]?.properties?.slug; if (s) navRef.current(`/ski-areas/${s}`); });
       map.on("click", "clusters", (e) => { const f = e.features?.[0]; if (f) map.easeTo({ center: (f.geometry as GeoJSON.Point).coordinates as [number, number], zoom: map.getZoom() + 2 }); });
-      (map as any).fire("hy-ready");
     });
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
@@ -100,18 +104,19 @@ export function SkiAreasPage() {
     void (async () => {
       const rows: { slug: string; name: string; latitude: number; longitude: number }[] = [];
       for (let i = 0; i < 7; i++) {
-        const { data } = await applyFilters<any>(client.from("ski_areas").select("slug,name,latitude,longitude"), filters).range(i * 1000, i * 1000 + 999);
+        const { data } = await applyFilters(client.from("ski_areas").select("slug,name,latitude,longitude"), filters).range(i * 1000, i * 1000 + 999);
         if (!data?.length) break;
-        rows.push(...data);
+        rows.push(...(data as typeof rows));
         if (data.length < 1000) break;
       }
       if (!live) return;
       const set = () => (map.getSource("areas") as maplibregl.GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: { slug: r.slug, name: r.name }, geometry: { type: "Point", coordinates: [r.longitude, r.latitude] } })) });
-      if (map.getSource("areas")) set(); else (map as any).once("hy-ready", set);
+      if (map.getSource("areas")) set(); else map.once("load", set);
     })();
     return () => { live = false; };
   }, [filters]);
 
+  const loading = loadedKey !== JSON.stringify([filters, page]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const sel = "rounded-[var(--radius-lg)] border border-[var(--border)] bg-surface-muted px-3 py-2.5 text-sm text-cream";
   const reset = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); setPage(0); };

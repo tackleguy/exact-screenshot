@@ -16,6 +16,7 @@ import {
   parseOverpassJson,
   normalizeSacScale,
   normalizePisteDifficulty,
+  type OverpassElement,
 } from "./overpass";
 
 test("geospatial: coordinate projection EPSG:4326 <-> EPSG:3857 roundtrip", () => {
@@ -111,7 +112,7 @@ test("overpass: normalizes SAC scale and ski piste difficulties", () => {
 });
 
 test("overpass: parses raw elements into normalized GeoJSON features", () => {
-  const sampleElements = [
+  const sampleElements: OverpassElement[] = [
     { type: "node" as const, id: 101, lat: 39.1, lon: -105.5, tags: { natural: "peak", name: "Mount Silver", ele: "4320" } },
     { type: "node" as const, id: 102, lat: 39.2, lon: -105.6, tags: { highway: "trailhead", name: "Alpine Trailhead" } },
     { type: "node" as const, id: 1, lat: 39.0, lon: -105.0 },
