@@ -42,8 +42,8 @@ async function main() {
   }
   step("OpenStreetMap extracts (Geofabrik, in memory)", "python3", ["pipeline/steps/extract-osm.py", "--workers", "2"]);
   step("Wikidata / Wikipedia", "npx", ["tsx", "pipeline/steps/wiki.ts"]);
-  step("Build catalog", "node", ["--max-old-space-size=12288", "node_modules/.bin/tsx", "pipeline/steps/build.ts"]);
-  step("Hike features along trails", "node", ["--max-old-space-size=8192", "node_modules/.bin/tsx", "pipeline/steps/features.ts"]);
+  step("Build catalog", "npx", ["tsx", "pipeline/steps/build.ts"], { NODE_OPTIONS: "--max-old-space-size=12288" });
+  step("Hike features along trails", "npx", ["tsx", "pipeline/steps/features.ts"], { NODE_OPTIONS: "--max-old-space-size=8192" });
   step("Validation report", "npx", ["tsx", "pipeline/steps/validate.ts"]);
   console.log("\nDone. `npm run build` turns the new snapshot into the app's sharded files, sitemap and robots.txt.");
 }
