@@ -43,14 +43,9 @@ export const PISTE_COLORS: Record<string, string> = {
   nordic: "#06b6d4",       // Cyan nordic track
 };
 
-/** POI colors for outdoor navigation points */
-export const POI_COLORS: Record<string, string> = {
-  trailhead: "#10b981", // Emerald
-  water: "#0284c7",     // Sky blue
-  campsite: "#f59e0b",  // Amber
-  peak: "#8b5cf6",      // Violet / summit
-  parking: "#64748b",   // Slate
-};
+/** Hike-feature colours by group (src/lib/routing/features.ts), shared with the route builder's list. */
+export const FEATURE_GROUP_COLORS: Record<string, string> = { water: "#0284c7", camping: "#d97706", other: "#475569" };
+export const MY_TRAIL_COLOR = "#8b5cf6";
 
 const difficultyColor: maplibreTypes.ExpressionSpecification = [
   "match", ["get", "d"],
@@ -71,15 +66,6 @@ const pisteDifficultyColor: maplibreTypes.ExpressionSpecification = [
   PISTE_COLORS.easy,
 ];
 
-const poiColor: maplibreTypes.ExpressionSpecification = [
-  "match", ["get", "poiType"],
-  "trailhead", POI_COLORS.trailhead,
-  "water", POI_COLORS.water,
-  "campsite", POI_COLORS.campsite,
-  "peak", POI_COLORS.peak,
-  "parking", POI_COLORS.parking,
-  POI_COLORS.trailhead,
-];
 
 let dem: InstanceType<typeof mlcontour.DemSource> | null = null;
 /** One shared DEM source; contour tiles are generated in its worker, so panning stays smooth. */
@@ -174,6 +160,7 @@ export interface OverlayData {
   pistes?: GeoJSON.FeatureCollection;
   lifts?: GeoJSON.FeatureCollection;
   pois?: GeoJSON.FeatureCollection;
+  myTrails?: GeoJSON.FeatureCollection;
 }
 
 /** Hyked's own sources and layers; re-installed after every basemap switch. */
@@ -233,7 +220,8 @@ export function installOverlay(map: maplibreTypes.Map, data: OverlayData) {
   map.addSource("hy-lines", { type: "geojson", data: data.lines });
   map.addSource("hy-route", { type: "geojson", data: data.route });
   const routeColor = getComputedStyle(map.getContainer()).getPropertyValue("--accent").trim() || SELECTED_COLOR;
-  map.addLayer({ id: "hy-route", type: "line", source: "hy-route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": routeColor, "line-width": 7 } });
+  map.addLayer({ id: "hy-route-casing", type: "line", source: "hy-route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#1a1405", "line-width": 10, "line-opacity": 0.6 } });
+  map.addLayer({ id: "hy-route", type: "line", source: "hy-route", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": routeColor, "line-width": 6 } });
   map.addSource("hy-drive", { type: "geojson", data: data.drive });
   map.addSource("hy-selected", { type: "geojson", data: data.selected });
   map.addSource("hy-grid", { type: "geojson", data: data.grid });
@@ -293,51 +281,52 @@ export function installOverlay(map: maplibreTypes.Map, data: OverlayData) {
     paint: { "circle-color": SELECTED_COLOR, "circle-radius": 10, "circle-stroke-color": "#1a1405", "circle-stroke-width": 3 },
   });
 
-  // 5. Mountain POIs (Trailheads, Water Sources, Campsites, Summits, Parking)
+  // 5. Hike features (water, camping, other) from the pipeline's feature layer; one layer per group so each toggles.
   map.addSource("hy-pois", { type: "geojson", data: data.pois ?? EMPTY });
+  for (const group of ["other", "camping", "water"] as const) {
+    map.addLayer({
+      id: `hy-feat-${group}`, type: "circle", source: "hy-pois", minzoom: TRAIL_DETAIL_ZOOM, filter: ["==", ["get", "group"], group],
+      paint: {
+        "circle-color": FEATURE_GROUP_COLORS[group],
+        "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, group === "other" ? 3 : 4, 15, group === "other" ? 5.5 : 7],
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 1.5,
+      },
+    });
+  }
   map.addLayer({
-    id: "hy-pois-circle",
-    type: "circle",
-    source: "hy-pois",
-    minzoom: 11,
-    paint: {
-      "circle-color": poiColor,
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 4, 15, 7],
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 1.5,
-    },
+    id: "hy-feat-label", type: "symbol", source: "hy-pois", minzoom: 13.5, filter: ["!=", ["get", "name"], ""],
+    layout: { "text-field": ["get", "name"], "text-font": FONT, "text-size": 11, "text-offset": [0, 1.1], "text-anchor": "top", "text-optional": true },
+    paint: { "text-color": "#0f172a", "text-halo-color": "#ffffff", "text-halo-width": 1.5 },
   });
-  map.addLayer({
-    id: "hy-pois-label",
-    type: "symbol",
-    source: "hy-pois",
-    minzoom: 12.5,
-    layout: {
-      "text-field": ["get", "name"],
-      "text-font": FONT,
-      "text-size": 11,
-      "text-offset": [0, 1.2],
-      "text-anchor": "top",
-    },
-    paint: {
-      "text-color": "#0f172a",
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 1.5,
-    },
-  });
+
+  // 6. The visitor's own saved trails; the route being built stays on top.
+  map.addSource("hy-mytrails", { type: "geojson", data: data.myTrails ?? EMPTY });
+  map.addLayer({ id: "hy-mytrails-casing", type: "line", source: "hy-mytrails", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 6, 4, 14, 8] } });
+  map.addLayer({ id: "hy-mytrails", type: "line", source: "hy-mytrails", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": MY_TRAIL_COLOR, "line-width": ["interpolate", ["linear"], ["zoom"], 6, 2.5, 14, 5] } });
+  map.moveLayer("hy-route-casing");
+  map.moveLayer("hy-route");
+}
+
+/** Feature names are labelled only for the groups that are switched on. */
+export function setFeatureLabelGroups(map: maplibreTypes.Map, groups: string[]) {
+  if (map.getLayer("hy-feat-label")) map.setFilter("hy-feat-label", ["all", ["!=", ["get", "name"], ""], ["in", ["get", "group"], ["literal", groups]]]);
 }
 
 /** Toggles visibility for specific layer categories */
 export function setLayerGroupVisibility(
   map: maplibreTypes.Map,
-  group: "thru-hikes" | "day-trails" | "ski" | "pois",
+  group: "thru-hikes" | "day-trails" | "ski" | "water" | "camping" | "other" | "my-trails",
   visible: boolean,
 ) {
   const layerMap: Record<string, string[]> = {
     "thru-hikes": ["hy-thru-hikes-casing", "hy-thru-hikes", "hy-thru-hikes-label"],
     "day-trails": ["hy-lines-casing", "hy-lines", "hy-lines-label", "hy-pin"],
     ski: ["hy-ski-pistes", "hy-ski-lifts"],
-    pois: ["hy-pois-circle", "hy-pois-label"],
+    water: ["hy-feat-water"],
+    camping: ["hy-feat-camping"],
+    other: ["hy-feat-other"],
+    "my-trails": ["hy-mytrails-casing", "hy-mytrails"],
   };
 
   const layers = layerMap[group] ?? [];

@@ -129,6 +129,26 @@ vertex-count lengths, packet defaults) were deleted.
   (`npm run build` runs `scripts/prepare-trail-assets.ts`), so only the source snapshot is committed. Output is
   sharded by 2° cell (trail records) and 1° cell (lines). Final sizes: see the summary below.
 
+## Route builder
+
+- **Engine: in the browser.** Routes are computed client-side (`src/lib/routing`) over the full-resolution trail
+  lines of the area around the start and end (`/api/trail-catalog/network`, at most a ~3° box). That covers day
+  hikes and multi-day routes like Happy Isles → Tuolumne Meadows with no server, no hosting cost and nothing to
+  keep in sync with the catalog. Very long routes (hundreds of miles) would need a self-hosted Valhalla or OSRM
+  with a foot profile built from the same trail network: a small VM (~$10–20/month) refreshed with the monthly
+  pipeline. Not set up, since it costs money.
+- **Topology, no invented connectors.** Trails connect where they share a vertex; vertices within 10 m are merged
+  and a line end within 25 m of another line is joined to it (mapping gaps). Crossing lines are split at the
+  crossing. Nothing is drawn across open terrain: separate networks give "No trail connection".
+- **Cost:** length × a quality factor, so verified and higher-scoring trails win over parallel mapped paths.
+- **Road connectors** are off by default. When turned on, gaps between networks are bridged with one walking
+  route from OSRM's foot profile (`/api/directions?profile=foot`, FOSSGIS public server or `ROUTING_FOOT_API_URL`),
+  which follows real roads and paths. The static build without `VITE_HYKED_API_URL` has no routing server.
+- **Facts on a route** come from the same sources as trail pages: DEM elevation, Naismith time, and hike features
+  from the feature layer within 200 m (water) or 300 m (everything else) by mile. Day splits end at the campsite,
+  shelter or hut nearest each day's mileage target. Saved routes become private personal trails in the account
+  (share link optional) and feed "Plan a trip"; GPX export has a waypoint for every feature.
+
 ## Rendering
 
 The app is a client-rendered single-page app (Vite + React Router); the Next.js app in `src/app` is kept for

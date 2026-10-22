@@ -1,0 +1,88 @@
+/* Route builder: a floating panel over the trail map, in the explorer's dark ink palette (.hx tokens). */
+.rb-panel { position: absolute; z-index: 7; top: 70px; left: 16px; width: 380px; max-height: calc(100% - 100px); overflow: auto; overscroll-behavior: contain; padding: 14px 14px 10px; border-radius: 12px; background: var(--hx-ink); color: var(--hx-text); box-shadow: var(--hx-shadow); font-size: 14px; }
+.rb-head { display: flex; align-items: center; justify-content: space-between; }
+.rb-head h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.rb-x { width: 32px; height: 32px; border: 0; border-radius: 8px; background: transparent; color: var(--hx-muted); font-size: 22px; line-height: 1; }
+.rb-x:hover { background: var(--hx-ink-2); color: var(--hx-text); }
+.rb-help, .rb-attrib { margin: 6px 0; font-size: 12.5px; line-height: 1.5; color: var(--hx-muted); }
+.rb-attrib { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--hx-line); font-size: 11.5px; }
+.rb-stops { display: grid; gap: 8px; margin: 10px 0; padding: 0; list-style: none; }
+.rb-place { display: grid; grid-template-columns: 26px 1fr; gap: 8px; align-items: start; }
+.rb-place-dot, .rb-via-dot { display: grid; place-items: center; width: 24px; height: 24px; margin-top: 8px; border-radius: 50%; font-size: 12px; font-weight: 700; color: #fff; }
+.rb-place--start .rb-place-dot { background: #2f9e5b; }
+.rb-place--end .rb-place-dot { background: #d8452f; }
+.rb-place-main { position: relative; min-width: 0; }
+.rb-place input { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--hx-line); border-radius: 8px; background: var(--hx-ink-2); color: var(--hx-text); font-size: 14px; }
+.rb-place input.has-stop::placeholder { color: var(--hx-text); opacity: 1; }
+.rb-place input:focus { outline: none; border-color: var(--hx-hi); }
+.rb-place-actions { display: flex; gap: 12px; margin-top: 4px; }
+.rb-options { z-index: 8; top: 44px; width: 100%; }
+.rb-via { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: center; }
+.rb-via-dot { margin: 0; background: #2f7fd8; }
+.rb-via-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.rb-link { padding: 2px 0; border: 0; background: transparent; color: var(--hx-hi); font-size: 12.5px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+.rb-link[aria-pressed="true"] { color: #fff; text-decoration: none; }
+.rb-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.rb-row .hx-btn[aria-pressed="true"] { border-color: var(--hx-hi); color: var(--hx-hi); }
+.rb-row .hx-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.rb-check { padding-left: 0; font-size: 13px; }
+.rb-check small { color: var(--hx-muted); }
+.rb-picking, .rb-status { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--hx-ink-2); font-size: 13px; }
+.rb-picking { border-left: 3px solid var(--hx-hi); }
+.rb-error { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: rgb(216 69 47 / 0.18); color: #ffd0c7; font-size: 13px; }
+.rb-warn { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: rgb(255 194 26 / 0.12); font-size: 12.5px; line-height: 1.45; }
+.rb-result h3 { display: flex; align-items: baseline; justify-content: space-between; margin: 16px 0 6px; font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--hx-muted); }
+.rb-result h3 small { font-weight: 600; letter-spacing: 0; text-transform: none; }
+.rb-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 8px; margin: 10px 0; }
+.rb-stats div { padding: 8px; border-radius: 8px; background: var(--hx-ink-2); }
+.rb-stats dt { font-size: 11px; color: var(--hx-muted); }
+.rb-stats dd { margin: 2px 0 0; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rb-elev { margin: 0; padding: 8px; border-radius: 8px; background: #f7f5ef; color: #1d1a16; }
+.rb-elev figcaption { margin-top: 4px; font-size: 11.5px; color: #4b5563; }
+.rb-trails, .rb-features, .rb-days { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.rb-trails li, .rb-feature, .rb-days li { display: grid; grid-template-columns: 58px 1fr auto; gap: 8px; align-items: baseline; padding: 6px 8px; border-radius: 6px; font-size: 13px; }
+.rb-trails a { color: var(--hx-text); }
+.rb-trails small { color: var(--hx-muted); }
+.rb-trails li.is-connector span:not(.rb-mile) { font-style: italic; color: var(--hx-hi); }
+.rb-mile { font-size: 12px; font-variant-numeric: tabular-nums; color: var(--hx-muted); }
+.rb-legs { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; }
+.rb-features { max-height: 260px; overflow: auto; }
+.rb-feature { grid-template-columns: 58px 1fr; border-left: 3px solid transparent; }
+.rb-feature--water { border-left-color: #38a3e0; background: rgb(56 163 224 / 0.1); }
+.rb-feature--camping { border-left-color: #f59e0b; background: rgb(245 158 11 / 0.1); }
+.rb-feature-name { display: grid; }
+.rb-feature-name small { font-size: 11.5px; color: var(--hx-muted); }
+.rb-daily { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.rb-daily input { width: 90px; height: 36px; padding: 0 10px; border: 1px solid var(--hx-line); border-radius: 8px; background: var(--hx-ink-2); color: var(--hx-text); }
+.rb-days li { grid-template-columns: 1fr; gap: 2px; background: var(--hx-ink-2); }
+.rb-days small { color: var(--hx-muted); }
+.rb-actions { margin-top: 14px; }
+.rb-save { display: grid; gap: 8px; margin-top: 8px; padding: 10px; border-radius: 8px; background: var(--hx-ink-2); }
+.rb-save label { display: grid; gap: 4px; font-size: 12.5px; color: var(--hx-muted); }
+.rb-save input:not([type="file"]), .rb-save textarea { padding: 8px 10px; border: 1px solid var(--hx-line); border-radius: 8px; background: var(--hx-ink); color: var(--hx-text); font: inherit; font-size: 14px; }
+.rb-saved { margin-top: 10px; padding: 10px; border-radius: 8px; background: rgb(47 158 91 / 0.18); }
+.rb-saved p { margin: 0; }
+
+/* Map markers and drag handles */
+.rb-marker { display: grid; place-items: center; width: 28px; height: 28px; border: 2px solid #fff; border-radius: 50%; color: #fff; font: 700 13px/1 system-ui, sans-serif; box-shadow: 0 2px 6px rgb(0 0 0 / 0.35); cursor: grab; }
+.rb-marker--start { background: #2f9e5b; }
+.rb-marker--end { background: #d8452f; }
+.rb-marker--via { width: 22px; height: 22px; background: #2f7fd8; font-size: 11px; }
+.rb-handle { width: 16px; height: 16px; border: 3px solid var(--accent, #ffc21a); border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.35); cursor: grab; }
+
+@media (max-width: 767px) {
+  .rb-panel { top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 58%; border-radius: 14px 14px 0 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+}
+
+/* Personal trail page (catalog template, src/components/trails/catalog.css) */
+.trail-confidence--personal { color: #5b21b6; }
+.pt-owner { margin: 20px 0; padding: 14px 16px; border-radius: 12px; background: var(--surface); }
+.pt-owner p { margin: 0 0 8px; }
+.pt-section { margin-top: 28px; }
+.pt-list { display: grid; gap: 2px; margin: 10px 0 0; padding: 0; list-style: none; }
+.pt-list li { display: grid; grid-template-columns: 72px 1fr auto; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 8px; background: var(--surface); }
+.pt-list small { color: var(--sage); }
+.pt-mile { font-size: 0.85rem; font-variant-numeric: tabular-nums; color: var(--sage); }
+.pt-feature { grid-template-columns: 72px 1fr; border-left: 3px solid transparent; }
+.pt-feature--water { border-left-color: #0284c7; }
+.pt-feature--camping { border-left-color: #d97706; }
