@@ -15,7 +15,7 @@ import path from "node:path";
 const root = process.cwd();
 const args = new Set(process.argv.slice(2));
 
-function step(title: string, command: string, commandArgs: string[], env: NodeJS.ProcessEnv = {}) {
+function step(title: string, command: string, commandArgs: string[], env: Record<string, string> = {}) {
   console.log(`\n▶ ${title}\n  ${command} ${commandArgs.join(" ")}`);
   const started = Date.now();
   const result = spawnSync(command, commandArgs, { stdio: "inherit", cwd: root, env: { ...process.env, ...env } });

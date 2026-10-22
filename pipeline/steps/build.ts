@@ -578,6 +578,14 @@ async function main() {
   }
   guideReport.push(`Peaks: ${peaksLinked} of ${PEAK_DEFINITIONS.length} linked to a mapped route (the rest show summit and trailhead only)`);
 
+  if (process.argv.includes("--dry-run")) {
+    log(`Dry run: ${relFinal.length.toLocaleString("en-US")} relation trails, ${mappedFinal.length.toLocaleString("en-US")} mapped trails; nothing written.`);
+    for (const [rule, bySrc] of Object.entries(rejected)) console.log(`  ${rule}: ${JSON.stringify(bySrc)}`);
+    const sample = [...relFinal, ...mappedFinal].sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0)).slice(0, 15);
+    for (const r of sample) console.log(`  ${r.name} · ${r.miles} mi · ${r.tier} · score ${r.qualityScore} · ${r.region}${r.sources?.length ? ` · +${r.sources.length} sources` : ""}`);
+    return;
+  }
+
   // ---- write the snapshot ----
   const name = `snapshot-${Date.now()}`;
   const dir = path.join(catalogRoot, name);

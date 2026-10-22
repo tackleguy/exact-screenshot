@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 OpenStreetMap route relations (hiking, foot, bicycle, mtb, horse, ski) from Geofabrik extracts of every U.S. state
-and Canadian province/territory. Each extract is downloaded into memory, read with pyosmium, reduced to the route relations, their member ways and
-named trail ways, and discarded: the raw extracts are never written to disk. Only the small result is kept.
+and Canadian province/territory. Each extract is downloaded to a RAM-backed scratch folder (a macOS RAM disk the script creates, or /dev/shm on
+Linux), read with pyosmium, reduced to the route relations, their member ways and named trail ways, and deleted:
+the raw extracts never touch the computer's disk. Only the small result is kept. (pyosmium reads in-memory
+buffers far more slowly than files, so a RAM disk is used rather than a Python bytes buffer.)
 
 Output: .cache/osm-pbf/<region>.json.gz  {"relations": {id: {"tags", "members"}}, "ways": {id: [[lon, lat], ...]}}
 Then `npx tsx scripts/ingestion/osm-routes.ts --pbf` joins the regions into data/sources/osm-routes.json.gz.
@@ -67,36 +69,58 @@ def extract(pbf) -> dict:
     return {"relations": relations, "ways": ways, "trails": trails}
 
 
+RAM = {"dir": None, "device": None}
+
+
+def scratch() -> str:
+    """A folder backed by memory, created once per run."""
+    if RAM["dir"]:
+        return RAM["dir"]
+    if os.path.isdir("/dev/shm"):
+        RAM["dir"] = "/dev/shm/hyked-osm"
+    elif sys.platform == "darwin":
+        if not os.path.isdir("/Volumes/hyked-ram"):
+            device = subprocess.run(["hdiutil", "attach", "-nomount", f"ram://{6 * 1024 * 2048}"], capture_output=True, text=True, check=True).stdout.strip()
+            subprocess.run(["diskutil", "erasevolume", "APFS", "hyked-ram", device], capture_output=True, check=True)
+            RAM["device"] = device
+        RAM["dir"] = "/Volumes/hyked-ram"
+    else:
+        raise SystemExit("No RAM-backed folder available (need /dev/shm or macOS).")
+    os.makedirs(RAM["dir"], exist_ok=True)
+    return RAM["dir"]
+
+
 def run(region: tuple) -> str:
     country, name = region
     target = os.path.join(OUT, f"{name}.json.gz")
     if os.path.exists(target):
         return f"{name}: cached"
-    # The child process downloads into memory, extracts, and exits, so its node index and the extract are freed.
-    started = time.time()
-    for attempt in range(3):
-        parsed = subprocess.run([sys.executable, __file__, "--parse", country, name, target], capture_output=True, text=True)
-        if parsed.returncode == 0:
-            return f"{name}: {time.time() - started:.0f}s — {parsed.stdout.strip()}"
-        time.sleep(15 * (attempt + 1))
-    return f"{name}: failed ({parsed.stderr.strip()[-200:]})"
-
-
-def download(country: str, name: str) -> bytes:
-    """The extract, straight into memory through a pipe (curl is far faster than urllib); nothing is written to disk."""
+    pbf = os.path.join(scratch(), f"{name}.osm.pbf")
     url = f"https://download.geofabrik.de/north-america/{country}/{name}-latest.osm.pbf"
-    result = subprocess.run(["curl", "-sSfL", "--retry", "3", "-A", "Hyked/1.0 trail catalog (https://github.com/tackleguy/health)", url], capture_output=True)
-    if result.returncode != 0:
-        raise RuntimeError(f"download failed: {result.stderr.decode()[:200]}")
-    return result.stdout
+    started = time.time()
+    try:
+        for attempt in range(3):
+            result = subprocess.run(["curl", "-sSfL", "--retry", "3", "-A", "Hyked/1.0 trail catalog (https://github.com/tackleguy/health)", "-o", pbf, url], capture_output=True, text=True)
+            if result.returncode == 0:
+                break
+            time.sleep(10 * (attempt + 1))
+        else:
+            return f"{name}: download failed ({result.stderr.strip()[:120]})"
+        size = os.path.getsize(pbf) / 1e6
+        # Parse in a child process so each extract's node index is freed when it finishes.
+        parsed = subprocess.run([sys.executable, __file__, "--parse", pbf, target], capture_output=True, text=True)
+        if parsed.returncode != 0:
+            return f"{name}: parse failed ({parsed.stderr.strip()[-200:]})"
+        return f"{name}: {size:.0f} MB in {time.time() - started:.0f}s — {parsed.stdout.strip()}"
+    finally:
+        if os.path.exists(pbf):
+            os.remove(pbf)
 
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--parse":
-        _, _, country, name, target = sys.argv
-        raw = download(country, name)
-        data = extract(osmium.io.FileBuffer(raw, "pbf"))
-        del raw
+        _, _, pbf, target = sys.argv
+        data = extract(pbf)
         with gzip.open(target + ".tmp", "wt") as f:
             json.dump(data, f, separators=(",", ":"))
         os.replace(target + ".tmp", target)
@@ -106,9 +130,14 @@ def main():
     os.makedirs(OUT, exist_ok=True)
     # Largest first, so the long downloads overlap with everything else.
     order = sorted(REGIONS, key=lambda r: r[1] not in ("california", "ontario", "quebec", "british-columbia", "texas", "new-york", "florida", "pennsylvania"))
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        for line in pool.map(run, order):
-            print(line, flush=True)
+    scratch()
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            for line in pool.map(run, order):
+                print(line, flush=True)
+    finally:
+        if RAM["device"]:
+            subprocess.run(["hdiutil", "detach", RAM["device"]], capture_output=True)
     print("done", flush=True)
 
 

@@ -9,7 +9,7 @@ import { SectionIcon } from "@/components/explore/SectionIcon";
 import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf } from "@/lib/trail-catalog/activity";
 import "@/components/trails/catalog.css";
 
-export interface CatalogResult { trails: CatalogTrail[]; total: number; page: number; pages: number; limit: number; manifest: CatalogManifest }
+export interface CatalogResult { trails: CatalogTrail[]; total: number; page: number; pages: number; limit: number; manifest: CatalogManifest; /** Name/place matches when more matched than were ranked and loaded. */ queryMatches?: number }
 export function CatalogPresentation({ params, result, mapData }: { params: URLSearchParams; result: CatalogResult; mapData: CatalogMapResult | null }) {
   const filters = parseCatalogFilters(params);
   const preview = filters.limit === undefined && (!filters.page || filters.page === 1);
@@ -54,7 +54,9 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
   const where = `${params.has("lat") && !params.get("q") ? " near you" : ""}${params.get("region") ? ` in ${params.get("region")}` : ""}`;
   const resultSummary = !total
     ? "No matching trails"
-    : `${total > trails.length ? `Showing ${first === 1 ? `the first ${last.toLocaleString("en-US")}` : `${first.toLocaleString("en-US")}–${last.toLocaleString("en-US")}`} of ` : ""}${total.toLocaleString("en-US")} ${total === 1 ? "trail" : "trails"}${where}`;
+    : result.queryMatches
+      ? `Showing the ${trails.length.toLocaleString("en-US")} best of ${result.queryMatches.toLocaleString("en-US")} trails matching “${params.get("q")}”`
+      : `${total > trails.length ? `Showing ${first === 1 ? `the first ${last.toLocaleString("en-US")}` : `${first.toLocaleString("en-US")}–${last.toLocaleString("en-US")}`} of ` : ""}${total.toLocaleString("en-US")} ${total === 1 ? "trail" : "trails"}${where}`;
 
   return (
     <div className="catalog-shell">

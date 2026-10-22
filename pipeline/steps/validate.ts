@@ -10,6 +10,8 @@ import path from "node:path";
 import type { CatalogTrail } from "../../src/lib/trail-catalog/types";
 import { resolveDifficulty, DIFFICULTY_LABELS } from "../../src/lib/trail-difficulty";
 import { trailSacScale } from "../../src/lib/trail-catalog/types";
+import { PEAK_DEFINITIONS } from "../../src/lib/trail-catalog/peaks";
+import { elevations } from "../../src/lib/geo/tiles";
 
 const OFFICIAL = new Set(["NPS_OFFICIAL", "USFS_OFFICIAL", "BLM_OFFICIAL", "PARKS_CANADA_OFFICIAL", "STATE_AGENCY", "LOCAL_AGENCY"]);
 
@@ -29,11 +31,20 @@ async function main() {
     if (cells.get(r.geometryShard)![r.id]) withLine++;
   }
   console.log(`Snapshot ${path.basename(dir)}`);
-  console.log(`Trails shown:              ${shown.length.toLocaleString("en-US")} (${rows.filter((r) => r.mergedInto).length.toLocaleString("en-US")} official records merged into whole trails)`);
+  const tier = (t: string) => shown.filter((r) => r.tier === t).length;
+  console.log(`Trails shown:              ${shown.length.toLocaleString("en-US")} = ${tier("verified").toLocaleString("en-US")} verified + ${tier("mapped").toLocaleString("en-US")} mapped${shown.length - tier("verified") - tier("mapped") ? ` + ${(shown.length - tier("verified") - tier("mapped")).toLocaleString("en-US")} curated/resort` : ""} (${rows.filter((r) => r.mergedInto).length.toLocaleString("en-US")} records merged into whole trails)`);
+  const bySource: Record<string, number> = {};
+  for (const r of shown) { const k = r.source === "osm" ? (r.osm ? "OSM route relation" : "OSM named ways") : r.sourceType ?? r.source; bySource[k] = (bySource[k] ?? 0) + 1; }
+  console.log(`By source:                 ${Object.entries(bySource).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v.toLocaleString("en-US")}`).join(" · ")}`);
+  try {
+    const report = JSON.parse(await readFile(path.join(dir, "build-report.json"), "utf8")) as { rejected: Record<string, Record<string, number>>; rules: Record<string, string> };
+    console.log("Rejected by rule:");
+    for (const [rule, bySrc] of Object.entries(report.rejected)) console.log(`  ${rule.padEnd(18)} ${String(Object.values(bySrc).reduce((a, b) => a + b, 0).toLocaleString("en-US")).padStart(9)}  ${Object.entries(bySrc).map(([k, v]) => `${k} ${v.toLocaleString("en-US")}`).join(", ")}`);
+  } catch { console.log("No build-report.json in this snapshot (built before the verification filter)."); }
   console.log(`Named:                     ${pct((r) => !/^unnamed/i.test(r.name) && !r.originalName)}`);
   console.log(`OSM route relation:        ${pct((r) => Boolean(r.osm))}`);
   console.log(`Official source match:     ${pct((r) => Boolean((r.sourceType && OFFICIAL.has(r.sourceType)) || r.sources?.some((s) => OFFICIAL.has(s.type))))}`);
-  console.log(`Mapped line (elevation, water and towns computed from it on the trail page): ${((withLine / shown.length) * 100).toFixed(1)}%`);
+  console.log(`With elevation (a mapped line sampled against AWS Terrain Tiles on the trail page): ${((withLine / shown.length) * 100).toFixed(1)}%`);
   console.log(`Wikipedia description:     ${pct((r) => Boolean(r.wiki?.extract))}`);
   console.log(`Licensed photo:            ${pct((r) => Boolean(r.wiki?.image))}`);
   console.log(`Mapped trailhead/parking:  ${pct((r) => Boolean(r.trailhead && r.trailhead.kind !== "trail-end"))}`);
@@ -50,4 +61,21 @@ async function main() {
     console.log(`- ${r.name} (${r.region ?? r.country}) · ${r.miles ?? "?"} mi · ${DIFFICULTY_LABELS[d.difficulty]} · score ${r.qualityScore ?? 0} · ${r.osm ? `OSM relation ${r.osm.relation}` : r.source}${r.sources?.length ? ` + ${r.sources.length} official` : ""}${r.trailhead && r.trailhead.kind !== "trail-end" ? " · trailhead" : ""}${r.wiki ? ` · Wikidata ${r.wiki.qid}` : ""}`);
   }
 }
-main().catch((e) => { console.error(e); process.exitCode = 1; });
+main()
+  .then(elevationCheck)
+  .catch((e) => { console.error(e); process.exitCode = 1; });
+
+/**
+ * DEM sanity check: the elevation tiles sampled at every U.S. 14er summit against its known summit elevation.
+ * Terrarium at zoom 13 is ~15 m per pixel, so summits read a little low (the pixel averages the slopes around them).
+ */
+async function elevationCheck() {
+  const peaks = PEAK_DEFINITIONS.filter((p) => p.category === "14er");
+  const meters = await elevations(peaks.map((p) => [p.longitude, p.latitude] as [number, number]));
+  const diffs = peaks.map((p, i) => ({ name: p.name, known: p.summitElevationFt, dem: Math.round(meters[i] * 3.28084) })).filter((d) => Number.isFinite(d.dem));
+  const errors = diffs.map((d) => Math.abs(d.dem - d.known));
+  const mean = errors.reduce((a, b) => a + b, 0) / Math.max(1, errors.length);
+  console.log(`\nElevation check (${diffs.length} 14er summits): mean difference ${Math.round(mean)} ft, worst ${Math.max(...errors)} ft (${diffs[errors.indexOf(Math.max(...errors))]?.name}).`);
+  for (const d of diffs.slice(0, 5)) console.log(`  ${d.name}: known ${d.known.toLocaleString("en-US")} ft, DEM ${d.dem.toLocaleString("en-US")} ft`);
+}
+

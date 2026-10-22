@@ -134,7 +134,7 @@ function getCuratedExtraTrails(): CatalogTrail[] {
   return [...peaks, ...thruHikes, ...detailedSections];
 }
 
-async function select(params: URLSearchParams, fetcher: typeof fetch) {
+async function select(params: URLSearchParams, fetcher: typeof fetch): Promise<{ rows: CatalogTrail[]; manifest: Metadata; queryMatches?: number }> {
   const m = await meta(fetcher);
   const f = parseCatalogFilters(params);
   const curated = getCuratedExtraTrails();
@@ -142,11 +142,12 @@ async function select(params: URLSearchParams, fetcher: typeof fetch) {
   if (f.q) {
     const terms = normalize(f.q).split(/\s+/).filter(Boolean);
     // Fuzzy match over names, other names and places; keep the best-ranked hits and load only their cells.
-    const ranked = (await searchIndex(m, fetcher))
+    const all = (await searchIndex(m, fetcher))
       .map((e) => ({ e, rank: searchRank(matchScore(f.q!, e.entry), e.score, placeMatch(f.q!, e.entry)) }))
       .filter((x) => x.rank >= 100)
-      .sort((a, b) => b.rank - a.rank)
-      .slice(0, 300);
+      .sort((a, b) => b.rank - a.rank);
+    // Only the best 300 are loaded; `queryMatches` keeps the true count of matching trails.
+    const ranked = all.slice(0, 300);
     const keys = [...new Set(ranked.map((x) => x.e.cell))];
     const wanted = new Set(ranked.map((x) => x.e.id));
     const cellRows = (await cells(keys.slice(0, 40), m, fetcher)).filter((r) => wanted.has(r.id));
@@ -154,8 +155,9 @@ async function select(params: URLSearchParams, fetcher: typeof fetch) {
       const text = normalize(`${t.name} ${t.region ?? ""} ${t.country} ${t.note ?? ""} ${(t.tags ?? []).join(" ")}`);
       return terms.every((term) => text.includes(term));
     });
-    const seen = new Set(cellRows.map((r) => r.id));
-    return { rows: [...matchedCurated, ...cellRows.filter((r) => !seen.has(r.id))], manifest: m };
+    // Curated guides first; catalog rows that duplicate a guide's id are dropped (not the other way round).
+    const seen = new Set(matchedCurated.map((r) => r.id));
+    return { rows: [...matchedCurated, ...cellRows.filter((r) => !seen.has(r.id))], manifest: m, queryMatches: all.length + matchedCurated.length };
   }
 
   if (f.collection) {
@@ -180,12 +182,12 @@ async function select(params: URLSearchParams, fetcher: typeof fetch) {
       return w <= box[2] && w + 2 >= box[0] && s <= box[3] && s + 2 >= box[1];
     });
     const cellRows = keys.length <= 16 ? await cells(keys, m, fetcher) : [];
-    const seen = new Set(cellRows.map((r) => r.id));
+    const seen = new Set(curated.map((r) => r.id));
     return { rows: [...curated, ...cellRows.filter((r) => !seen.has(r.id))], manifest: m };
   }
 
   const overview = await asset<CatalogTrail[]>(`${m.directory}/overview.json.gz`, fetcher);
-  const seen = new Set(overview.map((r) => r.id));
+  const seen = new Set(curated.map((r) => r.id));
   return { rows: [...curated, ...overview.filter((r) => !seen.has(r.id))], manifest: m };
 }
 
@@ -412,7 +414,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       if (["points", "lines"].includes(suffix[0]) && !localTrailsVisible(zoom)) {
         return Response.json(suffix[0] === "points" ? { trails: [], clusters: [], total: 0 } : { type: "FeatureCollection", features: [] });
       }
-      const { rows, manifest } = await select(params, fetcher);
+      const { rows, manifest, queryMatches } = await select(params, fetcher);
       const f = parseCatalogFilters(params);
       const bbox = f.bbox;
       const local = bbox ? { ...f, lat: (bbox[1] + bbox[3]) / 2, lng: (bbox[0] + bbox[2]) / 2, radiusKm: 1000 } : f;
@@ -461,7 +463,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       }
 
       if (suffix[0] === "map") return Response.json(buildCatalogMap(result.trails));
-      return Response.json({ ...result, manifest });
+      return Response.json({ ...result, manifest, ...(queryMatches && queryMatches > result.total ? { queryMatches } : {}) });
     }
 
     const d = await detail(decodeURIComponent(suffix[0]), fetcher);
