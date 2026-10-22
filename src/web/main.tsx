@@ -12,7 +12,9 @@ import { CatalogPresentation, type CatalogResult } from "./CatalogPresentation";
 import { CommunityTrails } from "./CommunityTrails";
 import { GearPageClient } from "@/components/gear/GearPageClient";
 import { LocalGear } from "@/components/gear/LocalGear";
-import { TripPlanner } from "@/components/assistant/TripPlanner";
+import { PlannerStart } from "@/components/assistant/PlannerStart";
+import { AuthCallback } from "@/components/auth/AuthCallback";
+import { rowToGear } from "@/lib/account/planner-cloud";
 import { TrailDatabase } from "@/components/pack-trails/TrailDatabase";
 import { SkiMapClient } from "@/components/ski/SkiMapClient";
 import { SkiAreasPage } from "@/components/ski/SkiAreasPage";
@@ -130,13 +132,13 @@ function Planner() {
     if (!user || !client) return;
     Promise.all([client.from("gear_items").select("*").eq("user_id", user.id).limit(500), client.from("activities").select("*").eq("user_id", user.id).eq("status", "completed").eq("activity_type", "hike").limit(40), client.from("user_trails").select("*").eq("user_id", user.id).limit(100)]).then(([gear, history, trails]) => {
       if (!active) return;
-      setContext({ userId: user.id, gear: (gear.data ?? []).map(g => ({ ...g.product_details, id: String(g.id), name: String(g.name), category: g.category, type: g.type, qty: Math.max(1, Number(g.qty) || 1), weightOz: Number(g.weight) > 0 ? Number(g.weight) : null, price: Number(g.price), packedSize: g.product_details?.packedSize ?? null, sourceUrl: g.link ?? null })), activities: (history.data ?? []).map(a => ({ id: a.id, title: a.title, miles: Number(a.distance_m) / 1609.344, hours: Number(a.duration_sec) / 3600, date: a.started_at })), routes: [...REFERENCE_ROUTES, ...(trails.data ?? []).map(t => ({ id: `custom:${t.id}`, name: t.name, region: t.location, distanceMiles: Number(t.distance), elevationFt: Number(t.elevation), difficulty: t.difficulty, sourceUrl: null, sourceLabel: "Your custom route", note: "Confirm current conditions and access before travel." }))], messages: gear.error ? ["Your account gear could not be loaded."] : [] });
+      setContext({ userId: user.id, gear: (gear.data ?? []).map(rowToGear), activities: (history.data ?? []).map(a => ({ id: a.id, title: a.title, miles: Number(a.distance_m) / 1609.344, hours: Number(a.duration_sec) / 3600, date: a.started_at })), routes: [...REFERENCE_ROUTES, ...(trails.data ?? []).map(t => ({ id: `custom:${t.id}`, name: t.name, region: t.location, distanceMiles: Number(t.distance), elevationFt: Number(t.elevation), difficulty: t.difficulty, sourceUrl: null, sourceLabel: "Your custom route", note: "Confirm current conditions and access before travel." }))], messages: gear.error ? ["Your account gear could not be loaded."] : [] });
     }); return () => { active = false; };
   }, [user?.id]);
   if (loading) return <Status title="Loading your trips…" />;
   // Guests (or a signed-out session) plan with the shared reference routes only.
   const effective = user && context.userId === user.id ? context : GUEST_PLANNER;
-  return <TripPlanner context={effective} initialRegion={params.get("region") ?? ""} initialPrompt={params.get("prompt") ?? ""} />;
+  return <PlannerStart context={effective} initialRegion={params.get("region") ?? ""} initialPrompt={params.get("prompt") ?? ""} routeParam={params.get("personalTrail") ?? params.get("route")} />;
 }
 function SavedTrails() { const { user } = useAccount(); return user ? <div className="fieldbook-page"><TrailDatabase userId={user.id} /></div> : null; }
 function SkiAreaDetail() { const { slug } = useParams(); return <SkiAreaDetailPage slug={slug ?? ""} />; }
@@ -171,7 +173,7 @@ function App() {
   return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><AppShell><Routes>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<Navigate to="/explore/trails" replace />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
-    <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} />
+    <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
     <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
     <Route path="/parks/:id" element={<BackendPage />} /><Route path="/admin/*" element={<BackendPage />} /><Route path="*" element={<Status title="Page not found"><Link className="btn-ghost" href="/">Return to Hyked</Link></Status>} />

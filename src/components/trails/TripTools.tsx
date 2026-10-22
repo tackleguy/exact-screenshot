@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { TrailElevationProfile } from "./TrailElevationProfile";
-import { usePlannerMemory } from "@/components/assistant/usePlannerMemory";
+import { useMyGear } from "@/lib/account/my-gear";
 import type { WaterReport } from "@/lib/trip/water";
 import type { ElevationProfile } from "@/lib/trip/elevation";
 import type { TownDayPlan } from "@/lib/trip/town-days";
@@ -35,7 +35,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
   const elevation = useJson<ElevationProfile>(hasLine ? `${base}/elevation` : null);
   const water = useJson<WaterReport>(hasLine ? `${base}/water` : null);
   const towns = useJson<{ towns: TownWithServices[]; attribution: string }>(`${base}/towns`);
-  const { memory } = usePlannerMemory(null);
+  const myGear = useMyGear();
   const [days, setDays] = useState(() => Math.max(1, Math.round((miles ?? 8) / 12)));
   const [startDate, setStartDate] = useState("");
   const [maxCarryDays, setMaxCarryDays] = useState(5);
@@ -52,10 +52,10 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
     setPlan(r?.ok ? { state: "ready", data } : { state: "error", message: data?.error ?? "Couldn’t plan town days." });
   }
 
-  /** Packet with the gear saved in this browser's planner. */
+  /** Packet with this person's gear (account gear when signed in). */
   async function packetWithGear() {
     setPacketBusy(true);
-    const pack = memory.gear.map((g) => ({ name: g.name, quantity: g.qty, weightOz: g.weightOz, category: g.category, consumable: g.type === "Consumable" }));
+    const pack = myGear.map((g) => ({ name: g.name, quantity: g.qty, weightOz: g.weightOz, category: g.category, consumable: g.type === "Consumable" }));
     const r = await fetch("/api/trips/packet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trailId, format: "html", days, maxCarryDays, ...(startDate ? { startDate } : {}), pack }) }).catch(() => null);
     setPacketBusy(false);
     if (!r?.ok) return;
@@ -153,7 +153,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
           {hasLine && <a className="catalog-button secondary" href={`${base}/download?format=gpx&${query}`} download>GPX with water & towns</a>}
           {hasLine && <a className="catalog-button secondary" href={`${base}/download?format=csv`} download>Water list (CSV)</a>}
           <a className="catalog-button secondary" href={`${base}/download?format=html&${query}`} target="_blank" rel="noopener noreferrer">Printable trip packet</a>
-          <button type="button" className="catalog-button" onClick={packetWithGear} disabled={packetBusy}>{packetBusy ? "Preparing…" : `Packet with my gear (${memory.gear.length})`}</button>
+          <button type="button" className="catalog-button" onClick={packetWithGear} disabled={packetBusy}>{packetBusy ? "Preparing…" : `Packet with my gear (${myGear.length})`}</button>
         </div>
         <p className="catalog-muted">The packet includes the trail, town days, water, towns and your pack list from the planner. Print it or save it as a PDF.</p>
       </div>
