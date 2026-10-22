@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { TrailElevationProfile } from "./TrailElevationProfile";
-import { usePlannerMemory } from "@/components/assistant/usePlannerMemory";
+import { useMyGear } from "@/lib/account/my-gear";
 import type { WaterReport } from "@/lib/trip/water";
 import type { ElevationProfile } from "@/lib/trip/elevation";
 import type { TownDayPlan } from "@/lib/trip/town-days";
 import type { TownWithServices } from "@/lib/trip/trail-trip";
 import { SERVICE_LABELS, type ServiceKey } from "@/lib/trip/services";
+import { feet, isNum, join } from "@/lib/display";
 
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; data: T };
 const WATER = { tap: "Tap", spring: "Spring", river: "River", stream: "Stream", lake: "Lake" } as const;
@@ -34,7 +35,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
   const elevation = useJson<ElevationProfile>(hasLine ? `${base}/elevation` : null);
   const water = useJson<WaterReport>(hasLine ? `${base}/water` : null);
   const towns = useJson<{ towns: TownWithServices[]; attribution: string }>(`${base}/towns`);
-  const { memory } = usePlannerMemory(null);
+  const myGear = useMyGear();
   const [days, setDays] = useState(() => Math.max(1, Math.round((miles ?? 8) / 12)));
   const [startDate, setStartDate] = useState("");
   const [maxCarryDays, setMaxCarryDays] = useState(5);
@@ -51,10 +52,10 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
     setPlan(r?.ok ? { state: "ready", data } : { state: "error", message: data?.error ?? "Couldn’t plan town days." });
   }
 
-  /** Packet with the gear saved in this browser's planner. */
+  /** Packet with this person's gear (account gear when signed in). */
   async function packetWithGear() {
     setPacketBusy(true);
-    const pack = memory.gear.map((g) => ({ name: g.name, quantity: g.qty, weightOz: g.weightOz, category: g.category, consumable: g.type === "Consumable" }));
+    const pack = myGear.map((g) => ({ name: g.name, quantity: g.qty, weightOz: g.weightOz, category: g.category, consumable: g.type === "Consumable" }));
     const r = await fetch("/api/trips/packet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trailId, format: "html", days, maxCarryDays, ...(startDate ? { startDate } : {}), pack }) }).catch(() => null);
     setPacketBusy(false);
     if (!r?.ok) return;
@@ -74,7 +75,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
           {elevation.state === "error" && <p className="catalog-muted">{elevation.message}</p>}
           {elevation.state === "ready" && (
             <>
-              <p><strong>+{elevation.data.gainFt.toLocaleString()} ft</strong> climb · −{elevation.data.lossFt.toLocaleString()} ft descent · {elevation.data.minFt.toLocaleString()}–{elevation.data.maxFt.toLocaleString()} ft</p>
+              <p>{join([feet(elevation.data.gainFt) && `+${feet(elevation.data.gainFt)} climb`, feet(elevation.data.lossFt) && `−${feet(elevation.data.lossFt)} descent`, feet(elevation.data.minFt) && feet(elevation.data.maxFt) && `${elevation.data.minFt.toLocaleString("en-US")}–${feet(elevation.data.maxFt)}`])} <small className="catalog-muted">(in the direction the trail is mapped)</small></p>
               <TrailElevationProfile samples={elevation.data.profile.map(([mi, ft]) => ({ distance_m: mi * 1609.344, elevation_ft: ft }))} />
               <p className="catalog-muted">{elevation.data.partial ? "Part of the elevation data couldn’t be loaded, so these totals cover only part of the trail. Reload to try again." : "Estimated from sampled ground elevation along the mapped line."}</p>
             </>
@@ -93,7 +94,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
               {water.data.sources.length > 0 && (
                 <ol className="catalog-trip-list">
                   {water.data.sources.slice(0, 40).map((s, i) => (
-                    <li key={i}><span className="catalog-trip-mile">Mi {s.mile}</span> {WATER[s.kind]}{s.crossing ? " crossing" : ""}{s.name ? ` · ${s.name}` : ""} <small>{RELIABILITY[s.reliability]}{s.offTrailMeters ? ` · ${s.offTrailMeters} m off trail` : ""}</small></li>
+                    <li key={i}>{isNum(s.mile) && <span className="catalog-trip-mile">Mi {s.mile}</span>} {WATER[s.kind]}{s.crossing ? " crossing" : ""}{s.name ? ` · ${s.name}` : ""} <small>{RELIABILITY[s.reliability]}{s.offTrailMeters ? ` · ${s.offTrailMeters} m off trail` : ""}</small></li>
                   ))}
                 </ol>
               )}
@@ -110,14 +111,14 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
         {towns.state === "ready" && (towns.data.towns.length ? (
           <ul className="catalog-trip-list">
             {towns.data.towns.map((t) => (
-              <li key={t.id}><strong>{t.name}, {t.state}</strong> <small>{t.milesOffTrail} mi off trail{hasLine ? ` near mile ${t.trailMile}` : ""}</small><br /><small>{services(t).map((k) => SERVICE_LABELS[k]).join(" · ") || "No services mapped"}</small></li>
+              <li key={t.id}><strong>{join([t.name, t.state], ", ")}</strong> <small>{join([isNum(t.milesOffTrail) && `${t.milesOffTrail} mi off trail`, hasLine && isNum(t.trailMile) && `near mile ${t.trailMile}`], " ")}</small><br /><small>{services(t).map((k) => SERVICE_LABELS[k]).join(" · ") || "No services mapped"}</small></li>
             ))}
           </ul>
         ) : <p className="catalog-muted">No towns within 15 miles.</p>)}
         {towns.state === "ready" && <p className="catalog-muted">{towns.data.attribution}</p>}
       </div>
 
-      {hasLine && (
+      {hasLine && (miles ?? 0) >= 20 && (
         <div className="catalog-trip-block">
           <h3>Town days</h3>
           <p className="catalog-muted">Plan resupply stops: which town on which day, and what to buy and do there.</p>
@@ -152,7 +153,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
           {hasLine && <a className="catalog-button secondary" href={`${base}/download?format=gpx&${query}`} download>GPX with water & towns</a>}
           {hasLine && <a className="catalog-button secondary" href={`${base}/download?format=csv`} download>Water list (CSV)</a>}
           <a className="catalog-button secondary" href={`${base}/download?format=html&${query}`} target="_blank" rel="noopener noreferrer">Printable trip packet</a>
-          <button type="button" className="catalog-button" onClick={packetWithGear} disabled={packetBusy}>{packetBusy ? "Preparing…" : `Packet with my gear (${memory.gear.length})`}</button>
+          <button type="button" className="catalog-button" onClick={packetWithGear} disabled={packetBusy}>{packetBusy ? "Preparing…" : `Packet with my gear (${myGear.length})`}</button>
         </div>
         <p className="catalog-muted">The packet includes the trail, town days, water, towns and your pack list from the planner. Print it or save it as a PDF.</p>
       </div>

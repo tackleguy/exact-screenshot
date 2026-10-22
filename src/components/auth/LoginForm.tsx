@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { GoogleButton } from "./GoogleButton";
+import { nextFromLocation, SIGN_IN_UNAVAILABLE } from "@/lib/account/auth";
 
 const inputClass =
   "w-full rounded-[var(--radius-lg)] border border-[var(--control-border)] bg-surface-muted px-3 py-2.5 text-base text-cream placeholder:text-mist focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-4";
@@ -22,7 +24,7 @@ export function LoginForm() {
 
     const supabase = createClient();
     if (!supabase) {
-      setError("Account sign-in is not connected in this preview. You can still explore trails and plan trips as a guest.");
+      setError(SIGN_IN_UNAVAILABLE);
       setLoading(false);
       return;
     }
@@ -37,12 +39,14 @@ export function LoginForm() {
       return;
     }
 
-    router.push("/");
+    router.push(nextFromLocation());
     router.refresh();
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <GoogleButton next={() => nextFromLocation()} />
+      <p className="auth-divider"><span>or with email</span></p>
       <div>
         <label htmlFor="email" className="mb-1 block text-sm font-medium text-sage">
           Email
@@ -77,7 +81,7 @@ export function LoginForm() {
       </button>
       <p className="text-center text-sm text-mist">
         No account?{" "}
-        <Link href="/signup" className="font-medium text-accent hover:underline">
+        <Link href="/signup" className="font-medium text-accent hover:underline" onClick={(e) => { const next = nextFromLocation(""); if (next) { e.preventDefault(); router.push(`/signup?next=${encodeURIComponent(next)}`); } }}>
           Sign up
         </Link>
       </p>

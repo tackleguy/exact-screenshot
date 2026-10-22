@@ -14,10 +14,11 @@ import { simplifyLine } from "@/lib/geo/simplify";
 import { resolveDifficulty } from "@/lib/trail-difficulty";
 import { withinBounds } from "./map";
 import { buildCatalogMap } from "./map";
+import { trailSacScale } from "./types";
 
 const unzip = promisify(gunzip);
 const root = path.join(process.cwd(), "data/trail-catalog");
-const CATALOG_ID = /^(usgs|parks-canada|ontario|nps|usfs|blm|resort|route)-/;
+const CATALOG_ID = /^(usgs|parks-canada|ontario|nps|usfs|blm|resort|route|osm)-/;
 let catalog: Promise<{
   rows: CatalogTrail[];
   texts: string[];
@@ -73,7 +74,7 @@ function load() {
     const manifest: CatalogManifest = {
       ...baseManifest,
       total: rows.length,
-      publicTotal: rows.filter((row) => row.confidence !== "REJECTED" && row.quality !== "fragment").length,
+      publicTotal: rows.filter((row) => row.confidence !== "REJECTED" && row.quality !== "fragment" && !row.mergedInto).length,
       countries: recountCountries(rows),
       notes: [
         ...baseManifest.notes,
@@ -148,6 +149,8 @@ export async function getCatalogTrail(id: string) {
     trail = alias ? data.byId.get(alias) : undefined;
     if (!trail) return null;
   }
+  // An official record merged into a whole trail opens as that trail.
+  for (let hops = 0; trail.mergedInto && hops < 3; hops++) trail = data.byId.get(trail.mergedInto) ?? trail;
   if (trail.kind === "route" || trail.geometryShard === "route") {
     const lines: [number, number][][] = [];
     for (const memberId of trail.memberIds ?? []) {
@@ -194,7 +197,7 @@ export async function catalogDownload() {
 /** Difficulty letter for map styling: e(asy), m(oderate), h(ard), x (expert). */
 const DIFFICULTY_CODE: Record<string, string> = { easy: "e", moderate: "m", hard: "h", expert: "x" };
 const difficultyCode = (t: CatalogTrail) =>
-  DIFFICULTY_CODE[resolveDifficulty({ reported: t.difficulty, miles: t.miles, name: t.name, elevationFt: t.elevationFt ? t.elevationFt.max - t.elevationFt.min : null }).difficulty] ?? "m";
+  DIFFICULTY_CODE[resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty] ?? "m";
 
 /** Trails matching filters (ignoring the map area), cached per filter set for line lookups. */
 const idSets = new Map<string, Promise<Set<string>>>();
@@ -211,7 +214,7 @@ async function matchingIds(filters: CatalogFilters) {
   return hit;
 }
 
-export type ExplorePointTrail = [id: string, name: string, longitude: number, latitude: number, miles: number | null, difficulty: string, place: string | null, routeType: string | null];
+export type ExplorePointTrail = [id: string, name: string, longitude: number, latitude: number, miles: number | null, difficulty: string, place: string | null, routeType: string | null, qualityScore: number];
 export type ExploreCluster = [longitude: number, latitude: number, count: number, west: number, south: number, east: number, north: number];
 export interface ExplorePoints { total: number; trails: ExplorePointTrail[]; clusters: ExploreCluster[] }
 
@@ -223,7 +226,7 @@ export async function exploreCatalogPoints(filters: CatalogFilters, maxTrails = 
     return {
       total: rows.length,
       clusters: [],
-      trails: rows.map((t) => [t.id, t.name, t.longitude, t.latitude, t.miles, difficultyCode(t), t.park ?? t.forest ?? t.region, t.routeType ?? null]),
+      trails: rows.map((t) => [t.id, t.name, t.longitude, t.latitude, t.miles, difficultyCode(t), t.park ?? t.forest ?? t.region, t.routeType ?? null, t.qualityScore ?? 0]),
     };
   }
   const [west, south, east, north] = filters.bbox ?? [-180, -60, 180, 85];

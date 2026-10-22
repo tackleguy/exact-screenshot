@@ -311,9 +311,13 @@ export function formatDistance(miles: number | null) {
   return { primary: `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toLocaleString("en-US")} mi`, secondary: km < 1 ? `${Math.round(meters / 10) * 10} m` : `${km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString("en-US")} km` };
 }
 
+/**
+ * From the geometry alone: a line whose ends meet is a loop; a single line is walked out and back unless a
+ * shuttle is arranged (so it is labeled both ways); several pieces form a network.
+ */
 export const ROUTE_TYPE_LABELS: Record<RouteType, string> = {
   loop: "Loop",
-  "point-to-point": "Linear (one way)",
+  "point-to-point": "Out and back / point to point",
   network: "Trail network",
 };
 

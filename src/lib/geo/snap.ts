@@ -94,7 +94,7 @@ export function snapPointToLine(
   let minDistanceMeters = Infinity;
   let bestMerc: [number, number] = pMerc;
   let bestSegmentIndex = 0;
-  let bestAlongMeters = 0;
+  const bestAlongMeters = 0;
 
   let cumulativeDistance = 0;
   let runningAlongAtBest = 0;

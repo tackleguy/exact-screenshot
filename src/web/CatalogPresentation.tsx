@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { CatalogManifest, CatalogTrail, CatalogMapResult } from "@/lib/trail-catalog/types";
 import { parseCatalogFilters } from "@/lib/trail-catalog/search";
-import { countryName, displayMiles, trailPlace } from "@/lib/trail-catalog/types";
+import { headlineCount, countryName, displayMiles, trailPlace } from "@/lib/trail-catalog/types";
 import { QUALITY_STATUS_LABELS } from "@/lib/trail-catalog/quality";
 import { CatalogMap } from "@/components/trails/CatalogMap";
 import { NavIcon } from "@/components/nav/NavIcon";
@@ -9,7 +9,7 @@ import { SectionIcon } from "@/components/explore/SectionIcon";
 import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf } from "@/lib/trail-catalog/activity";
 import "@/components/trails/catalog.css";
 
-export interface CatalogResult { trails: CatalogTrail[]; total: number; page: number; pages: number; limit: number; manifest: CatalogManifest }
+export interface CatalogResult { trails: CatalogTrail[]; total: number; page: number; pages: number; limit: number; manifest: CatalogManifest; /** Name/place matches when more matched than were ranked and loaded. */ queryMatches?: number }
 export function CatalogPresentation({ params, result, mapData }: { params: URLSearchParams; result: CatalogResult; mapData: CatalogMapResult | null }) {
   const filters = parseCatalogFilters(params);
   const preview = filters.limit === undefined && (!filters.page || filters.page === 1);
@@ -19,7 +19,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
     filters.bbox && "Map area",
     filters.collection === "14ers" && "⛰️ 14ers (14,000+ ft Peaks)",
     filters.collection === "8000m" && "🏔️ The 14 Eight-Thousanders",
-    filters.collection === "7summits" && "👑 Seven Summits",
+    filters.collection === "7summits" && "Seven Summits",
     filters.collection === "thru-hikes" && "Through-Hikes (All Together)",
     filters.collection === "thru-sections" && "Through-Hike Sections",
     filters.country === "intl"
@@ -49,35 +49,45 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
     .filter(([code]) => code !== "US" && code !== "CA")
     .reduce((sum, [, count]) => sum + count, 0);
 
+  // One count for the whole page: "Showing the first 24 of 1,284 trails near you" when the list is capped.
+  const first = (page - 1) * limit + 1, last = Math.min(page * limit, total);
+  const where = `${params.has("lat") && !params.get("q") ? " near you" : ""}${params.get("region") ? ` in ${params.get("region")}` : ""}`;
+  const resultSummary = !total
+    ? "No matching trails"
+    : result.queryMatches
+      ? `Showing the ${trails.length.toLocaleString("en-US")} best of ${result.queryMatches.toLocaleString("en-US")} trails matching “${params.get("q")}”`
+      : `${total > trails.length ? `Showing ${first === 1 ? `the first ${last.toLocaleString("en-US")}` : `${first.toLocaleString("en-US")}–${last.toLocaleString("en-US")}`} of ` : ""}${total.toLocaleString("en-US")} ${total === 1 ? "trail" : "trails"}${where}`;
+
   return (
     <div className="catalog-shell">
       <header className="catalog-heading">
         <h1>Find your next trail.</h1>
         <p>
-          {(manifest.publicTotal ?? manifest.total).toLocaleString("en-US")} trails — whole mapped trails across the United
-          States and Canada, plus curated through-hikes, 14ers, and world summits.
+          {headlineCount(manifest).toLocaleString("en-US")} trails across the United States and Canada
+          {manifest.tiers ? ` (${manifest.tiers.verified.toLocaleString("en-US")} verified by an agency or route relation, ${manifest.tiers.mapped.toLocaleString("en-US")} mapped in OpenStreetMap)` : ""}, plus curated
+          through-hikes, 14ers and world summits.
         </p>
         <div className="catalog-quick-links">
           <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=thru-hikes">
-            🥾 All Thru-Hikes
+            Through-hikes
           </Link>
           <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=thru-sections">
-            📍 Thru Sections
+            Through-hike sections
           </Link>
           <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=14ers">
-            ⛰️ 14ers (14,000+ ft)
+            14ers
           </Link>
           <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=8000m">
-            🏔️ 8,000m Giants
+            8,000 m peaks
           </Link>
           <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=7summits">
-            👑 Seven Summits
+            Seven Summits
           </Link>
           <Link className="catalog-button secondary" href="/explore/trails/catalog?country=intl&kind=route">
-            🌍 International
+            International
           </Link>
           <Link className="catalog-button secondary" href="/explore/ski">
-            ⛷️ Ski maps
+            Ski maps
           </Link>
         </div>
         <Link className="catalog-mobile-plan" href="/plan">
@@ -104,7 +114,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
         {activity !== "all" && (
           <input type="hidden" name="activity" value={activity} />
         )}
-        {activity === "ski" && <input type="hidden" name="includeWinter" value="true" />}
+        {(activity === "ski" || activity === "sled") && <input type="hidden" name="includeWinter" value="true" />}
         <div className="catalog-search-bar">
           <label className="catalog-query">
             <span className="sr-only">Search trails</span>
@@ -226,13 +236,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
         trails={trails}
         mapData={mapData}
         query={params.toString()}
-        summary={
-          total
-            ? `${total.toLocaleString("en-US")} ${total === 1 ? "match" : "matches"}${
-                params.get("region") ? ` in ${params.get("region")}` : ""
-              }`
-            : "No matching trails"
-        }
+        summary={resultSummary}
         tools={
           <>
             {hasFilters && (
@@ -300,8 +304,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
               {preview ? (
                 <div className="catalog-preview-footer">
                   <span>
-                    Showing a preview of {total.toLocaleString("en-US")}{" "}
-                    {total === 1 ? "match" : "matches"}
+                    Showing the first {trails.length} of {total.toLocaleString("en-US")} {total === 1 ? "trail" : "trails"}
                   </span>
                   {total > trails.length && (
                     <Link className="catalog-button secondary" href={`/explore/trails/catalog?${allParams}`}>

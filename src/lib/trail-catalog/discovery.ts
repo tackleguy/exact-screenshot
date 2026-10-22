@@ -1,7 +1,9 @@
-/** Keep wide-area maps quiet; show a small local selection once the camera is close. */
+/** Zoomed out, the map shows count bubbles; from this zoom it shows individual trails. */
 export const TRAIL_DETAIL_ZOOM = 11;
-export const MAP_TRAIL_LIMIT = 24;
-export const TRAIL_CARD_LIMIT = 6;
+/** Trails drawn on the map at once (pins and lines, clustered in MapLibre's worker). */
+export const MAP_TRAIL_LIMIT = 250;
+/** Cards in the list, best-documented first; the heading always states the full count. */
+export const TRAIL_CARD_LIMIT = 12;
 export function localTrailsVisible(zoom: number) {
   return Number.isFinite(zoom) && zoom >= TRAIL_DETAIL_ZOOM;
 }

@@ -116,3 +116,14 @@
   .hx-discover { padding: 20px 16px; }
   .hx-workspace .hx-filter-options { top: 215px; }
 }
+/* Trail map workspace: controls centred over the map area (the list panel takes 350px on the right). */
+.hx-workspace .hx-stack { top: 104px; left: calc((100% - 350px) / 2); border: 1px solid var(--border); }
+.hx-workspace .hx-search--panel { top: 158px; left: calc((100% - 350px) / 2); }
+.hx-workspace .hx-top { top: 158px; }
+.hx-workspace .hx-status--error { left: calc((100% - 350px) / 2); }
+@media (max-width: 767px) {
+  .hx-workspace .hx-stack { top: 82px; left: 50%; }
+  .hx-workspace .hx-search--panel, .hx-workspace .hx-top { top: 134px; left: 50%; }
+  .hx-workspace .hx-top { left: 12px; }
+}
+.catalog-location-note { max-width: 1100px; margin: 16px auto 0; padding: 10px 14px; border-radius: 8px; background: var(--surface-muted); color: var(--foreground); font-size: 14px; }

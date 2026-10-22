@@ -41,7 +41,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const id = decodeId((await params).id);
-  if (/^(usgs|parks-canada|ontario|nps|usfs|blm|resort|route)-/.test(id)) {
+  if (/^(usgs|parks-canada|ontario|nps|usfs|blm|resort|route|osm)-/.test(id)) {
     const record = await getCatalogTrail(id);
     const isRoute = record?.trail.kind === "route";
     return {
@@ -76,7 +76,7 @@ export default async function ExploreTrailDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const id = decodeId((await params).id);
-  if (/^(usgs|parks-canada|ontario|nps|usfs|blm|resort|route)-/.test(id)) {
+  if (/^(usgs|parks-canada|ontario|nps|usfs|blm|resort|route|osm)-/.test(id)) {
     const record = await getCatalogTrail(id);
     if (!record) notFound();
     if (record.trail.id !== id) permanentRedirect(`/explore/trails/${encodeURIComponent(record.trail.id)}`);

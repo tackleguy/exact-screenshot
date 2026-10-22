@@ -1,17 +1,19 @@
 import Link from "next/link";
-import { CatalogPhotos } from "./CatalogPhotos";
 import { CatalogMapView } from "./CatalogMapView";
 import { TrailMapAndDirections } from "./TrailMapAndDirections";
 import { TripTools } from "./TripTools";
+import { TrailFeatureList } from "./TrailFeatureList";
+import { CatalogPhotos } from "./CatalogPhotos";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { TrailWeatherForecast } from "./TrailWeatherForecast";
 import type { CatalogManifest, CatalogTrail } from "@/lib/trail-catalog/types";
 import { countryName, sourceName, trailPlace } from "@/lib/trail-catalog/types";
 import { CONFIDENCE_LABELS, SOURCE_TYPE_LABELS, TRAIL_TYPE_LABELS } from "@/lib/trail-catalog/agencies";
 import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, ROUTE_TYPE_LABELS, formatDistance } from "@/lib/trail-catalog/quality";
-import { resolveDifficulty } from "@/lib/trail-difficulty";
+import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, resolveDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
 import { CatalogTrailHero } from "./CatalogTrailHero";
 import "./catalog.css";
+import { trailSacScale } from "@/lib/trail-catalog/types";
 
 export function CatalogTrailDetail({
   trail: t,
@@ -37,11 +39,7 @@ export function CatalogTrailDetail({
     ...(isRoute ? { kind: "route" } : {}),
     ...(t.region && (t.country === "US" || t.country === "CA") ? { region: t.region } : {}),
   });
-  const difficulty = resolveDifficulty({
-    reported: t.difficulty,
-    miles: t.miles,
-    name: t.name,
-  });
+  const difficulty = resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) });
 
   return (
     <article className="catalog-shell catalog-detail">
@@ -70,6 +68,15 @@ export function CatalogTrailDetail({
             </Link>
           </div>
         </div>
+      )}
+      {t.linkedTrailId && t.linkedTrailId !== t.id && (
+        <p className="catalog-section-note">
+          This guide’s map shows the real mapped line of{" "}
+          <Link className="catalog-link" href={`/explore/trails/${encodeURIComponent(t.linkedTrailId)}`}>the matching trail in the catalog</Link>.
+        </p>
+      )}
+      {(t.peakCategory || t.partOfRoute || t.kind === "route") && !hasLines && (
+        <p className="catalog-section-note">No mapped route line is available for this guide, so only its location is shown.</p>
       )}
       {isRoute && !t.peakCategory && <span className="catalog-badge">Through-hike</span>}
       {t.winterUse && (
@@ -105,12 +112,23 @@ export function CatalogTrailDetail({
           )}
         </div>
       )}
+      {t.wiki?.extract && (
+        <section className="catalog-about" aria-label="About this trail">
+          <p>{t.wiki.extract}</p>
+          <p className="catalog-muted">
+            From <a href={t.wiki.url} target="_blank" rel="noopener noreferrer">Wikipedia: {t.wiki.title}</a> (CC BY-SA 4.0).
+          </p>
+        </section>
+      )}
+      {t.osm?.description && !t.wiki?.extract && <p className="catalog-about">{t.osm.description}</p>}
       <p className="catalog-section-note">
         {isRoute
           ? t.note ??
             "This is a through-hike / long-route guide. Confirm distance, permits, and current conditions with the official trail association or land manager."
           : t.source === "resort" && t.note
             ? t.note
+          : t.osm
+            ? `This trail is an OpenStreetMap route relation: its mapped ways joined in order into one trail${t.sources?.length ? `, matched to ${t.sources.length} official record${t.sources.length > 1 ? "s" : ""}` : ""}. Check access, trailheads and conditions before you go.`
           : sections > 1
             ? `This trail joins ${sections.toLocaleString("en-US")} connected source sections that share its name. It may link to other trails; check access, trailheads and the complete route before planning your hike.`
             : "This record is a mapped trail. It may link to other trails; check access, trailheads and the complete route before planning your hike."}
@@ -126,6 +144,8 @@ export function CatalogTrailDetail({
                 ? t.source === "route-aggregate"
                   ? "Official corridor length"
                   : "Curated guide length"
+                : t.factSources?.miles
+                  ? t.factSources.miles
                 : sections > 1
                   ? `Sum of ${sections.toLocaleString("en-US")} mapped sections, overlaps counted once`
                   : t.source === "resort"
@@ -139,9 +159,9 @@ export function CatalogTrailDetail({
         </div>
         <div>
           <dt>Difficulty</dt>
-          <dd className="capitalize">
-            {difficulty.difficulty}
-            <small>{difficulty.label}</small>
+          <dd>
+            {DIFFICULTY_LABELS[difficulty.difficulty as TrailDifficulty] ?? difficulty.difficulty}
+            <small title={DIFFICULTY_FORMULA}>{difficulty.label}</small>
           </dd>
         </div>
         {t.sectionCount != null && t.sectionCount > 1 ? (
@@ -185,7 +205,6 @@ export function CatalogTrailDetail({
           ))}
         </ul>
       )}
-      {!isRoute && <CatalogPhotos trailId={t.id} />}
       <div className="catalog-detail-map-heading">
         <h2>{hasLines ? (isRoute ? "Mapped route" : "Trail map") : "Approximate location"}</h2>
         {hasLines && (
@@ -199,7 +218,7 @@ export function CatalogTrailDetail({
         )}
       </div>
       {hasLines && !isRoute ? (
-        <TrailMapAndDirections name={t.name} miles={t.miles} lines={lines} trailhead={t.trailhead} />
+        <TrailMapAndDirections name={t.name} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }} />
       ) : hasLines ? (
         <CatalogMapView lines={lines} />
       ) : (
@@ -231,6 +250,8 @@ export function CatalogTrailDetail({
         />
       )}
       <TripTools trailId={t.id} hasLine={hasLines} miles={t.miles} />
+      <TrailFeatureList trailId={t.id} hasLine={hasLines} />
+      {hasLocation && <CatalogPhotos trailId={t.id} />}
       {t.sections && t.sections.length > 0 && (
         <section className="catalog-sections-breakdown" style={{ marginTop: "2rem", marginBottom: "2rem" }}>
           <h2 style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>Trail Sections & Segments ({t.sections.length})</h2>
@@ -359,7 +380,9 @@ export function CatalogTrailDetail({
               <dd>
                 {t.elevationFt
                   ? `${t.elevationFt.min.toLocaleString("en-US")}–${t.elevationFt.max.toLocaleString("en-US")} ft (sampled; not total gain)`
-                  : "Not in source data"}
+                  : hasLines
+                    ? "Measured along the line in the elevation profile (AWS Terrain Tiles)"
+                    : "No mapped line to measure"}
               </dd>
             </div>
             <div>
@@ -382,19 +405,32 @@ export function CatalogTrailDetail({
               </div>
             )}
           </dl>
+          {t.osm && (
+            <p className="catalog-muted">
+              <a href={`https://www.openstreetmap.org/relation/${t.osm.relation}`} target="_blank" rel="noopener noreferrer">OpenStreetMap relation {t.osm.relation}</a>
+              {t.osm.network && ` · ${({ iwn: "International", nwn: "National", rwn: "Regional", lwn: "Local", icn: "International", ncn: "National", rcn: "Regional", lcn: "Local" } as Record<string, string>)[t.osm.network] ?? t.osm.network} network`}
+              {t.osm.ref && ` · ref ${t.osm.ref}`}
+              {t.osm.website && <> · <a href={t.osm.website} target="_blank" rel="noopener noreferrer">website</a></>}
+              . Line © OpenStreetMap contributors (ODbL).
+            </p>
+          )}
           {t.sources && t.sources.length > 0 && (
             <p className="catalog-muted">
-              Also mapped in:{" "}
-              {t.sources.map((ref, i) => (
-                <span key={`${ref.type}-${ref.id}`}>
-                  {i > 0 && " · "}
-                  <a href={ref.url} target="_blank" rel="noopener noreferrer">
-                    {SOURCE_TYPE_LABELS[ref.type]}
-                    {ref.officialTrailId ? ` trail #${ref.officialTrailId}` : ""}
-                    {ref.name !== t.name ? ` (“${ref.name}”)` : ""}
-                  </a>
-                </span>
-              ))}
+              {t.source === "osm" ? "Official records:" : "Also mapped in:"}{" "}
+              {/* One link per distinct source, with a count when an agency mapped several pieces. */}
+              {[...new Map(t.sources.map((ref) => [`${ref.type}:${ref.officialTrailId ?? ""}`, ref])).values()].map((ref, i) => {
+                const pieces = t.sources!.filter((x) => x.type === ref.type && (x.officialTrailId ?? "") === (ref.officialTrailId ?? "")).length;
+                return (
+                  <span key={`${ref.type}-${ref.id}`}>
+                    {i > 0 && " · "}
+                    <a href={ref.url} target="_blank" rel="noopener noreferrer">
+                      {SOURCE_TYPE_LABELS[ref.type]}
+                      {ref.officialTrailId ? ` trail #${ref.officialTrailId}` : ""}
+                      {pieces > 1 ? ` (${pieces} sections)` : ref.name !== t.name ? ` (“${ref.name}”)` : ""}
+                    </a>
+                  </span>
+                );
+              })}
             </p>
           )}
           <p>

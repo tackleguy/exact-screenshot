@@ -16,7 +16,6 @@ export const SURROUND_METERS = 1000;
 const RAD = Math.PI / 180;
 type XY = [number, number];
 const toXY = ([lng, lat]: Point): XY => [lng * 111_320 * Math.cos(lat * RAD), lat * 110_540];
-const CELL = DUPLICATE_METERS * 2;
 const key = (x: number, y: number) => (x + 2_097_152) * 4_194_304 + (y + 2_097_152);
 
 function segDist(p: XY, a: XY, b: XY) {
@@ -31,6 +30,9 @@ function segDist(p: XY, a: XY, b: XY) {
  */
 export class LineIndex {
   private cells = new Map<number, number[]>();
+  private readonly cell: number;
+  /** `radius`: how close (m) a point must be to an indexed line to count as on it. */
+  constructor(private readonly radius = DUPLICATE_METERS) { this.cell = radius * 2; }
   private coords = new Float64Array(1 << 16);
   private owners = new Int32Array(1 << 14);
   private count = 0;
@@ -46,10 +48,10 @@ export class LineIndex {
         if (segment + 1 > this.owners.length) { const next = new Int32Array(this.owners.length * 2); next.set(this.owners); this.owners = next; }
         this.coords.set([a[0], a[1], b[0], b[1]], segment * 4);
         this.owners[segment] = owner;
-        const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (CELL / 2)));
+        const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (this.cell / 2)));
         let last = NaN;
         for (let s = 0; s <= steps; s++) {
-          const k = key(Math.floor((a[0] + (b[0] - a[0]) * s / steps) / CELL), Math.floor((a[1] + (b[1] - a[1]) * s / steps) / CELL));
+          const k = key(Math.floor((a[0] + (b[0] - a[0]) * s / steps) / this.cell), Math.floor((a[1] + (b[1] - a[1]) * s / steps) / this.cell));
           if (k === last) continue;
           last = k;
           const bucket = this.cells.get(k);
@@ -59,13 +61,13 @@ export class LineIndex {
     }
   }
 
-  /** Owners with a segment within DUPLICATE_METERS of p. */
+  /** Owners with a segment within `radius` of p. */
   private near(p: XY, found: Set<number>) {
-    const cx = Math.floor(p[0] / CELL), cy = Math.floor(p[1] / CELL);
+    const cx = Math.floor(p[0] / this.cell), cy = Math.floor(p[1] / this.cell);
     for (let x = cx - 1; x <= cx + 1; x++) for (let y = cy - 1; y <= cy + 1; y++) {
       for (const segment of this.cells.get(key(x, y)) ?? []) {
         const o = segment * 4, c = this.coords;
-        if (segDist(p, [c[o], c[o + 1]], [c[o + 2], c[o + 3]]) <= DUPLICATE_METERS) found.add(this.owners[segment]);
+        if (segDist(p, [c[o], c[o + 1]], [c[o + 2], c[o + 3]]) <= this.radius) found.add(this.owners[segment]);
       }
     }
   }
@@ -91,6 +93,26 @@ export class LineIndex {
     let best = -1, bestHits = 0;
     for (const [o, n] of perOwner) if (n > bestHits) { best = o; bestHits = n; }
     return { share: total ? hit / total : 0, ownerId: best >= 0 ? this.ownerIds[best] : null };
+  }
+
+  /** Share of `lines` on each indexed record it touches. */
+  ownerShares(lines: Lines): Map<string, number> {
+    let total = 0;
+    const perOwner = new Map<number, number>();
+    const found = new Set<number>();
+    for (const line of lines) {
+      for (let i = 1; i < line.length; i++) {
+        const a = toXY(line[i - 1]), b = toXY(line[i]);
+        const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 20));
+        for (let s = i === 1 ? 0 : 1; s <= steps; s++) {
+          total++;
+          found.clear();
+          this.near([a[0] + (b[0] - a[0]) * s / steps, a[1] + (b[1] - a[1]) * s / steps], found);
+          for (const o of found) perOwner.set(o, (perOwner.get(o) ?? 0) + 1);
+        }
+      }
+    }
+    return new Map([...perOwner].map(([o, n]) => [this.ownerIds[o], total ? n / total : 0]));
   }
 
   coveredShare(lines: Lines) {

@@ -1,11 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getAllPeakTrails, getPeakGeometry, PEAK_DEFINITIONS } from "./peaks";
+import { getAllPeakTrails, PEAK_DEFINITIONS } from "./peaks";
+import { sliceRoute } from "./curated-geometry";
 import {
   DETAILED_THRU_HIKES,
   getDetailedThruHikeTrails,
-  getDetailedThruHikeLines,
-  getSectionLine,
 } from "./through-hikes-data";
 import { filterCatalog, parseCatalogFilters } from "./search";
 import { fetchOpenMeteoForecast } from "@/lib/weather/open-meteo";
@@ -65,11 +64,8 @@ test("peaks: includes all 14ers, all 14 8,000m peaks, and the Seven Summits", ()
   }
 });
 
-test("peaks: each peak has valid geometry, coordinates, and elevations", () => {
+test("peaks: each peak has valid coordinates and elevations (no drawn placeholder line)", () => {
   for (const def of PEAK_DEFINITIONS) {
-    const lines = getPeakGeometry(def.id);
-    assert.ok(lines && lines.length > 0, `Peak ${def.id} has no geometry lines`);
-    assert.ok(lines[0].length >= 10, `Peak ${def.id} geometry line too short`);
     assert.ok(Number.isFinite(def.latitude) && Number.isFinite(def.longitude));
     assert.ok(def.summitElevationFt > 0);
     assert.ok(def.summitElevationM > 0);
@@ -104,11 +100,14 @@ test("thru-hikes: provides full routes all together AND individual sections", ()
   assert.ok(jmt1);
   assert.equal(jmt1!.partOfRoute?.id, "route-jmt");
 
-  // Geometries
-  const ctLines = getDetailedThruHikeLines("route-ct");
-  assert.ok(ctLines && ctLines.length > 0);
-  const secLine = getSectionLine("ct-seg-1");
-  assert.ok(secLine && secLine.length > 0);
+});
+
+test("guide sections are cut from the real route line, and refused when the endpoints are off it", () => {
+  const route: [number, number][][] = [[[-105, 39], [-105, 39.01], [-105, 39.02], [-105, 39.03]]];
+  const cut = sliceRoute(route, [-105.0001, 39.005], [-105.0001, 39.025])!;
+  assert.ok(cut);
+  assert.ok(Math.abs(cut[0][0][1] - 39.005) < 1e-4 && Math.abs(cut[0][cut[0].length - 1][1] - 39.025) < 1e-4);
+  assert.equal(sliceRoute(route, [-104, 39], [-105, 39.02]), null, "start 85 km away");
 });
 
 test("catalog filters: collections for 14ers, 8000m, 7summits, thru-hikes, and thru-sections", () => {

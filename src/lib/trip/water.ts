@@ -1,5 +1,6 @@
 import { tileFeaturesOrNull, type LngLat, type TileFeature } from "@/lib/geo/tiles";
 import { MILE_METERS, Route, round, segmentIntersection } from "@/lib/geo/line";
+import { FEATURE_LABELS, type TrailFeature } from "@/lib/trail-catalog/features";
 
 export type WaterKind = "tap" | "spring" | "river" | "stream" | "lake";
 /** potable: a mapped drinking-water tap; treat: natural water to filter or treat; seasonal: mapped as intermittent. */
@@ -156,4 +157,30 @@ export async function waterAlong(trailLines: LngLat[][]): Promise<WaterReport> {
     attribution: "Water features © OpenStreetMap contributors, via OpenStreetMap US tiles (OpenMapTiles schema).",
     notes,
   };
+}
+
+/** The water report from the build-time feature layer (features already placed at their trail miles). */
+export function waterFromFeatures(features: TrailFeature[], trailMiles: number): WaterReport {
+  const kindOf: Partial<Record<TrailFeature["type"], WaterKind>> = { spring: "spring", drinking_water: "tap", lake: "lake", river: "river", crossing: "stream", ford: "stream" };
+  const sources: WaterSource[] = [];
+  for (const f of features) {
+    const kind = f.type === "crossing" && f.extra.waterway === "river" ? "river" : kindOf[f.type];
+    if (!kind) continue;
+    const crossing = f.type === "crossing" || f.type === "ford";
+    const seasonal = f.extra.intermittent === true || f.extra.seasonal === "yes";
+    sources.push({
+      kind, name: f.name && f.name !== FEATURE_LABELS[f.type] ? f.name : null, mile: round(f.mile, 2), offTrailMeters: crossing ? 0 : Math.round(f.offTrailFt / 3.28084), crossing,
+      reliability: kind === "tap" ? "potable" : seasonal ? "seasonal" : "treat", latitude: f.lat, longitude: f.lon,
+    });
+  }
+  const dependable = sources.filter((s) => s.reliability !== "seasonal").map((s) => s.mile);
+  const stops = [0, ...dependable, trailMiles].sort((a, b) => a - b);
+  let longestDryMiles = 0;
+  for (let i = 1; i < stops.length; i++) longestDryMiles = Math.max(longestDryMiles, stops[i] - stops[i - 1]);
+  const notes = [
+    "Treat or filter all natural water. Taps are mapped as drinking water but may be turned off seasonally.",
+    "Streams marked seasonal are mapped as intermittent and may be dry.",
+  ];
+  if (!sources.length) notes.unshift("No water is mapped along this trail. Carry all the water you need.");
+  return { sources, longestDryMiles: round(longestDryMiles, 1), trailMiles: round(trailMiles, 2), partial: false, unreadableTiles: 0, attribution: "Water features © OpenStreetMap contributors (ODbL), from Hyked's feature layer.", notes };
 }

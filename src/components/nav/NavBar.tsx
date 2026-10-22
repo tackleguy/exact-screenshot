@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { SearchBar } from "@/components/search/SearchBar";
 import { NAV_SHORTCUTS } from "@/lib/nav-shortcuts";
 import { NavIcon } from "./NavIcon";
+import { syncLabel, useSyncStatus } from "@/lib/account/sync";
 
 const navLinks = [
   { href: "/explore/trails", label: "Explore", icon: "explore" as const, hint: "G then E" },
@@ -36,14 +37,13 @@ const tools = [
   { href: "/explore/trails/catalog", label: "All trails & filters" },
   { href: "/explore/trails/catalog?kind=route", label: "Through-hikes" },
   { href: "/you", label: "Profile" },
-  { href: "/login", label: "Log in" },
-  { href: "/signup", label: "Create account" },
   { href: "/record", label: "Record activity", hint: "G then R" },
-  { href: "/", label: "Activity log", hint: "G then A" },
+  { href: "/activity", label: "Activity log", hint: "G then A" },
   { href: "/pack-trails", label: "Route guides" },
   { href: "/explore/trails/catalog?collection=community", label: "Community & GPX trails" },
   { href: "/explore/ski", label: "Ski trails" },
   { href: "/ski-areas", label: "Ski areas" },
+  { href: "/about/data", label: "Data sources & licences" },
 ];
 
 const goRoutes: Record<string, string> = {};
@@ -111,6 +111,24 @@ function MoreTools({ collapsed }: { collapsed?: boolean }) {
         </div>
       </nav>
     </details>
+  );
+}
+
+/** Account sync status: "Synced · just now", "Syncing…", "Offline — changes will sync", or "Guest · not saved". */
+function SyncBadge({ signedIn }: { signedIn: boolean }) {
+  const status = useSyncStatus();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const label = signedIn ? syncLabel(status.state === "guest" ? { ...status, state: "idle" } : status, now) : "Guest · not saved";
+  const tone = !signedIn ? "guest" : status.state === "error" ? "error" : status.state === "offline" ? "offline" : status.state === "syncing" ? "syncing" : "synced";
+  return (
+    <p className={`fieldbook-sync fieldbook-sync--${tone}`} role="status" aria-live="polite" title={status.message || label}>
+      <span className="fieldbook-sync-dot" aria-hidden="true" />
+      <span className="fieldbook-nav-label">{label}</span>
+    </p>
   );
 }
 
@@ -288,6 +306,7 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
                 <span className="fieldbook-nav-label">{link.label}</span>
               </Link>
             ))}
+            <SyncBadge signedIn={Boolean(userEmail)} />
             <div className="fieldbook-auth">
               {userEmail ? (
                 <button type="button" onClick={handleSignOut}>

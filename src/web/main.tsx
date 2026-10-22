@@ -1,18 +1,21 @@
-import { StrictMode, useEffect, useState, type ReactNode } from "react";
+import { StrictMode, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import Link from "./compat/link";
 import { AppShell } from "@/components/nav/AppShell";
-import { DeployBanner } from "@/components/nav/DeployBanner";
+import { GuestSaveBanner } from "@/components/nav/GuestSaveBanner";
 import { HomePromotion } from "@/components/home/HomePromotion";
 import { TrailExplorer } from "@/components/explore/TrailExplorer";
-import { OsmTrailPage } from "@/components/trails/OsmTrailPage";
+import { PersonalTrailPage } from "@/components/route-builder/PersonalTrailPage";
+import { OsmTrailRedirect } from "./OsmTrailRedirect";
 import { CatalogTrailDetail } from "@/components/trails/CatalogTrailDetail";
 import { CatalogPresentation, type CatalogResult } from "./CatalogPresentation";
 import { CommunityTrails } from "./CommunityTrails";
 import { GearPageClient } from "@/components/gear/GearPageClient";
 import { LocalGear } from "@/components/gear/LocalGear";
-import { TripPlanner } from "@/components/assistant/TripPlanner";
+import { PlannerStart } from "@/components/assistant/PlannerStart";
+import { AuthCallback } from "@/components/auth/AuthCallback";
+import { rowToGear } from "@/lib/account/planner-cloud";
 import { TrailDatabase } from "@/components/pack-trails/TrailDatabase";
 import { SkiMapClient } from "@/components/ski/SkiMapClient";
 import { SkiAreasPage } from "@/components/ski/SkiAreasPage";
@@ -33,6 +36,8 @@ import type { CatalogManifest, CatalogTrail, CatalogMapResult } from "@/lib/trai
 import { CATALOG_ACTIVITIES, type CatalogActivity } from "@/lib/trail-catalog/activity";
 import mountainNight from "@/assets/mountain-night.jpg";
 import { apiOrigin, installApiBridge } from "./api";
+import { RouteMeta, trailPageMeta, usePageMeta } from "./seo";
+import { DataSources } from "@/components/about/DataSources";
 import { useAccount } from "./session";
 import "@/app/globals.css";
 import "./web.css";
@@ -45,37 +50,69 @@ function RequireAccount({ children }: { children: ReactNode }) {
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   return children;
 }
+/** Without a search or filter, the catalog opens on trails near the visitor (western U.S. if location is off). */
+const WEST: { lat: number; lng: number; fallback: true } = { lat: 38.5, lng: -119.6, fallback: true };
 function Catalog() {
   const { search } = useLocation();
-  const [state, setState] = useState<{ result?: CatalogResult; map?: CatalogMapResult; error?: string }>({});
+  const needsOrigin = !["q", "collection", "lat", "bbox", "region", "country", "kind", "resort", "page"].some((k) => new URLSearchParams(search).has(k));
+  const [origin, setOrigin] = useState<{ lat: number; lng: number; fallback?: true } | null>(null);
+  const [state, setState] = useState<{ result?: CatalogResult; map?: CatalogMapResult; error?: string; for?: string }>({});
   useEffect(() => {
-    const controller = new AbortController(); setState({});
-    const params = new URLSearchParams(search); if (!params.has("limit")) params.set("limit", "4");
+    if (!needsOrigin) return;
+    let settled = false;
+    const finish = (o: { lat: number; lng: number; fallback?: true }) => { if (!settled) { settled = true; setOrigin(o); } };
+    const timer = setTimeout(() => finish(WEST), 4000);
+    if (!("geolocation" in navigator)) finish(WEST);
+    else navigator.geolocation.getCurrentPosition((p) => finish({ lat: p.coords.latitude, lng: p.coords.longitude }), () => finish(WEST), { timeout: 4000, maximumAge: 600_000 });
+    return () => clearTimeout(timer);
+  }, [needsOrigin]);
+  const query = useMemo(() => {
+    const params = new URLSearchParams(search);
+    if (!params.has("limit")) params.set("limit", "24");
+    if (needsOrigin && origin) { params.set("lat", origin.lat.toFixed(3)); params.set("lng", origin.lng.toFixed(3)); params.set("radiusKm", "50"); }
+    return params.toString();
+  }, [search, needsOrigin, origin]);
+  const waiting = needsOrigin && !origin;
+  useEffect(() => {
+    if (waiting) return;
+    const controller = new AbortController();
     Promise.all([
-      fetch(`/api/trail-catalog?${params}`, { signal: controller.signal }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error); return data as CatalogResult; }),
-      fetch(`/api/trail-catalog/map?${params}`, { signal: controller.signal }).then(res => res.ok ? res.json() : undefined).catch(() => undefined),
-    ]).then(([result, map]) => { if (!controller.signal.aborted) setState({ result, map }); }).catch(error => { if (!controller.signal.aborted) setState({ error: error.message }); });
+      fetch(`/api/trail-catalog?${query}`, { signal: controller.signal }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error); return data as CatalogResult; }),
+      fetch(`/api/trail-catalog/map?${query}`, { signal: controller.signal }).then(res => res.ok ? res.json() : undefined).catch(() => undefined),
+    ]).then(([result, map]) => { if (!controller.signal.aborted) setState({ result, map, for: query }); }).catch(error => { if (!controller.signal.aborted) setState({ error: error.message, for: query }); });
     return () => controller.abort();
-  }, [search]);
-  if (state.error) return <Status title="Trail catalog unavailable">{state.error}</Status>;
-  if (!state.result) return <Status title="Loading trails…" />;
-  return <CatalogPresentation key={search} params={new URLSearchParams(search)} result={state.result} mapData={state.map ?? null} />;
+  }, [query, waiting]);
+  if (state.for === query && state.error) return <Status title="Trail catalog unavailable">{state.error}</Status>;
+  if (waiting || state.for !== query || !state.result) return <Status title={waiting ? "Finding trails near you…" : "Loading trails…"} />;
+  return <>
+    {needsOrigin && origin?.fallback && <p className="catalog-location-note" role="status">Showing trails in the western U.S. Allow location in your browser to see trails near you.</p>}
+    <CatalogPresentation key={query} params={new URLSearchParams(query)} result={state.result} mapData={state.map ?? null} />
+  </>;
 }
 function TrailCatalogPage() {
   const { search } = useLocation();
   return new URLSearchParams(search).get("collection") === "community" ? <CommunityTrails /> : <Catalog />;
 }
-function OsmTrailRoute() { const { id } = useParams(); return <OsmTrailPage key={id} id={id ?? ""} />; }
+function OsmTrailRoute() { const { id } = useParams(); return <OsmTrailRedirect key={id} id={id ?? ""} />; }
 function TrailDetail() {
-  const { id } = useParams();
-  const [state, setState] = useState<{ trail?: CatalogTrail; lines?: [number, number][][]; manifest?: CatalogManifest; error?: string }>({});
+  const { id = "" } = useParams();
+  // Results are kept with the id they belong to, so navigating between trails never shows the previous one.
+  const [loaded, setLoaded] = useState<{ id: string; trail?: CatalogTrail; lines?: [number, number][][]; manifest?: CatalogManifest; error?: string } | null>(null);
   useEffect(() => {
-    const controller = new AbortController(); setState({});
-    Promise.all([fetch(`/api/trail-catalog/${encodeURIComponent(id ?? "")}`, { signal: controller.signal }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error); return data; }), fetch("/api/trail-catalog?limit=1", { signal: controller.signal }).then(res => res.json())]).then(([detail, catalog]) => { if (!controller.signal.aborted) setState({ ...detail, manifest: catalog.manifest }); }).catch(error => { if (!controller.signal.aborted) setState({ error: error.message }); });
+    const controller = new AbortController();
+    Promise.all([
+      fetch(`/api/trail-catalog/${encodeURIComponent(id)}`, { signal: controller.signal }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error); return data; }),
+      fetch("/api/trail-catalog?limit=1", { signal: controller.signal }).then(res => res.json()),
+    ]).then(([detail, catalog]) => { if (!controller.signal.aborted) setLoaded({ id, ...detail, manifest: catalog.manifest }); })
+      .catch(error => { if (!controller.signal.aborted) setLoaded({ id, error: error.message }); });
     return () => controller.abort();
   }, [id]);
-  if (state.error) return <Status title="Trail unavailable">{state.error}</Status>;
-  if (!state.trail || !state.manifest) return <Status title="Loading trail…" />;
+  const state = loaded?.id === id ? loaded : null;
+  usePageMeta(state?.trail ? trailPageMeta(state.trail) : null);
+  if (state?.error) return <Status title="Trail unavailable">{state.error}</Status>;
+  if (!state?.trail || !state.manifest) return <Status title="Loading trail…" />;
+  // Merged or duplicate ids open their trail; show its own address.
+  if (state.trail.id !== id) return <Navigate to={`/explore/trails/${encodeURIComponent(state.trail.id)}`} replace />;
   return <CatalogTrailDetail trail={state.trail} lines={state.lines ?? []} manifest={state.manifest} />;
 }
 function MapPage({ workspace = false }: { workspace?: boolean }) {
@@ -85,22 +122,35 @@ function MapPage({ workspace = false }: { workspace?: boolean }) {
   const activity: CatalogActivity = candidate && (CATALOG_ACTIVITIES as readonly string[]).includes(candidate) ? candidate as CatalogActivity : "hike";
   const lat = params.has("lat") ? Number(params.get("lat")) : NaN; const lng = params.has("lng") ? Number(params.get("lng")) : NaN;
   const zoom = params.has("z") ? Number(params.get("z")) : NaN;
-  return <TrailExplorer workspace={workspace} start={{ activity, trail: params.get("trail"), center: Number.isFinite(lat) && lat >= -85 && lat <= 85 && Number.isFinite(lng) && lng >= -180 && lng <= 180 ? [lng, lat] : null, zoom: Number.isFinite(zoom) && zoom >= 1 && zoom <= 20 ? zoom : null }} />;
+  // "Build a route from here": ?routeFrom=<lat>,<lng>&routeFromName=<name> opens the route builder with that start.
+  const [fromLat, fromLng] = (params.get("routeFrom") ?? "").split(",").map(Number);
+  const routeFrom = Number.isFinite(fromLat) && Number.isFinite(fromLng) && Math.abs(fromLat) <= 85 && Math.abs(fromLng) <= 180 && params.get("routeFrom") ? { point: [fromLng, fromLat] as [number, number], name: (params.get("routeFromName") ?? "").slice(0, 120) || "Trail start" } : null;
+  const center: [number, number] | null = Number.isFinite(lat) && lat >= -85 && lat <= 85 && Number.isFinite(lng) && lng >= -180 && lng <= 180 ? [lng, lat] : routeFrom?.point ?? null;
+  return <TrailExplorer workspace={workspace} start={{ activity, trail: params.get("trail"), center, zoom: Number.isFinite(zoom) && zoom >= 1 && zoom <= 20 ? zoom : routeFrom ? 13 : null, routeFrom }} />;
 }
+function PersonalTrailRoute({ shared = false }: { shared?: boolean }) {
+  const { id, token } = useParams();
+  return shared ? <PersonalTrailPage key={token} token={token ?? ""} /> : <PersonalTrailPage key={id} id={id ?? ""} />;
+}
+/** Explore links keep their query (e.g. ?routeFrom=… from a trail page) when they redirect to the map. */
+function ExploreRedirect() { const { search } = useLocation(); return <Navigate to={`/explore/trails${search}`} replace />; }
 function Gear() { const { user, loading } = useAccount(); if (loading) return <Status title="Loading gear…" />; return user ? <div className="fieldbook-page"><GearPageClient userId={user.id} /></div> : <LocalGear />; }
+const GUEST_PLANNER: PlannerContext = { userId: null, gear: [], activities: [], routes: [...REFERENCE_ROUTES], messages: [] };
 function Planner() {
   const { user, loading } = useAccount(); const { search } = useLocation(); const params = new URLSearchParams(search);
   const [context, setContext] = useState<PlannerContext>({ userId: null, gear: [], activities: [], routes: [...REFERENCE_ROUTES], messages: [] });
   useEffect(() => {
     const client = createClient(); let active = true;
-    if (!user || !client) { setContext({ userId: null, gear: [], activities: [], routes: [...REFERENCE_ROUTES], messages: [] }); return; }
+    if (!user || !client) return;
     Promise.all([client.from("gear_items").select("*").eq("user_id", user.id).limit(500), client.from("activities").select("*").eq("user_id", user.id).eq("status", "completed").eq("activity_type", "hike").limit(40), client.from("user_trails").select("*").eq("user_id", user.id).limit(100)]).then(([gear, history, trails]) => {
       if (!active) return;
-      setContext({ userId: user.id, gear: (gear.data ?? []).map(g => ({ ...g.product_details, id: String(g.id), name: String(g.name), category: g.category, type: g.type, qty: Math.max(1, Number(g.qty) || 1), weightOz: Number(g.weight) > 0 ? Number(g.weight) : null, price: Number(g.price), packedSize: g.product_details?.packedSize ?? null, sourceUrl: g.link ?? null })), activities: (history.data ?? []).map(a => ({ id: a.id, title: a.title, miles: Number(a.distance_m) / 1609.344, hours: Number(a.duration_sec) / 3600, date: a.started_at })), routes: [...REFERENCE_ROUTES, ...(trails.data ?? []).map(t => ({ id: `custom:${t.id}`, name: t.name, region: t.location, distanceMiles: Number(t.distance), elevationFt: Number(t.elevation), difficulty: t.difficulty, sourceUrl: null, sourceLabel: "Your custom route", note: "Confirm current conditions and access before travel." }))], messages: gear.error ? ["Your account gear could not be loaded."] : [] });
+      setContext({ userId: user.id, gear: (gear.data ?? []).map(rowToGear), activities: (history.data ?? []).map(a => ({ id: a.id, title: a.title, miles: Number(a.distance_m) / 1609.344, hours: Number(a.duration_sec) / 3600, date: a.started_at })), routes: [...REFERENCE_ROUTES, ...(trails.data ?? []).map(t => ({ id: `custom:${t.id}`, name: t.name, region: t.location, distanceMiles: Number(t.distance), elevationFt: Number(t.elevation), difficulty: t.difficulty, sourceUrl: null, sourceLabel: "Your custom route", note: "Confirm current conditions and access before travel." }))], messages: gear.error ? ["Your account gear could not be loaded."] : [] });
     }); return () => { active = false; };
   }, [user?.id]);
   if (loading) return <Status title="Loading your trips…" />;
-  return <TripPlanner context={context} initialRegion={params.get("region") ?? ""} initialPrompt={params.get("prompt") ?? ""} />;
+  // Guests (or a signed-out session) plan with the shared reference routes only.
+  const effective = user && context.userId === user.id ? context : GUEST_PLANNER;
+  return <PlannerStart context={effective} initialRegion={params.get("region") ?? ""} initialPrompt={params.get("prompt") ?? ""} routeParam={params.get("personalTrail") ?? params.get("route")} />;
 }
 function SavedTrails() { const { user } = useAccount(); return user ? <div className="fieldbook-page"><TrailDatabase userId={user.id} /></div> : null; }
 function SkiAreaDetail() { const { slug } = useParams(); return <SkiAreaDetailPage slug={slug ?? ""} />; }
@@ -117,18 +167,28 @@ function ActivityDetail() {
   if (!activity) return <Status title="Loading activity…" />;
   return <section className="fieldbook-page"><Link className="btn-ghost" href="/you">← Your activities</Link><h1>{activity.title}</h1><RouteMiniMap route={activity.route_geojson} className="h-80 w-full" /><ActivityStats distanceM={Number(activity.distance_m)} durationSec={Number(activity.duration_sec)} elevationGainFt={Number(activity.elevation_gain_ft)} /><p>{activity.notes}</p></section>;
 }
+/** Activity log: recorded hikes for signed-in people; guests learn where their recordings will appear. */
+function ActivityLog() {
+  const { user, loading } = useAccount();
+  usePageMeta({ title: "Activity log | Hyked", description: "Your recorded hikes, runs, rides and ski days." });
+  if (loading) return <Status title="Loading your activity…" />;
+  if (user) return <ActivityFeed />;
+  return <Status title="Your activity log"><p>Hikes you record with Hyked are listed here once you sign in, on every device.</p><Link className="btn-primary" href="/login?next=%2Factivity">Sign in</Link> <Link className="btn-ghost" href="/record">Record a hike</Link></Status>;
+}
 function Home() {
   const { user } = useAccount();
   return <><HomePromotion signedIn={Boolean(user)} />{user && <ActivityFeed />}</>;
 }
-function BackendPage() { const location = useLocation(); return <Status title="This page needs live trail services">{apiOrigin ? <a className="btn-primary" href={`${apiOrigin}${location.pathname}${location.search}`}>Open this page</a> : "Live trail services are not connected yet."}</Status>; }
+function BackendPage() { const location = useLocation(); return <Status title="This page is unavailable right now">{apiOrigin ? <a className="btn-primary" href={`${apiOrigin}${location.pathname}${location.search}`}>Open this page</a> : "Please try again later."}</Status>; }
 function App() {
-  return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><AppShell notice={<DeployBanner />}><Routes>
-    <Route path="/" element={<Home />} /><Route path="/explore" element={<Navigate to="/explore/trails" replace />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
+  const { user } = useAccount();
+  const { pathname } = useLocation();
+  return <><RouteMeta pathname={pathname} /><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><AppShell><Routes>
+    <Route path="/" element={<Home />} /><Route path="/explore" element={<ExploreRedirect />} /><Route path="/my/trails/:id" element={<PersonalTrailRoute />} /><Route path="/shared/trails/:token" element={<PersonalTrailRoute shared />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
-    <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} />
+    <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
-    <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
+    <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/about/data" element={<DataSources />} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
     <Route path="/parks/:id" element={<BackendPage />} /><Route path="/admin/*" element={<BackendPage />} /><Route path="*" element={<Status title="Page not found"><Link className="btn-ghost" href="/">Return to Hyked</Link></Status>} />
   </Routes></AppShell></>;
 }

@@ -372,32 +372,5 @@ export function getDetailedThruHikeTrails(): {
   return { thruHikes, sections };
 }
 
-/** Generate realistic coordinates for a through-hike section. */
-export function generateSectionLine(s: ThruHikeSection): [number, number][] {
-  const steps = 20;
-  const line: [number, number][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const wobble = Math.sin(t * Math.PI * 2) * 0.004;
-    const lng = s.startLng + (s.endLng - s.startLng) * t + wobble;
-    const lat = s.startLat + (s.endLat - s.startLat) * t - wobble * 0.5;
-    line.push([Number(lng.toFixed(5)), Number(lat.toFixed(5))]);
-  }
-  return line;
-}
-
-/** Get lines for a detailed thru-hike by stitching its sections. */
-export function getDetailedThruHikeLines(id: string): [number, number][][] | null {
-  const hike = DETAILED_THRU_HIKES.find((h) => h.id === id);
-  if (!hike) return null;
-  return hike.sections.map(generateSectionLine);
-}
-
-/** Get line for an individual section. */
-export function getSectionLine(id: string): [number, number][][] | null {
-  for (const hike of DETAILED_THRU_HIKES) {
-    const s = hike.sections.find((sec) => sec.id === id);
-    if (s) return [generateSectionLine(s)];
-  }
-  return null;
-}
+// Section and route lines come from the matched OpenStreetMap relation at build time (curated.json.gz),
+// never from straight lines between the listed start and end points.

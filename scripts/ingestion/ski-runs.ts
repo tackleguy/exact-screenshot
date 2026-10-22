@@ -1,6 +1,8 @@
 /** Downloads the OpenSkiMap run and ski-area exports (ODbL, © OpenStreetMap contributors) and keeps the
  * U.S. and Canadian features in a compact cache that `npm run source:trails` uses to find catalog records
  * that are really ski runs. Run with npm run source:ski [--refresh].
+ * With --world it also writes runs-world.json.gz: every run that belongs to a ski area, worldwide, for the
+ * ski-area export (scripts/export/ski-areas.ts).
  */
 import { createReadStream } from "node:fs";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
@@ -15,6 +17,7 @@ import type { SkiRunCache } from "../../src/lib/trail-catalog/ski-runs";
 const cache = path.join(process.cwd(), ".cache/ski");
 const refresh = process.argv.includes("--refresh");
 const COUNTRIES = new Set(["US", "CA"]);
+const world = process.argv.includes("--world");
 const round = (n: number) => Math.round(n * 1e5) / 1e5;
 
 async function download(name: string) {
@@ -37,7 +40,8 @@ async function* features(file: string) {
 }
 
 const inRegion = (props: Record<string, unknown>) =>
-  (props.places as { iso3166_1Alpha2?: string }[] | undefined)?.some((p) => COUNTRIES.has(p.iso3166_1Alpha2 ?? "")) ?? false;
+  world ||
+  ((props.places as { iso3166_1Alpha2?: string }[] | undefined)?.some((p) => COUNTRIES.has(p.iso3166_1Alpha2 ?? "")) ?? false);
 
 async function main() {
   await mkdir(cache, { recursive: true });
@@ -55,6 +59,7 @@ async function main() {
     seen++;
     const p = f.properties;
     if (p.type !== "run" || !inRegion(p)) continue;
+    if (world && !(p.skiAreas as unknown[] | undefined)?.length) continue;
     const g = f.geometry;
     const lines = g.type === "LineString" ? [g.coordinates as number[][]] : g.type === "MultiLineString" ? (g.coordinates as number[][][]) : g.type === "Polygon" ? [(g.coordinates as number[][][])[0]] : g.type === "MultiPolygon" ? (g.coordinates as number[][][][]).map((poly) => poly[0]) : [];
     if (!lines.length) continue;
@@ -68,7 +73,7 @@ async function main() {
       lines: lines.map((line) => line.map(([x, y]) => [round(x), round(y)] as [number, number])),
     });
   }
-  await writeFile(path.join(cache, "runs-na.json.gz"), gzipSync(JSON.stringify(out)));
-  console.log(`${seen.toLocaleString()} runs scanned; kept ${out.runs.length.toLocaleString()} U.S./Canadian runs and ${out.areas.length.toLocaleString()} ski areas.`);
+  await writeFile(path.join(cache, world ? "runs-world.json.gz" : "runs-na.json.gz"), gzipSync(JSON.stringify(out)));
+  console.log(`${seen.toLocaleString()} runs scanned; kept ${out.runs.length.toLocaleString()} ${world ? "ski-area" : "U.S./Canadian"} runs and ${out.areas.length.toLocaleString()} ski areas.`);
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

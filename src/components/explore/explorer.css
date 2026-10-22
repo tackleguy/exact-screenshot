@@ -15,6 +15,7 @@
   font-variant-numeric: tabular-nums;
 }
 .hx-map { position: absolute; inset: 0; }
+.hx-map-canvas { position: absolute; inset: 0; }
 .hx :focus-visible { outline: 2px solid var(--hx-hi); outline-offset: 2px; }
 :where(.hx) button { font: inherit; color: inherit; cursor: pointer; }
 .hx ::selection { background: var(--hx-hi); color: var(--hx-ink); }
@@ -189,3 +190,50 @@
   .hx-card--active { max-height: calc(100dvh - 325px); }
   .hx-rail-wrap { bottom: 26px; }
 }
+
+/* One control stack at the top centre of the map: search, locate, zoom, tilt, full screen, 3D, Maps. */
+.hx-stack { position: absolute; z-index: 4; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 4px; border-radius: 10px; background: var(--hx-ink); box-shadow: var(--hx-shadow); }
+.hx-stack .hx-ctl { width: 40px; height: 40px; border: 0; border-radius: 8px; background: transparent; box-shadow: none; }
+.hx-stack .hx-ctl:hover { background: var(--hx-ink-2); }
+.hx-stack .hx-ctl--text { width: auto; padding: 0 10px; }
+.hx-pop--right { left: auto; right: 0; }
+.hx-layer-toggles { display: grid; gap: 0; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--hx-line); }
+.hx-layer--standard .hx-layer-swatch { background-color: #f3efe6; background-image: linear-gradient(115deg, transparent 44%, #ffffff 44% 52%, transparent 52%), linear-gradient(20deg, transparent 60%, #f6d58d 60% 66%, transparent 66%); }
+.hx-search--panel { position: absolute; z-index: 6; top: 70px; left: 50%; transform: translateX(-50%); width: min(420px, calc(100% - 32px)); }
+.hx-top { top: 72px; }
+.hx-status--error { top: auto; bottom: 40px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); }
+.hx-results-heading p { margin: 3px 0 0; font-size: 12.5px; color: var(--hx-muted); }
+/* MapLibre's geolocate button is driven from the stack; only its blue dot shows. */
+.hx .maplibregl-ctrl-group:has(.maplibregl-ctrl-geolocate) { display: none; }
+
+/* The map never sits blank: a skeleton until the style and first trails arrive. */
+.hx-loading { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; overflow: hidden; background: #ebe7dc; color: #4b5a49; pointer-events: none; }
+.hx-loading p { position: relative; margin: 0; padding: 8px 14px; border-radius: 8px; background: rgb(255 255 255 / 0.85); font-size: 14px; font-weight: 600; }
+.hx-loading-sheen { position: absolute; inset: 0; background: repeating-linear-gradient(115deg, transparent 0 60px, rgb(255 255 255 / 0.35) 60px 64px), linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 0.55) 50%, transparent 70%); background-size: auto, 200% 100%; animation: hx-sheen 1.4s ease-in-out infinite; }
+@keyframes hx-sheen { from { background-position: 0 0, 150% 0; } to { background-position: 0 0, -50% 0; } }
+
+/* Mobile: a handle tells people the trail list lives below the map. */
+.hx-sheet-handle { display: none; }
+@media (max-width: 767px) {
+  .hx-stack { top: 12px; max-width: calc(100% - 24px); overflow-x: auto; scrollbar-width: none; }
+  .hx-stack::-webkit-scrollbar { display: none; }
+  .hx-search--panel { top: 64px; }
+  .hx-top { top: 64px; }
+  .hx-sheet-handle { position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; width: 100%; padding: 8px 16px 12px; border: 0; border-bottom: 1px solid var(--hx-line); background: var(--hx-ink); color: var(--hx-text); text-align: left; font-size: 15px; font-weight: 650; pointer-events: auto; }
+  .hx-sheet-handle small { color: var(--hx-muted); font-size: 12px; font-weight: 500; }
+  .hx-sheet-grip { grid-column: 1 / -1; justify-self: center; width: 40px; height: 4px; margin-bottom: 4px; border-radius: 2px; background: var(--hx-muted); opacity: 0.6; }
+  .hx-rail-wrap .hx-results-heading h2 { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .hx-loading-sheen { animation: none; } }
+
+/* Route builder open: the route panel replaces the trail list. */
+.hx-rail-wrap--routing { display: none; }
+/* My trails: saved personal routes, above the list. */
+.hx-mytrails { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 16px 8px; pointer-events: auto; }
+.hx-mytrails > span { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--hx-muted); }
+.hx-mytrail { display: inline-flex; align-items: baseline; gap: 6px; padding: 6px 10px; border-radius: 999px; background: var(--hx-ink); box-shadow: var(--hx-shadow); color: var(--hx-text); font-size: 13px; font-weight: 600; text-decoration: none; border-left: 3px solid #8b5cf6; }
+.hx-mytrail small { font-weight: 500; color: var(--hx-muted); }
+.hx-popup .maplibregl-popup-content { padding: 8px 10px; border-radius: 8px; background: #10201a; color: #f4f2ec; box-shadow: 0 6px 20px rgb(6 14 11 / 0.28); }
+.hx-popup .maplibregl-popup-tip { border-top-color: #10201a; border-bottom-color: #10201a; }
+.hx-feature-pop { display: grid; gap: 2px; font: 13px/1.35 system-ui, sans-serif; }
+.hx-feature-pop small { color: #b6c3ba; }

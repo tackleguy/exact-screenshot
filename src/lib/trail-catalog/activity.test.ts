@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   matchesCatalogActivity,
   parseCatalogActivity,
+  sectionOf,
   trailActivities,
 } from "./activity";
 import { filterCatalog, parseCatalogFilters } from "./search";
@@ -68,4 +69,18 @@ test("default hike filter keeps summer hiking and drops ski-named sections", () 
   assert.deepEqual(filterCatalog(rows, { activity: "bike" }).trails.map((t) => t.id), ["bike"]);
   assert.ok(filterCatalog(rows, { activity: "backpack" }).trails.some((t) => t.id === "route"));
   assert.ok(filterCatalog(rows, { activity: "run" }).trails.some((t) => t.id === "hike"));
+});
+
+test("OpenStreetMap pistes and water trails get the snow, sled and paddle sections", () => {
+  const sled = stub({ id: "sled", name: "Rodelbahn Hahnenkamm", source: "osm", winterUse: "downhill", osmWay: { ids: [1], highway: "piste", pisteType: "sled" }, uses: ["Sledding"] });
+  assert.deepEqual(trailActivities(sled).sort(), ["ski", "sled"]);
+  const sledRoute = stub({ id: "sr", name: "Schlittenweg", source: "osm", osm: { relation: 2, route: "piste", pisteType: "sled" } });
+  assert.deepEqual(trailActivities(sledRoute), ["ski", "sled"]);
+  const canoe = stub({ id: "c", name: "Bowron Lakes Canoe Circuit", source: "osm", osm: { relation: 3, route: "canoe" } });
+  assert.deepEqual(trailActivities(canoe), ["paddle"]);
+  assert.equal(sectionOf("paddle").key, "water");
+  assert.equal(sectionOf("sled").key, "snow");
+  assert.equal(parseCatalogFilters(new URLSearchParams("activity=sled")).includeWinter, true);
+  assert.deepEqual(filterCatalog([sled, stub({ id: "h", name: "Hahnenkamm Trail" })], { activity: "sled" }).trails.map((t) => t.id), ["sled"]);
+  assert.deepEqual(filterCatalog([sled, stub({ id: "h", name: "Hahnenkamm Trail" })], { activity: "hike" }).trails.map((t) => t.id), ["h"]);
 });

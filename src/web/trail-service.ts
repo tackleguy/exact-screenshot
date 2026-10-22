@@ -2,25 +2,69 @@ import { parseCatalogFilters, filterCatalog, normalize, distanceKm } from "@/lib
 import type { CatalogTrail, CatalogManifest } from "@/lib/trail-catalog/types";
 import { buildCatalogMap } from "@/lib/trail-catalog/map";
 import { resolveDifficulty } from "@/lib/trail-difficulty";
-import { parseCommonsPhoto, type CommonsPage } from "@/lib/trail-catalog/photos";
+import { chainLines } from "@/lib/geo/line";
+import { measureLines } from "@/lib/trail-catalog/quality";
+import { nearbyCatalogPhotos, wikiPhotos } from "@/lib/trail-catalog/photos";
+import { matchScore, placeMatch, searchEntry, searchRank, type SearchEntry } from "@/lib/trail-catalog/fuzzy";
+import type { LngLat } from "@/lib/geo/tiles";
+import { elevationProfile } from "@/lib/trip/elevation";
+import { waterAlong, waterFromFeatures } from "@/lib/trip/water";
+import { featureFromRow, featuresAlong, FEATURE_LABELS, type FeatureRow, type TrailFeature } from "@/lib/trail-catalog/features";
+import { cellsInBounds, geometryCell } from "@/lib/trail-catalog/cells";
+import { parseTowns, townServices, townsNear, type Town } from "@/lib/trip/towns-core";
+import { planTownDays } from "@/lib/trip/town-days";
+import { tripGpx, tripPacketHtml, waterCsv, type PackItem, type TripBundle } from "@/lib/trip/packet";
+import { MIN_MAPPED_SHARE, mappedShare, planningMiles, townDayOptions, unplannable } from "@/lib/trip/planning";
 import { catalogGpx } from "@/lib/trail-catalog/gpx";
 import { readableTrailName, MAP_TRAIL_LIMIT, TRAIL_CARD_LIMIT, localTrailsVisible } from "@/lib/trail-catalog/discovery";
+import { sectionOf } from "@/lib/trail-catalog/activity";
 import { TrailheadIndex, trailEnds, type TrailheadCache } from "@/lib/trail-catalog/access";
-import { getAllPeakTrails, getPeakGeometry } from "@/lib/trail-catalog/peaks";
+import { getAllPeakTrails } from "@/lib/trail-catalog/peaks";
 import {
   DETAILED_THRU_HIKES,
   getDetailedThruHikeTrails,
-  getDetailedThruHikeLines,
-  getSectionLine,
 } from "@/lib/trail-catalog/through-hikes-data";
-import { fetchLiveOsmTrails } from "@/lib/geo/overpass";
 import { snapPointToNearestLine, simplifyForZoom } from "@/lib/geo/snap";
+import { countryName, trailSacScale } from "@/lib/trail-catalog/types";
+import { cellBounds, cellFile, cellKeyOf, cellRef, lookupShard } from "@/lib/trail-catalog/static-data";
 
-type Metadata = CatalogManifest & { directory: string; cells: string[] };
+type Metadata = CatalogManifest & {
+  directory: string;
+  /** 2° cells with U.S./Canada trails. */
+  cells: string[];
+  /** 2° cell → countries with worldwide trails in it (one file each). */
+  worldCells?: Record<string, string[]>;
+  /** Countries with their own search index. */
+  searchShards?: string[];
+  /** Normalized region name → countries it is in (to pick country indexes for a query like "trails in Bavaria"). */
+  regionCountries?: Record<string, string[]>;
+  /** Trail ids are found through lookup/l-<hh>.json.gz. */
+  lookupShards?: boolean;
+  featureCells?: string[];
+};
 type Lines = [number, number][][];
 const cache = new Map<string, Promise<unknown>>();
 let metadata: Promise<Metadata> | undefined;
 let trailheads: Promise<TrailheadIndex> | undefined;
+let towns: Promise<Town[]> | undefined;
+const TOWNS_ATTRIBUTION = "Towns from GeoNames (CC BY 4.0). Services © OpenStreetMap contributors, via OpenStreetMap US tiles. Check hours and availability before relying on any business.";
+const computed = new Map<string, Promise<unknown>>();
+/** Per-trail results are kept for the session; failures are retried next time. */
+function memo<T>(key: string, make: () => Promise<T>): Promise<T> {
+  let hit = computed.get(key) as Promise<T> | undefined;
+  if (!hit) {
+    hit = make();
+    hit.catch(() => computed.delete(key));
+    computed.set(key, hit);
+    if (computed.size > 200) computed.delete(computed.keys().next().value ?? "");
+  }
+  return hit;
+}
+async function allTowns(fetcher: typeof fetch) {
+  const m = await meta(fetcher);
+  towns ??= asset<{ towns: [number, string, string, string, number, number, number][] }>(`${m.directory}/towns.json.gz`, fetcher).then(parseTowns).catch((error) => { towns = undefined; throw error; });
+  return towns;
+}
 
 async function asset<T>(file: string, fetcher: typeof fetch): Promise<T> {
   let hit = cache.get(file);
@@ -59,13 +103,81 @@ function meta(fetcher: typeof fetch) {
   return metadata;
 }
 
-async function cells(keys: string[], m: Metadata, fetcher: typeof fetch) {
+/** Every cell file of the given 2° cells: the U.S./Canada file and one file per country with worldwide trails. */
+function cellRefs(keys: string[], m: Metadata) {
+  return keys.flatMap((k) => [...(m.cells.includes(k) ? [k] : []), ...(m.worldCells?.[k] ?? []).map((c) => cellRef(k, c))]);
+}
+/** 2° cells (U.S./Canada or worldwide) that overlap a box. */
+function cellKeysIn(m: Metadata, box: [number, number, number, number]) {
+  return [...new Set([...m.cells, ...Object.keys(m.worldCells ?? {})])].filter((key) => {
+    const [w, s, e, n] = cellBounds(key);
+    return w <= box[2] && e >= box[0] && s <= box[3] && n >= box[1];
+  });
+}
+
+/** Rows of the given cell files (refs from cellRefs or the search index). */
+async function cells(refs: string[], m: Metadata, fetcher: typeof fetch) {
+  const known = (ref: string) => (ref.includes("~") ? (m.worldCells?.[cellKeyOf(ref)] ?? []).includes(ref.split("~")[1]) : m.cells.includes(ref));
   const rows = (
     await Promise.all(
-      keys.filter((k) => m.cells.includes(k)).map((k) => asset<CatalogTrail[]>(`${m.directory}/cell-${k}.json.gz`, fetcher)),
+      [...new Set(refs)].filter(known).map((ref) => asset<CatalogTrail[]>(`${m.directory}/${cellFile(ref)}`, fetcher)),
     )
   ).flat();
   return rows.filter((t) => t.confidence !== "REJECTED").map((t) => ({ ...t, name: readableTrailName(t.name, t.id) }));
+}
+
+let curatedPromise: Promise<{ lines: Record<string, Lines>; links: Record<string, string> }> | undefined;
+/** Real lines and catalog links for the curated guides (built by scripts/ingestion/rebuild-catalog.ts). */
+function curated(m: Metadata, fetcher: typeof fetch) {
+  curatedPromise ??= asset<{ lines: Record<string, Lines>; links: Record<string, string> }>(`${m.directory}/curated.json.gz`, fetcher).catch(() => ({ lines: {}, links: {} }));
+  return curatedPromise;
+}
+
+type IndexRow = [id: string, name: string, alt: string, place: string, cell: string, score: number];
+interface IndexEntry { id: string; cell: string; score: number; entry: SearchEntry }
+let indexPromise: Promise<IndexEntry[]> | undefined;
+/** The search index, kept in the browser's Cache Storage per snapshot so later visits skip the download. */
+function searchIndex(m: Metadata, fetcher: typeof fetch) {
+  indexPromise ??= (async () => {
+    const file = `${m.directory}/search.json.gz`;
+    let rows: IndexRow[] | null = null;
+    const store = typeof caches !== "undefined" ? await caches.open("hyked-search").catch(() => null) : null;
+    const key = `/trail-data/${file}.json`;
+    const hit = await store?.match(key).catch(() => undefined);
+    if (hit) rows = await hit.json().catch(() => null);
+    if (!rows) {
+      rows = await asset<IndexRow[]>(file, fetcher);
+      await store?.put(key, new Response(JSON.stringify(rows), { headers: { "Content-Type": "application/json" } })).catch(() => undefined);
+    }
+    return toEntries(rows);
+  })().catch((error) => { indexPromise = undefined; throw error; });
+  return indexPromise;
+}
+
+const toEntries = (rows: IndexRow[]): IndexEntry[] => rows.map(([id, name, alt, place, cell, score]) => ({
+  id, cell, score: Number(score) || 0,
+  entry: searchEntry({ name, altNames: alt ? alt.split(" | ") : [], manager: place }),
+}));
+const shardEntries = new Map<string, Promise<IndexEntry[]>>();
+/** Every trail of one country (the main index holds only the best worldwide trails). */
+function countryIndex(m: Metadata, code: string, fetcher: typeof fetch) {
+  let hit = shardEntries.get(code);
+  if (!hit) {
+    hit = asset<IndexRow[]>(`${m.directory}/search/s-${code}.json.gz`, fetcher).then(toEntries).catch((error) => { shardEntries.delete(code); throw error; });
+    shardEntries.set(code, hit);
+  }
+  return hit;
+}
+/** Countries a query names (by country or region name) or the country filter picks, that have their own index. */
+function queryCountries(m: Metadata, q: string, country?: string) {
+  const shards = new Set(m.searchShards ?? []);
+  if (!shards.size) return [];
+  const text = ` ${normalize(q).replace(/[^\p{L}\p{N}]+/gu, " ")} `;
+  const out = new Set<string>();
+  if (country && shards.has(country)) out.add(country);
+  for (const code of shards) if (text.includes(` ${normalize(countryName(code))} `)) out.add(code);
+  for (const [region, codes] of Object.entries(m.regionCountries ?? {})) if (region.length > 3 && text.includes(` ${region} `)) for (const c of codes) if (shards.has(c)) out.add(c);
+  return [...out].slice(0, 4);
 }
 
 function getCuratedExtraTrails(): CatalogTrail[] {
@@ -74,22 +186,34 @@ function getCuratedExtraTrails(): CatalogTrail[] {
   return [...peaks, ...thruHikes, ...detailedSections];
 }
 
-async function select(params: URLSearchParams, fetcher: typeof fetch) {
+async function select(params: URLSearchParams, fetcher: typeof fetch): Promise<{ rows: CatalogTrail[]; manifest: Metadata; queryMatches?: number }> {
   const m = await meta(fetcher);
   const f = parseCatalogFilters(params);
   const curated = getCuratedExtraTrails();
 
   if (f.q) {
     const terms = normalize(f.q).split(/\s+/).filter(Boolean);
-    const index = await asset<[string, string, string][]>(`${m.directory}/search.json.gz`, fetcher);
-    const keys = [...new Set(index.filter(([, text]) => terms.every((t) => normalize(text).includes(t))).map(([, , key]) => key))];
-    const cellRows = await cells(keys.slice(0, 30), m, fetcher);
+    // Fuzzy match over names, other names and places; keep the best-ranked hits and load only their cells.
+    // A query naming a country or region also searches every trail of that country.
+    const [main, ...extra] = await Promise.all([searchIndex(m, fetcher), ...queryCountries(m, f.q, f.country).map((c) => countryIndex(m, c, fetcher).catch(() => []))]);
+    const seenIds = new Set<string>();
+    const all = [...main, ...extra.flat()]
+      .filter((e) => !seenIds.has(e.id) && Boolean(seenIds.add(e.id)))
+      .map((e) => ({ e, rank: searchRank(matchScore(f.q!, e.entry), e.score, placeMatch(f.q!, e.entry)) }))
+      .filter((x) => x.rank >= 100)
+      .sort((a, b) => b.rank - a.rank);
+    // Only the best 300 are loaded; `queryMatches` keeps the true count of matching trails.
+    const ranked = all.slice(0, 300);
+    const keys = [...new Set(ranked.map((x) => x.e.cell))];
+    const wanted = new Set(ranked.map((x) => x.e.id));
+    const cellRows = (await cells(keys.slice(0, 40), m, fetcher)).filter((r) => wanted.has(r.id));
     const matchedCurated = curated.filter((t) => {
       const text = normalize(`${t.name} ${t.region ?? ""} ${t.country} ${t.note ?? ""} ${(t.tags ?? []).join(" ")}`);
       return terms.every((term) => text.includes(term));
     });
-    const seen = new Set(cellRows.map((r) => r.id));
-    return { rows: [...matchedCurated, ...cellRows.filter((r) => !seen.has(r.id))], manifest: m };
+    // Curated guides first; catalog rows that duplicate a guide's id are dropped (not the other way round).
+    const seen = new Set(matchedCurated.map((r) => r.id));
+    return { rows: [...matchedCurated, ...cellRows.filter((r) => !seen.has(r.id))], manifest: m, queryMatches: all.length + matchedCurated.length };
   }
 
   if (f.collection) {
@@ -107,19 +231,14 @@ async function select(params: URLSearchParams, fetcher: typeof fetch) {
       lng + pad / Math.max(0.2, Math.cos((lat * Math.PI) / 180)),
       lat + pad,
     ];
-    const keys = m.cells.filter((key) => {
-      const [x, y] = key.split("_").map(Number);
-      const w = x * 2 - 180,
-        s = y * 2 - 90;
-      return w <= box[2] && w + 2 >= box[0] && s <= box[3] && s + 2 >= box[1];
-    });
-    const cellRows = keys.length <= 16 ? await cells(keys, m, fetcher) : [];
-    const seen = new Set(cellRows.map((r) => r.id));
+    const keys = cellKeysIn(m, box as [number, number, number, number]);
+    const cellRows = keys.length <= 16 ? await cells(cellRefs(keys, m), m, fetcher) : [];
+    const seen = new Set(curated.map((r) => r.id));
     return { rows: [...curated, ...cellRows.filter((r) => !seen.has(r.id))], manifest: m };
   }
 
   const overview = await asset<CatalogTrail[]>(`${m.directory}/overview.json.gz`, fetcher);
-  const seen = new Set(overview.map((r) => r.id));
+  const seen = new Set(curated.map((r) => r.id));
   return { rows: [...curated, ...overview.filter((r) => !seen.has(r.id))], manifest: m };
 }
 
@@ -128,21 +247,22 @@ async function detail(
   fetcher: typeof fetch,
 ): Promise<{ trail: CatalogTrail; lines: Lines; manifest: Metadata } | null> {
   const m = await meta(fetcher);
+  // Curated guides draw the real line of the trail they were matched to at build time, or no line at all.
+  const guide = async (trail: CatalogTrail) => {
+    const c = await curated(m, fetcher);
+    const linked = c.links[trail.id];
+    return { trail: linked ? { ...trail, linkedTrailId: linked } : trail, lines: (c.lines[trail.id] ?? []) as Lines, manifest: m };
+  };
 
   // 1. Check Peaks (14ers, 8000m, Seven Summits)
   const peak = getAllPeakTrails().find((p) => p.id === id);
-  if (peak) {
-    const lines = getPeakGeometry(id) ?? [];
-    return { trail: peak, lines, manifest: m };
-  }
+  if (peak) return guide(peak);
 
   // 2. Check Detailed Through-Hike Routes ("ALL TOGETHER")
   const detailedHike = DETAILED_THRU_HIKES.find((h) => h.id === id);
   if (detailedHike) {
     const { thruHikes } = getDetailedThruHikeTrails();
-    const trail = thruHikes.find((t) => t.id === id)!;
-    const lines = getDetailedThruHikeLines(id) ?? [];
-    return { trail, lines, manifest: m };
+    return guide(thruHikes.find((t) => t.id === id)!);
   }
 
   // 3. Check Detailed Through-Hike Individual Sections ("IN SECTIONS")
@@ -150,21 +270,34 @@ async function detail(
     const sec = hike.sections.find((s) => s.id === id);
     if (sec) {
       const { sections } = getDetailedThruHikeTrails();
-      const trail = sections.find((t) => t.id === id)!;
-      const lines = getSectionLine(id) ?? [];
-      return { trail, lines, manifest: m };
+      return guide(sections.find((t) => t.id === id)!);
     }
   }
 
-  // 4. Check Sharded Source Trails
-  const index = await asset<[string, string, string][]>(`${m.directory}/search.json.gz`, fetcher);
-  const entry = index.find((r) => r[0] === id);
-  if (!entry) return null;
-  const trail = (await cells([entry[2]], m, fetcher)).find((t) => t.id === id);
+  // 4. Check Sharded Source Trails (merged records redirect to the whole trail)
+  if (m.lookupShards) {
+    const where = (await asset<Record<string, string>>(`${m.directory}/lookup/l-${lookupShard(id)}.json.gz`, fetcher))[id];
+    if (!where) return null;
+    if (where.startsWith("r:")) return where.slice(2) !== id ? detail(where.slice(2), fetcher) : null;
+    const found = (await cells([where.slice(2)], m, fetcher)).find((t) => t.id === id);
+    return found ? withLines(found, m, fetcher) : null;
+  }
+  const index = await searchIndex(m, fetcher);
+  const entry = index.find((r) => r.id === id);
+  if (!entry) {
+    const redirect = (await asset<Record<string, string>>(`${m.directory}/redirects.json.gz`, fetcher).catch(() => ({}) as Record<string, string>))[id];
+    return redirect && redirect !== id ? detail(redirect, fetcher) : null;
+  }
+  const trail = (await cells([entry.cell], m, fetcher)).find((t) => t.id === id);
   if (!trail) return null;
+  return withLines(trail, m, fetcher);
+}
+
+/** A catalog trail with its mapped line and nearest trailhead. */
+async function withLines(trail: CatalogTrail, m: Metadata, fetcher: typeof fetch): Promise<{ trail: CatalogTrail; lines: Lines; manifest: Metadata }> {
   let lines: Lines = [];
   if (trail.geometryShard !== "route" && trail.source !== "resort") {
-    lines = (await asset<Record<string, Lines>>(`${m.directory}/geometry-${trail.geometryShard}.json.gz`, fetcher))[id] ?? [];
+    lines = (await asset<Record<string, Lines>>(`${m.directory}/geometry-${trail.geometryShard}.json.gz`, fetcher))[trail.id] ?? [];
   } else if (trail.memberIds?.length) {
     for (const memberId of trail.memberIds) {
       const member = await detail(memberId, fetcher);
@@ -185,6 +318,105 @@ async function detail(
   return { trail, lines, manifest: m };
 }
 
+/** Rows of the hike-feature layer for the given 1° cells (cells without features are skipped). */
+async function featureRows(cellIds: string[], m: Metadata, fetcher: typeof fetch): Promise<FeatureRow[]> {
+  const have = new Set(m.featureCells ?? []);
+  const parts = await Promise.all(cellIds.filter((c) => have.has(c)).map((c) => asset<FeatureRow[]>(`${m.directory}/features/f-${c}.json.gz`, fetcher)));
+  return parts.flat();
+}
+
+/** Features on or near one trail with their mile markers, or null when this build has no feature layer. */
+async function trailFeatures(d: { trail: CatalogTrail; lines: Lines }, fetcher: typeof fetch): Promise<TrailFeature[] | null> {
+  const m = await meta(fetcher);
+  if (!m.featureCells?.length) return null;
+  const cellIds = new Set<string>();
+  for (const line of d.lines) for (const p of line) cellIds.add(geometryCell(p[0], p[1]));
+  return memo(`features:${d.trail.id}`, async () => featuresAlong(await featureRows([...cellIds].slice(0, 80), m, fetcher), d.trail.id));
+}
+
+/** Water along a trail: from the feature layer when the build has one, otherwise read from map tiles. */
+async function waterFor(d: { trail: CatalogTrail; lines: Lines }, chained: LngLat[][], fetcher: typeof fetch) {
+  const features = await trailFeatures(d, fetcher).catch(() => null);
+  if (features) return waterFromFeatures(features, measureLines(chained).meters / 1609.344);
+  return memo(`water:${d.trail.id}`, () => waterAlong(chained));
+}
+
+/** The 2–3 nearest real towns for a day hike (more, spread along the route, for long trails), with services. */
+function townsFor(d: { trail: CatalogTrail }, chained: LngLat[][], maxMilesOff: number, limit: number | undefined, fetcher: typeof fetch) {
+  const lines = chained.length ? chained : [[[d.trail.longitude, d.trail.latitude], [d.trail.longitude + 0.00001, d.trail.latitude]] as LngLat[]];
+  const long = d.trail.kind === "route" || (d.trail.miles ?? 0) > 60;
+  const count = limit ?? (long ? Math.min(60, Math.ceil((d.trail.miles ?? 100) / 25)) : 3);
+  return memo(`towns:${d.trail.id}:${maxMilesOff}:${count}`, async () => {
+    const near = townsNear(await allTowns(fetcher), lines, maxMilesOff, count);
+    const out = [];
+    for (let i = 0; i < near.length; i += 6) out.push(...await Promise.all(near.slice(i, i + 6).map(async (town) => ({ ...town, services: await townServices(town).catch(() => null) }))));
+    return out;
+  });
+}
+
+/** Everything a packet or download needs, all from real sources (missing parts are left out, never filled in). */
+async function tripBundle(d: { trail: CatalogTrail; lines: Lines }, chained: LngLat[][], options: ReturnType<typeof townDayOptions>, pack: PackItem[], fetcher: typeof fetch): Promise<TripBundle> {
+  const [water, towns, elevation] = await Promise.all([
+    chained.length ? waterFor(d, chained, fetcher).catch(() => null) : Promise.resolve(null),
+    townsFor(d, chained, options?.maxMilesOffTrail ?? 15, undefined, fetcher).catch(() => []),
+    chained.length ? memo(`elev:${d.trail.id}`, () => elevationProfile(chained)).catch(() => null) : Promise.resolve(null),
+  ]);
+  const t = { trail: d.trail, lines: chained };
+  const consumables = [...(options?.consumables ?? []), ...pack.filter((i) => i.consumable).map((i) => i.name)];
+  const plan = options && chained.length && mappedShare(t) >= MIN_MAPPED_SHARE ? planTownDays(towns, { ...options, consumables, trailMiles: planningMiles(t) }) : null;
+  return { trail: d.trail, lines: chained as [number, number][][], water, towns, elevation, plan, pack, siteUrl: typeof window !== "undefined" ? window.location.origin : "", generatedAt: new Date().toISOString() };
+}
+
+function packetResponse(bundle: TripBundle, format: string) {
+  const base = `hyked-${bundle.trail.name.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "trail"}`;
+  const file = (body: string, type: string, ext: string, inline = false) => new Response(body, { headers: { "Content-Type": `${type}; charset=utf-8`, "Content-Disposition": `${inline ? "inline" : "attachment"}; filename="${base}.${ext}"` } });
+  switch (format) {
+    case "gpx": return file(tripGpx(bundle), "application/gpx+xml", "gpx");
+    case "csv": return file(waterCsv(bundle), "text/csv", "water.csv");
+    case "html": return file(tripPacketHtml(bundle), "text/html", "html", true);
+    case "json": return Response.json(bundle);
+    default: return Response.json({ error: "format must be gpx, csv, html or json" }, { status: 400 });
+  }
+}
+
+/** POST /api/trips/packet: the printable packet with the planner's pack list. */
+export async function tripPacket(body: Record<string, unknown>, fetcher: typeof fetch) {
+  const d = await detail(String(body.trailId ?? ""), fetcher);
+  if (!d) return Response.json({ error: "This trail was not found." }, { status: 404 });
+  const pack: PackItem[] = (Array.isArray(body.pack) ? body.pack : []).slice(0, 300).flatMap((raw) => {
+    const i = raw as Record<string, unknown>;
+    const name = typeof i.name === "string" ? i.name.trim().slice(0, 120) : "";
+    return name ? [{ name, quantity: Number(i.quantity) > 0 ? Number(i.quantity) : 1, weightOz: Number.isFinite(Number(i.weightOz)) ? Number(i.weightOz) : null, category: typeof i.category === "string" ? i.category : null, consumable: i.consumable === true }] : [];
+  });
+  return packetResponse(await tripBundle(d, chainLines(d.lines as LngLat[][]), townDayOptions(body), pack, fetcher), String(body.format ?? "html"));
+}
+
+/**
+ * Trail lines for routing inside a bounding box: verified and mapped trails (no winter-only routes), full
+ * resolution so junctions line up. Trails are found by their pin within 0.25° of the box, then kept when a
+ * line actually enters it.
+ */
+async function routingNetwork(box: [number, number, number, number], fetcher: typeof fetch): Promise<GeoJSON.FeatureCollection> {
+  const m = await meta(fetcher);
+  const pad = 0.25;
+  const keys = cellKeysIn(m, [box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad]);
+  const rows = (await cells(cellRefs(keys, m), m, fetcher)).filter((t) =>
+    !t.mergedInto && !t.winterUse && t.source !== "resort" && t.geometryShard && t.geometryShard !== "route" &&
+    t.longitude >= box[0] - pad && t.longitude <= box[2] + pad && t.latitude >= box[1] - pad && t.latitude <= box[3] + pad,
+  ).sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0));
+  const shards = new Map<string, Promise<Record<string, Lines>>>();
+  for (const t of rows) if (!shards.has(t.geometryShard)) shards.set(t.geometryShard, asset<Record<string, Lines>>(`${m.directory}/geometry-${t.geometryShard}.json.gz`, fetcher).catch(() => ({})));
+  const inside = ([x, y]: [number, number]) => x >= box[0] && x <= box[2] && y >= box[1] && y <= box[3];
+  const features: GeoJSON.Feature[] = [];
+  for (const t of rows) {
+    const lines = ((await shards.get(t.geometryShard)!)[t.id] ?? []).filter((line) => line.length > 1 && line.some(inside));
+    if (!lines.length) continue;
+    features.push({ type: "Feature", id: t.id, properties: { id: t.id, name: t.name, q: t.qualityScore ?? 0, tier: t.tier ?? (t.sourceType ? "verified" : "mapped") }, geometry: { type: "MultiLineString", coordinates: lines } });
+    if (features.length >= 4000) break;
+  }
+  return { type: "FeatureCollection", features };
+}
+
 export function isTrailServicePath(path: string) {
   return path === "/api/trail-catalog" || path.startsWith("/api/trail-catalog/");
 }
@@ -199,7 +431,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
     if (suffix[0] === "thru-hikes") {
       const features: GeoJSON.Feature[] = [];
       for (const hike of DETAILED_THRU_HIKES) {
-        const lines = getDetailedThruHikeLines(hike.id);
+        const lines = (await curated(await meta(fetcher), fetcher)).lines[hike.id] as Lines | undefined;
         if (lines && lines.length) {
           features.push({
             type: "Feature",
@@ -222,20 +454,20 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       return Response.json({ type: "FeatureCollection", features });
     }
 
-    // Dedicated endpoint for Mountain POIs (Trailheads, Water, Campsites, Summits, Parking)
-    if (suffix[0] === "pois") {
-      const f = parseCatalogFilters(params);
-      const bbox = f.bbox;
-      if (!bbox) {
-        return Response.json({ type: "FeatureCollection", features: [] });
+    // Hike features in view (water, campsites, shelters, trailheads, viewpoints…) from the build-time feature layer.
+    // `pois` is the GeoJSON form of the same data.
+    if (suffix[0] === "features" || suffix[0] === "pois") {
+      const m = await meta(fetcher);
+      const bbox = parseCatalogFilters(params).bbox;
+      const types = new Set((params.get("types") ?? "").split(",").filter(Boolean));
+      const rows = bbox
+        ? (await featureRows(cellsInBounds(bbox, 0, 16), m, fetcher)).filter((r) => r[3] >= bbox[0] && r[3] <= bbox[2] && r[4] >= bbox[1] && r[4] <= bbox[3] && (!types.size || types.has(r[1])))
+        : [];
+      const features = rows.slice(0, 5000).map(featureFromRow);
+      if (suffix[0] === "pois") {
+        return Response.json({ type: "FeatureCollection", features: features.map((f) => ({ type: "Feature", id: f.id, properties: { id: f.id, type: f.type, kind: f.type, name: f.name, label: FEATURE_LABELS[f.type] }, geometry: { type: "Point", coordinates: [f.lon, f.lat] } })) });
       }
-      try {
-        const live = await fetchLiveOsmTrails([bbox[1], bbox[0], bbox[3], bbox[2]]);
-        const poiFeatures = live.features.filter((feat) => feat.geometry.type === "Point");
-        return Response.json({ type: "FeatureCollection", features: poiFeatures });
-      } catch {
-        return Response.json({ type: "FeatureCollection", features: [] });
-      }
+      return Response.json({ features, total: rows.length, source: "© OpenStreetMap contributors (ODbL)" });
     }
 
     // Dedicated Snap-to-Trail endpoint (Projects user click or GPS waypoint directly to trail vector geometry)
@@ -257,7 +489,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
 
       // Also include detailed thru-hikes if nearby
       for (const hike of DETAILED_THRU_HIKES) {
-        const lines = getDetailedThruHikeLines(hike.id);
+        const lines = (await curated(await meta(fetcher), fetcher)).lines[hike.id] as Lines | undefined;
         if (lines) candidateLines.push(...lines);
       }
 
@@ -276,68 +508,72 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       });
     }
 
+    // Route builder network: every shown trail whose line enters the box, at full resolution (src/lib/routing).
+    if (suffix[0] === "network") {
+      const box = parseCatalogFilters(params).bbox;
+      if (!box || box[2] - box[0] > 3.2 || box[3] - box[1] > 3.2) return Response.json({ error: "Choose points closer together (within about 150 miles)." }, { status: 400 });
+      return Response.json(await routingNetwork(box, fetcher));
+    }
+
+    // Towns by name (GeoNames) for the route builder's start and end search; bigger places first.
+    if (suffix[0] === "places") {
+      const q = normalize(params.get("q") ?? "");
+      if (q.length < 2) return Response.json({ places: [] });
+      const near = [Number(params.get("lng")), Number(params.get("lat"))];
+      const places = (await allTowns(fetcher))
+        .filter((t) => normalize(t.name).startsWith(q))
+        .map((t) => ({ t, km: Number.isFinite(near[0]) && Number.isFinite(near[1]) ? distanceKm(near[1], near[0], t.latitude, t.longitude) : 0 }))
+        .sort((a, b) => a.km - b.km || (b.t.population ?? 0) - (a.t.population ?? 0))
+        .slice(0, 6)
+        .map(({ t }) => ({ name: t.name, region: t.state, country: t.country, lat: t.latitude, lng: t.longitude }));
+      return Response.json({ places, attribution: "GeoNames (CC BY 4.0)" });
+    }
+
+    // Zoomed-out count bubbles: build-time totals per grid cell and section (see scripts/prepare-trail-assets.ts).
+    if (suffix[0] === "clusters") {
+      const m = await meta(fetcher);
+      const f = parseCatalogFilters(params);
+      const zoom = Number(params.get("zoom") ?? 4);
+      const grid = zoom < 3.5 ? "8" : zoom < 4.5 ? "4" : zoom < 5.5 ? "2" : zoom < 6.5 ? "1" : zoom < 8 ? "0.5" : "0.25";
+      const data = await asset<{ sections: Record<string, Record<string, number[][]>> }>(`${m.directory}/clusters.json.gz`, fetcher);
+      const key = sectionOf(f.activity === "all" ? "hike" : f.activity).key;
+      const [w, sth, e, n] = f.bbox ?? [-180, -90, 180, 90];
+      const clusters = (data.sections[key]?.[grid] ?? []).filter(([lng, lat]) => lng >= w && lng <= e && lat >= sth && lat <= n);
+      return Response.json({ total: clusters.reduce((t, c) => t + c[2], 0), verified: clusters.reduce((t, c) => t + c[3], 0), clusters, grid });
+    }
+
     if (!suffix.length || ["points", "lines", "map"].includes(suffix[0])) {
       const zoom = Number(params.get("zoom") ?? 11);
       if (["points", "lines"].includes(suffix[0]) && !localTrailsVisible(zoom)) {
         return Response.json(suffix[0] === "points" ? { trails: [], clusters: [], total: 0 } : { type: "FeatureCollection", features: [] });
       }
-      const { rows, manifest } = await select(params, fetcher);
+      const { rows, manifest, queryMatches } = await select(params, fetcher);
       const f = parseCatalogFilters(params);
       const bbox = f.bbox;
       const local = bbox ? { ...f, lat: (bbox[1] + bbox[3]) / 2, lng: (bbox[0] + bbox[2]) / 2, radiusKm: 1000 } : f;
       const result = filterCatalog(rows, { ...local, limit: suffix.length ? MAP_TRAIL_LIMIT : f.limit ?? TRAIL_CARD_LIMIT, uniqueNames: true });
 
       if (suffix[0] === "points") {
-        let trails: (string | number | null)[][] = result.trails.map((t) => [
+        const trails: (string | number | null)[][] = result.trails.map((t) => [
           t.id,
           t.name,
           t.longitude,
           t.latitude,
           t.miles,
           { easy: "e", moderate: "m", hard: "h", expert: "x" }[
-            resolveDifficulty({ reported: t.difficulty, miles: t.miles, name: t.name }).difficulty
+            resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty
           ],
           t.park ?? t.forest ?? t.region,
           t.routeType ?? null,
+          t.qualityScore ?? 0,
         ]);
 
-        // Coverage expansion: If local catalog yields sparse results in this viewport (< 5 trails) and bbox is active,
-        // stream real OpenStreetMap data dynamically via live Overpass API!
-        if (trails.length < 5 && bbox && Math.abs(bbox[2] - bbox[0]) < 12 && Math.abs(bbox[3] - bbox[1]) < 10) {
-          try {
-            const live = await fetchLiveOsmTrails([bbox[1], bbox[0], bbox[3], bbox[2]]);
-            for (const feat of live.features) {
-              if (feat.geometry.type === "Point") continue;
-              const p = feat.properties;
-              const coords = feat.geometry.type === "LineString" ? feat.geometry.coordinates : feat.geometry.coordinates[0];
-              const mid = coords ? coords[Math.floor(coords.length / 2)] : null;
-              if (!mid) continue;
-              const lenMiles = Math.round((feat.geometry.type === "LineString" ? coords.length * 0.04 : 4.5) * 10) / 10;
-              trails.push([
-                p.id,
-                p.name,
-                mid[0],
-                mid[1],
-                lenMiles,
-                p.sacScale?.includes("T1") ? "e" : p.sacScale?.includes("T2") ? "m" : p.sacScale?.includes("T3") ? "h" : "m",
-                p.kind === "piste" ? "Ski Piste" : p.surface ? `OSM · ${p.surface}` : "OpenStreetMap",
-                "point-to-point",
-              ]);
-            }
-          } catch {
-            // Live OSM Overpass query failed or timed out; continue with local catalog
-          }
-        }
-
-        return Response.json({
-          total: trails.length,
-          clusters: [],
-          trails: trails.slice(0, MAP_TRAIL_LIMIT),
-        });
+        // `total` is every matching trail in view; `trails` is the best-ranked first page of it.
+        return Response.json({ total: result.total, clusters: [], trails });
       }
 
       if (suffix[0] === "lines") {
-        let features = await Promise.all(
+        const features = await Promise.all(
           result.trails.map(async (t) => {
             const d = await detail(t.id, fetcher);
             const simplified = (d?.lines ?? []).map((line) => simplifyForZoom(line as [number, number][], zoom));
@@ -348,7 +584,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
                 id: t.id,
                 name: t.name,
                 d: { easy: "e", moderate: "m", hard: "h", expert: "x" }[
-                  resolveDifficulty({ reported: t.difficulty, miles: t.miles, name: t.name }).difficulty
+                  resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty
                 ],
               },
               geometry: { type: "MultiLineString", coordinates: simplified },
@@ -356,36 +592,11 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
           }),
         );
 
-        // Fallback coverage: stream live OSM lines if local geometry is sparse in viewport
-        if (features.length < 5 && bbox && Math.abs(bbox[2] - bbox[0]) < 6 && Math.abs(bbox[3] - bbox[1]) < 5) {
-          try {
-            const live = await fetchLiveOsmTrails([bbox[1], bbox[0], bbox[3], bbox[2]]);
-            for (const feat of live.features) {
-              if (feat.geometry.type === "Point") continue;
-              const p = feat.properties;
-              features.push({
-                type: "Feature",
-                id: p.id,
-                properties: {
-                  id: p.id,
-                  name: p.name,
-                  d: p.pisteDifficulty ? (p.pisteDifficulty === "novice" ? "e" : p.pisteDifficulty === "expert" ? "x" : "m") : "m",
-                  sacScale: p.sacScale,
-                  surface: p.surface,
-                },
-                geometry: feat.geometry,
-              } as unknown as { type: "Feature"; id: string; properties: { id: string; name: string; d: string }; geometry: { type: "MultiLineString"; coordinates: [number, number][][] } });
-            }
-          } catch {
-            // Fallback continues with local features
-          }
-        }
-
         return Response.json({ type: "FeatureCollection", features: features.slice(0, MAP_TRAIL_LIMIT) });
       }
 
       if (suffix[0] === "map") return Response.json(buildCatalogMap(result.trails));
-      return Response.json({ ...result, manifest });
+      return Response.json({ ...result, manifest, ...(queryMatches && queryMatches > result.total ? { queryMatches } : {}) });
     }
 
     const d = await detail(decodeURIComponent(suffix[0]), fetcher);
@@ -406,21 +617,14 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       });
     }
 
+    // Photos: only the licensed Commons image of the trail's matched Wikidata item. No nearby-image guessing.
+    // ?nearby=1: geotagged Commons photos near the pin, shown lower on the page and labelled as nearby.
     if (suffix[1] === "photos") {
-      const t = d.trail;
-      const q = async (queryParms: Record<string, string>) =>
-        (await fetcher(`https://commons.wikimedia.org/w/api.php?${new URLSearchParams({ action: "query", format: "json", origin: "*", ...queryParms })}`)).json();
-      const geo = await q({ list: "geosearch", gscoord: `${t.latitude}|${t.longitude}`, gsradius: "3000", gsnamespace: "6", gslimit: "12" });
-      const near = (geo.query?.geosearch ?? []) as { pageid: number; dist: number }[];
-      if (!near.length) return Response.json({ photos: [] });
-      const img = await q({ pageids: near.map((p) => p.pageid).join("|"), prop: "imageinfo", iiprop: "url|mime|extmetadata", iiurlwidth: "960" });
-      const pages = (img.query?.pages ?? {}) as Record<string, CommonsPage>;
-      return Response.json({
-        photos: near.map((p) => (pages[String(p.pageid)] ? parseCommonsPhoto(pages[String(p.pageid)], p.dist) : null)).filter(Boolean).slice(0, 8),
-      });
+      if (params.get("nearby") === "1") return Response.json({ photos: await memo(`nearby:${d.trail.id}`, () => nearbyCatalogPhotos(d.trail.latitude, d.trail.longitude)).catch(() => []), nearby: true });
+      return Response.json({ photos: wikiPhotos(d.trail) });
     }
 
-    // GPX Download (Always available on any trail, thru-hike or peak!)
+    // GPX of the trail's own mapped line.
     if (suffix[1] === "gpx") {
       return new Response(catalogGpx(d.trail, d.lines), {
         headers: {
@@ -430,110 +634,49 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       });
     }
 
-    // Elevation Profile (Always available!)
+    // Facts below are computed from the trail's real line; with no line there is nothing to compute.
+    const chained = chainLines(d.lines as LngLat[][]);
+    const noLine = (what: string) => Response.json({ error: `This trail has no mapped line, so ${what} can't be measured.` }, { status: 422 });
+
+    // Elevation: sampled from AWS Terrain Tiles (Mapzen Terrarium; USGS 3DEP, SRTM) along the line.
     if (suffix[1] === "elevation") {
-      const t = d.trail;
-      const miles = t.miles ?? 10;
-      const maxFt = t.summitElevationFt ?? (t.elevationFt?.max ?? Math.min(29032, Math.max(1200, Math.round(miles * 350 + 1000))));
-      const minFt = t.elevationFt?.min ?? Math.max(0, maxFt - (t.summitElevationFt ? Math.round(miles * 320) : Math.round(miles * 250)));
-      const gainFt = Math.max(100, maxFt - minFt);
-      const lossFt = t.routeType === "point-to-point" ? Math.round(gainFt * 0.4) : gainFt;
-
-      const sampleCount = Math.min(80, Math.max(20, Math.round(miles * 3)));
-      const profile: [number, number][] = [];
-      for (let i = 0; i <= sampleCount; i++) {
-        const mi = (i / sampleCount) * miles;
-        const progress = i / sampleCount;
-        const curve = Math.sin(progress * Math.PI);
-        const altitude = minFt + curve * (maxFt - minFt) + Math.sin(progress * Math.PI * 4) * (gainFt * 0.04);
-        profile.push([Math.round(mi * 100) / 100, Math.round(altitude)]);
-      }
-
-      return Response.json({
-        profile,
-        gainFt,
-        lossFt,
-        minFt,
-        maxFt,
-        trailMiles: Math.round(miles * 10) / 10,
-        partial: false,
-        attribution: "Elevation: Terrarium DEM & topographic models. Profile calculated along mapped route.",
-      });
+      if (!chained.length) return noLine("its elevation");
+      const profile = await memo(`elev:${d.trail.id}`, () => elevationProfile(chained));
+      if (!profile) return Response.json({ error: "Elevation data couldn't be read for this trail. Try again." }, { status: 503 });
+      return Response.json({ ...profile, source: "AWS Terrain Tiles (Terrarium DEM)" });
     }
 
-    // Water on Trail (Always available!)
+    // Water: OpenStreetMap springs, drinking water, lakes and stream crossings, each at its real trail mile.
     if (suffix[1] === "water") {
-      const t = d.trail;
-      const miles = t.miles ?? 10;
-      const count = Math.min(10, Math.max(1, Math.floor(miles / 3.5)));
-      const sources = [];
-      for (let i = 1; i <= count; i++) {
-        const mile = Math.round((i * (miles / (count + 1))) * 10) / 10;
-        const kind = i % 3 === 0 ? "lake" : i % 2 === 0 ? "spring" : "stream";
-        sources.push({
-          mile,
-          name: `${kind.charAt(0).toUpperCase() + kind.slice(1)} crossing #${i}`,
-          kind,
-          reliability: "potable" as const,
-          crossing: true,
-          offTrailMeters: 0,
-        });
-      }
-      return Response.json({
-        sources,
-        longestDryMiles: Math.round((miles / (count + 1)) * 10) / 10,
-        notes: ["Natural water source. Treat or filter all water along backcountry trails."],
-      });
+      if (!chained.length) return noLine("water along it");
+      return Response.json(await waterFor(d, chained, fetcher));
     }
 
-    // Towns near Trail (Always available!)
-    if (suffix[1] === "towns") {
-      const t = d.trail;
-      const townName = t.region ? `${t.region.split("·")[0].trim()} Gateway` : "Trailhead Gateway";
-      return Response.json({
-        towns: [
-          {
-            name: townName,
-            mile: 0,
-            milesOff: 3.5,
-            population: 3200,
-            services: {
-              counts: { grocery: 2, restaurant: 4, lodging: 3, postOffice: 1, outdoorStore: 1, transit: 1, hospital: 1 },
-            },
-          },
-          {
-            name: "Summit Camp & Resupply Outpost",
-            mile: Math.round((t.miles ?? 12) * 0.5 * 10) / 10,
-            milesOff: 1.2,
-            population: 450,
-            services: {
-              counts: { grocery: 1, restaurant: 2, lodging: 1, postOffice: 0, outdoorStore: 1, transit: 0, hospital: 0 },
-            },
-          },
-        ],
-        attribution: "OpenStreetMap community contributors and regional directories.",
-      });
+    // Every hike feature on or near the trail (water, campsites, shelters, viewpoints…), by mile.
+    if (suffix[1] === "features") {
+      if (!chained.length) return noLine("features along it");
+      const features = await trailFeatures(d, fetcher);
+      return Response.json({ features: features ?? [], available: features !== null, source: "© OpenStreetMap contributors (ODbL)" });
     }
 
-    // Town Days Resupply Planning (Always available!)
-    if (suffix[1] === "town-days") {
-      const t = d.trail;
-      const miles = t.miles ?? 12;
-      const days = Number(params.get("days") ?? 2);
-      return Response.json({
-        trailMiles: miles,
-        dailyMiles: Math.round((miles / days) * 10) / 10,
-        stops: [
-          {
-            day: 1,
-            trailMile: Math.round((miles * 0.5) * 10) / 10,
-            townName: t.region ? `${t.region.split("·")[0].trim()} Gateway` : "Trail Gateway",
-            milesOff: 2.0,
-            action: "Resupply carry, restock provisions, top off water.",
-            buyDays: Math.max(1, Math.ceil(days / 2)),
-          },
-        ],
-      });
+    // Downloads: GPX with water and towns, water CSV, printable packet — built from the same real data.
+    if (suffix[1] === "download") {
+      const format = params.get("format") ?? "gpx";
+      return packetResponse(await tripBundle(d, chained, townDayOptions(Object.fromEntries(params)), [], fetcher), format);
+    }
+
+    // Towns: real GeoNames places near the line, with services counted from OpenStreetMap.
+    if (suffix[1] === "towns" || suffix[1] === "town-days") {
+      const maxMilesOff = Math.min(40, Math.max(1, Number(params.get("maxMilesOff")) || 15));
+      const limit = params.get("limit") ? Math.min(60, Math.max(1, Number(params.get("limit")) || 6)) : undefined;
+      const towns = await townsFor(d, chained, maxMilesOff, limit, fetcher);
+      if (suffix[1] === "towns") return Response.json({ towns, maxMilesOff, attribution: TOWNS_ATTRIBUTION });
+      const options = townDayOptions(Object.fromEntries(params));
+      if (!options) return Response.json({ error: "Give the number of hiking days, e.g. ?days=5." }, { status: 400 });
+      const t = { trail: d.trail, lines: chained };
+      if (!chained.length) return noLine("town stops along it");
+      if (mappedShare(t) < MIN_MAPPED_SHARE) return Response.json({ error: unplannable(t) }, { status: 422 });
+      return Response.json({ trailId: d.trail.id, trailMiles: planningMiles(t), ...planTownDays(towns, { ...options, trailMiles: planningMiles(t) }), attribution: TOWNS_ATTRIBUTION });
     }
 
     return Response.json({ error: "Action not supported." }, { status: 404 });

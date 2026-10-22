@@ -39,7 +39,7 @@ export function ActivityStats({
       <StatBlock
         label="Calories"
         value="—"
-        sub="Coming soon"
+        sub="Not tracked"
       />
     </div>
   );

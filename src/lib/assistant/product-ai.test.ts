@@ -15,7 +15,7 @@ test("local extraction fills sourced narrative specifications and records local-
   const p = applyProductAI(answer([weight, { kind: "materials", value: "polyester", quote: "It is made from polyester.", source: 0 }, { kind: "price", value: "39.95 USD", quote: "Listed price: 39.95 USD.", source: 0 }]), product, "");
   const d = makeProductDraft(p, "", defaultSelections(p.facts))!;
   assert.equal(d.weightOz, 70.4); assert.equal(d.price, 39.95); assert.equal(d.priceCurrency, "USD");
-  assert.match(d.materials!, /polyester/); assert.match(d.sourceNote!, /Local AI/); assert.match(d.sourceNote!, /example.com/);
+  assert.match(d.materials!, /polyester/); assert.match(d.sourceNote!, /Eco AI/); assert.match(d.sourceNote!, /example.com/);
   assert.equal(p.recovery?.method, "local-ai");
 });
 test("invented facts, altered quotes, wrong source indices and partial numbers cannot fill parameters", () => {
@@ -49,7 +49,7 @@ test("missing structured specifications carry actual page text into the local-AI
   const p = await researchProduct(url, "Alpine tent", { fetch: async target => ({ url: target, body: `<title>Alpine tent</title><main><p>${text}</p></main>` }), search: async () => [] });
   assert.equal(p.recovery?.method, "not-found");
   assert.ok(p.readings?.[0].text.includes("weighs just 4.4 pounds"));
-  assert.match(p.recovery!.notice, /local AI/);
+  assert.match(p.recovery!.notice, /Eco AI/);
 });
 test("Walmart advertising URLs resolve by item ID without dropping seller or variant selection", async () => {
   const raw = "https://www.walmart.com/ip/Ozark-Trail-1-Person-Hiker-Tent/5128730697?wmlspartner=wlpa&selectedSellerId=0&wl0=&gclid=example&variant=blue&utm_source=ads#details";

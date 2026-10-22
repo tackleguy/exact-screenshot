@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   averageDifficulties,
-  estimateDifficulty,
+  computeDifficulty,
+  naismithHours,
   normalizeDifficulty,
   resolveDifficulty,
 } from "./trail-difficulty";
@@ -14,12 +15,19 @@ test("normalizeDifficulty maps common trail language", () => {
   assert.equal(normalizeDifficulty(""), null);
 });
 
-test("estimateDifficulty uses distance and climb when source is blank", () => {
-  assert.equal(estimateDifficulty({ miles: 1.2, elevationFt: 80, name: "Nature boardwalk" }), "easy");
-  assert.equal(estimateDifficulty({ miles: 12, elevationFt: 3200, name: "Alpine summit ridge" }), "expert");
-  assert.equal(estimateDifficulty({ miles: 5, elevationFt: 900, name: "Forest loop" }), "moderate");
-  assert.equal(estimateDifficulty({ miles: 0.4, name: "Lakeshore Trail" }), "easy", "a short trail with no climb data is easy");
-  assert.equal(estimateDifficulty({ miles: 0.6, elevationFt: 700, name: "Summit Trail" }), "hard", "a short steep summit trail is not");
+test("computeDifficulty: effort = miles + 2 × thousands of feet climbed, with an OSM sac_scale floor", () => {
+  assert.equal(computeDifficulty({ miles: 1.2, gainFt: 80 }), "easy");
+  assert.equal(computeDifficulty({ miles: 3, gainFt: 1000 }), "moderate"); // 5
+  assert.equal(computeDifficulty({ miles: 8, gainFt: 2000 }), "hard"); // 12
+  assert.equal(computeDifficulty({ miles: 14, gainFt: 4800 }), "expert"); // 23.6
+  assert.equal(computeDifficulty({ miles: 0.6, sacScale: "demanding_mountain_hiking" }), "hard");
+  assert.equal(computeDifficulty({ miles: null }), null);
+});
+
+test("naismithHours: 3 mph plus an hour per 2,000 ft; none without a climb or over 50 miles", () => {
+  assert.equal(naismithHours(6, 2000), 3);
+  assert.equal(naismithHours(6, null), null);
+  assert.equal(naismithHours(60, 1000), null);
 });
 
 test("resolveDifficulty prefers community average once five ratings exist", () => {
@@ -32,16 +40,16 @@ test("resolveDifficulty prefers community average once five ratings exist", () =
   assert.equal(community.source, "community");
   assert.equal(community.difficulty, "hard");
 
-  const estimated = resolveDifficulty({
+  const computed = resolveDifficulty({
     reported: null,
     communityDifficulty: "hard",
     difficultyRatingCount: 3,
     miles: 2,
-    elevationFt: 100,
-    name: "Meadow walk",
+    gainFt: 100,
   });
-  assert.equal(estimated.source, "estimated");
-  assert.match(estimated.label, /3\/5/);
+  assert.equal(computed.source, "computed");
+  assert.equal(computed.difficulty, "easy");
+  assert.match(computed.label, /distance, climb/);
 });
 
 test("averageDifficulties rounds to the nearest band", () => {

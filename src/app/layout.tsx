@@ -3,7 +3,6 @@ import { DM_Sans, Playfair_Display, JetBrains_Mono } from "next/font/google";
 import Image from "next/image";
 import mountainNight from "@/assets/mountain-night.jpg";
 import { AppShell } from "@/components/nav/AppShell";
-import { DeployBanner } from "@/components/nav/DeployBanner";
 import "./globals.css";
 
 const bodyFont = DM_Sans({
@@ -28,7 +27,7 @@ export default function RootLayout({
     <html lang="en" className={`${bodyFont.variable} ${displayFont.variable} ${dataFont.variable} h-full`}>
       <body className="min-h-full font-sans text-[var(--foreground)] antialiased">
         <Image src={mountainNight} alt="" aria-hidden="true" className="mountain-backdrop" priority sizes="100vw" />
-        <AppShell notice={<DeployBanner />}>{children}</AppShell>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

@@ -22,6 +22,7 @@ import { shoppingForTrip, shoppingText } from "@/lib/assistant/shopping";
 import { CatalogSuggestions } from "./CatalogSuggestions";
 import { LocalOutdoorAiChat } from "./LocalOutdoorAiChat";
 import "./planner.css";
+import { noteGuestProgress } from "@/components/nav/GuestSaveBanner";
 
 function NumberField({ label, value, onChange, min = 0, max = 10000, step = "any", hint }: { label: string; value: number | null; onChange: (n: number | null) => void; min?: number; max?: number; step?: string; hint?: string }) {
   return <label>{label}<input type="number" min={min} max={max} step={step} value={value ?? ""} onChange={e => onChange(optionalNumber(e.target.value, min, max))} placeholder="Not set" />{hint && <small>{hint}</small>}</label>;
@@ -38,8 +39,11 @@ function FeedbackForm({ plan, onSave }: { plan: SavedPlan; onSave: (feedback: Tr
     </div><button className="planner-button secondary">{plan.feedback ? "Update completed-trip feedback" : "Mark completed & remember feedback"}</button>
   </form>;
 }
-export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }: { context: PlannerContext; initialRegion?: string; initialPrompt?: string }) {
-  const { memory, update, error: memoryError } = usePlannerMemory(context.userId);
+export function TripPlanner({ context, initialRegion = "", initialPrompt = "", initialRoute = null, initialDays = null }: { context: PlannerContext; initialRegion?: string; initialPrompt?: string; initialRoute?: RouteCandidate | null; initialDays?: number | null }) {
+  const { memory, update, error: memoryError, loading: memoryLoading } = usePlannerMemory(context.userId);
+  const signedIn = Boolean(context.userId);
+  // Started from a personal trail or a built route: the trip opens on that route, ready to pack for.
+  const startDays = initialRoute ? initialDays ?? Math.max(1, Math.ceil(initialRoute.distanceMiles / 12)) : null;
   const model = useLocalModel();
   const router = useRouter();
   const stopModel = model.stop;
@@ -56,10 +60,10 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
     });
     return () => subscription.unsubscribe();
   }, [context.userId, router, stopModel]);
-  const [prompt, setPrompt] = useState(initialPrompt || (initialRegion ? `A trip in ${initialRegion}` : ""));
-  const [request, setRequest] = useState<TripRequest>({ ...EMPTY_REQUEST, region: initialRegion });
-  const [started, setStarted] = useState(false);
-  const [step, setStep] = useState(0);
+  const [prompt, setPrompt] = useState(initialRoute ? `${initialRoute.distanceMiles} miles, ${startDays} ${startDays === 1 ? "day" : "days"} on ${initialRoute.name}` : initialPrompt || (initialRegion ? `A trip in ${initialRegion}` : ""));
+  const [request, setRequest] = useState<TripRequest>(initialRoute ? { ...EMPTY_REQUEST, region: initialRoute.region, distanceMiles: initialRoute.distanceMiles, days: startDays } : { ...EMPTY_REQUEST, region: initialRegion });
+  const [started, setStarted] = useState(Boolean(initialRoute));
+  const [step, setStep] = useState(initialRoute ? 1 : 0);
   const [units, setUnits] = useState<PackUnits>("imperial");
   const [activePlanId, setActivePlanId] = useState<string | null>(null);
   const [savedSignature, setSavedSignature] = useState("");
@@ -68,7 +72,7 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
   useEffect(() => {
     if (started) stageHeading.current?.focus();
   }, [started, step]);
-  const [route, setRoute] = useState<RouteCandidate | null>(null);
+  const [route, setRoute] = useState<RouteCandidate | null>(initialRoute);
   const [excluded, setExcluded] = useState<string[]>([]);
   const [shopping, setShopping] = useState<ShoppingItem[]>([]);
   const [packed, setPacked] = useState<string[]>([]);
@@ -119,7 +123,7 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
   function buildTrip() {
     searchController.current?.abort(); ++searchSequence.current; setSources([]); setSearchError(""); setSearching(false); setResearchingRoute("");
     setActivePlanId(null); setSavedSignature("");
-    const parsed = parseTripRequest(prompt); setRequest(parsed); setStarted(true); setStep(0); setRoute(null); setPacked([]); setShopping([]); setExcluded([]); setExplanation([]); setNotice("");
+    const parsed = parseTripRequest(prompt); setRequest(parsed); setStarted(true); noteGuestProgress(); setStep(0); setRoute(null); setPacked([]); setShopping([]); setExcluded([]); setExplanation([]); setNotice("");
     if (parsed.region) void findSources(parsed);
   }
   const insights = planInsights(request, route, selected, memory.profile, memory.plans, context.activities);
@@ -141,14 +145,14 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
     const plan: SavedPlan = { id, prompt, request, route, gear: selected, shopping, packedIds: packed.filter(id => selected.some(g => g.id === id)), savedAt: new Date().toISOString(), feedback: memory.plans.find(p => p.id === id)?.feedback ?? null };
     if (update(m => ({ ...m, plans: [plan, ...m.plans.filter(p => p.id !== id)].slice(0, 30) }))) {
       setActivePlanId(id); setSavedSignature(planSignature);
-      setNotice("Trip and shopping list saved on this device. Add feedback after your outing to improve the next plan.");
+      setNotice(signedIn ? "Trip and shopping list saved to your account. Add feedback after your outing to improve the next plan." : "Trip saved for this visit. Sign in to keep it on every device.");
     }
   }
   function downloadChecklist() {
     const url = URL.createObjectURL(new Blob([tripChecklist(request, route, selected, packed, units), "\n", shoppingText(shoppingForTrip(request, inventory, shopping))], { type: "text/plain;charset=utf-8" }));
     const link = document.createElement("a"); link.href = url; link.download = "hyked-checklist.txt"; link.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    setNotice("Checklist prepared for download. Save this trip to keep your progress in this browser too.");
+    setNotice(signedIn ? "Checklist prepared for download. Save this trip to keep your progress in your account too." : "Checklist prepared for download. Sign in and save this trip to keep your progress.");
   }
   function newTrip() {
     searchController.current?.abort(); ++searchSequence.current; setSources([]); setSearchError(""); setSearching(false); setResearchingRoute("");
@@ -162,18 +166,19 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
   if (accountChanged) return <div className="planner-shell" role="status">Updating your planning account… <button className="planner-link" onClick={() => window.location.reload()}>Reload planner</button></div>;
   return <div className="planner-shell">
     {started && route && step > 0 && <div className="planner-topline"><Link href="/plan">My trips</Link><button className="planner-button" onClick={newTrip}>New trip</button></div>}
-    <header className="planner-heading"><div><h1>{route && step > 0 ? route.name : "Your trip, taking shape."}</h1><p>{route && step > 0 ? route.region : "Find a route. Prepare your pack. Make it your next outing."}</p></div>{started && <span className="planner-save-state">{savedSignature === planSignature ? "Saved on this device" : "Unsaved changes"}</span>}</header>
+    <header className="planner-heading"><div><h1>{route && step > 0 ? route.name : "Your trip, taking shape."}</h1><p>{route && step > 0 ? route.region : "Find a route. Prepare your pack. Make it your next outing."}</p></div>{started && <span className="planner-save-state">{savedSignature === planSignature ? (signedIn ? "Saved to your account" : "Saved for this visit") : "Unsaved changes"}</span>}</header>
     {started && route && step > 0 && <div className="planner-trip-banner"><div className="planner-landscape" role="img" aria-label="Illustrated mountain landscape, not a photograph of this route"><span>Planning illustration</span></div><div className="planner-trip-stats"><span>{route.distanceMiles} mi</span><span>{request.days ?? "—"} days</span><span>{request.startDate || "Dates to decide"}</span><button className="planner-link" onClick={() => setStep(0)}>Edit trip</button></div></div>}
     <nav className="planner-steps" aria-label="Trip planning steps">{["Choose a trail", "Prepare your pack", "Record your outing"].map((label, i) => <button key={label} disabled={!started && i > 0} aria-current={step === i ? "step" : undefined} onClick={() => setStep(i)}><span>{i+1}</span>{label}</button>)}</nav>
     <div className="planner-layout">
       <div className="planner-workspace">
         {!started && <form className="planner-prompt" onSubmit={e => { e.preventDefault(); buildTrip(); }}>
           <label htmlFor="trip-prompt">What do you have in mind?</label>
-          <textarea id="trip-prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="30 miles, 3 days in Colorado…" maxLength={1500} required rows={2} />
-          <div className="planner-prompt-footer"><button type="button" className="planner-link" onClick={() => setPrompt("30 miles, 3 days in Colorado")}>Try a 3-day Colorado trip</button><button className="planner-button">Build my trip <span aria-hidden="true">→</span></button></div>
+          {!prompt && <button type="button" className="planner-example" onClick={() => setPrompt("30 miles, 3 days in Colorado")}>Start with an example: <strong>3 days, 30 miles in Colorado</strong></button>}
+          <textarea id="trip-prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe your trip: where, how far, how many days" maxLength={1500} required rows={2} />
+          <div className="planner-prompt-footer"><button className="planner-button">Build my trip <span aria-hidden="true">→</span></button></div>
         </form>}
         {!started && <div className="planner-intro"><h2>Your next trip, informed by your last.</h2><p>Start with a distance, number of days, and region. We’ll find route options, calculate the gear you’re carrying, and arrange it into a packing checklist.</p><p className="planner-help">Your account’s gear and hikes are used when you’re signed in. Add preferences and trip feedback here to make recommendations more personal.</p></div>}
-        {!started && <LocalOutdoorAiChat onApplyPrompt={(p) => { setPrompt(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />}
+        {!started && <LocalOutdoorAiChat model={model} onApplyPrompt={(p) => { setPrompt(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />}
         {started && <>
           {step === 0 && <div className="planner-request-summary"><h2>{request.distanceMiles ? `${request.distanceMiles} miles` : "Choose your mileage"}{request.days ? ` over ${request.days} ${request.days === 1 ? "day" : "days"}` : ""}{request.region ? ` ${request.locationMode === "near" ? "near" : "in"} ${request.region}` : ""}</h2><div><p>{request.region} · About {request.distanceMiles ?? "—"} mi · {request.days ?? "—"} days</p><button className="planner-button secondary" onClick={() => setStarted(false)}>Edit request</button></div></div>}
           {step === 0 && <section className="planner-stage" aria-labelledby="trail-title">
@@ -240,7 +245,7 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
             <div className="planner-packing-progress"><span>{selected.filter(g => packed.includes(g.id)).length} of {selected.length} items checked</span><progress aria-label="Equipment packing progress" max={Math.max(selected.length, 1)} value={selected.filter(g => packed.includes(g.id)).length} /></div>
             <PackingGuide gear={selected} request={request} packed={packed} onToggle={togglePacked} units={units} capacityLiters={memory.profile.packCapacityL} />
             <h3>Before you head out</h3><ul className="planner-prep">{preparationChecks(request).map(check => <li key={check}>{check}</li>)}</ul><a href={REFERENCES.essentials} target="_blank" rel="noopener noreferrer">National Park Service: the Ten Essentials</a>
-            <div className="planner-actions planner-go-actions"><button className="planner-button" onClick={savePlan} disabled={!request.region || !request.distanceMiles || !request.days}>{activePlanId ? "Save trip changes" : "Save this trip on my device"}</button><Link className="planner-button secondary" href={route?.trailId ? `/record/live?type=hike&trail_id=${encodeURIComponent(route.trailId)}` : "/record"}>Open activity recorder</Link></div>
+            <div className="planner-actions planner-go-actions"><button className="planner-button" onClick={savePlan} disabled={!request.region || !request.distanceMiles || !request.days}>{activePlanId ? "Save trip changes" : signedIn ? "Save trip to my account" : "Save trip for this visit"}</button><Link className="planner-button secondary" href={route?.trailId ? `/record/live?type=hike&trail_id=${encodeURIComponent(route.trailId)}` : "/record"}>Open activity recorder</Link></div>
           </section>}
           <details id="trip-details" className="planner-details planner-trip-details" open={!request.region || !request.distanceMiles || !request.days}>
             <summary>Trip details <span>{request.distanceMiles ?? "—"} mi · {request.days ?? "—"} days · {request.region || "Choose a region"}</span></summary>
@@ -255,9 +260,9 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
           </details>
           <details className="planner-details planner-questions"><summary>{followUps.length ? `${followUps.length} details to make this plan yours` : "Your trip details are filled in"}</summary><ul>{followUps.map(q => <li key={q}>{q}</li>)}</ul><p className="planner-help">Update trip details above and My trip preferences alongside the plan.</p></details>
           <div className="planner-ai-answer">
-            <LocalOutdoorAiChat onApplyPrompt={(p) => { setPrompt(p); setNotice(`Prompt applied from Local AI: ${p}`); }} />
-            <div className="planner-section-heading"><h3>Think it through with local AI</h3>{model.status === "ready" && !aiError && <button className="planner-link" onClick={() => void explain()}>Explain my plan</button>}</div>
-            <p className="planner-help">{model.status === "off" || model.status === "error" ? "Enable the browser model in Local AI to get an explanation using this trip, your gear, and past-trip feedback." : model.status === "loading" ? "The browser model is loading. Keep building your plan while it finishes." : model.status === "thinking" ? "Thinking on this device…" : "The local model prioritizes facts and questions from your current plan. Displayed weights and specifications come from the planner’s verified data."}</p>
+            <LocalOutdoorAiChat model={model} onApplyPrompt={(p) => { setPrompt(p); setNotice(`Prompt applied from Eco AI: ${p}`); }} />
+            <div className="planner-section-heading"><h3>Think it through with Eco AI</h3>{model.status === "ready" && !aiError && <button className="planner-link" onClick={() => void explain()}>Explain my plan</button>}</div>
+            <p className="planner-help">{model.status === "off" || model.status === "error" ? "Turn on Eco AI to get an explanation using this trip, your gear, and past-trip feedback." : model.status === "loading" ? "The browser model is loading. Keep building your plan while it finishes." : model.status === "thinking" ? "Thinking on this device…" : "The local model prioritizes facts and questions from your current plan. Displayed weights and specifications come from the planner’s verified data."}</p>
             {explanation.length > 0 && explainedSignature === aiSignature && <ul className="planner-explanation">{explanation.map(text => <li key={text}>{text}</li>)}</ul>}<p id="planner-ai-error" role="status" className="planner-help">{aiError}</p>
             {aiError && <button type="button" className="planner-button secondary" aria-describedby="planner-ai-error" disabled={model.status === "loading" || model.status === "thinking"} onClick={() => void explain()}>Retry explanation</button>}
           </div>
@@ -276,23 +281,23 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
 
         </section>}
 
-        <section className="planner-memory"><h2>Built around you.</h2><p>{context.userId ? "Using your signed-in account’s equipment and completed hikes." : "Planning as a guest. Your preferences, gear additions, and saved trips stay in this browser."}</p><dl><div><dt>Gear available</dt><dd>{inventory.length} {inventory.length === 1 ? "item" : "items"}</dd></div><div><dt>Recorded hikes</dt><dd>{context.activities.length}</dd></div><div><dt>Trip feedback</dt><dd>{history.completedCount} {history.completedCount === 1 ? "trip" : "trips"}</dd></div></dl>{history.typicalRecordedHike != null && <p className="planner-help">Your typical recorded hike is {history.typicalRecordedHike.toFixed(1)} mi. Add daily-mileage preferences for overnight trips.</p>}<Link className="planner-button secondary" href="/gear">Review my gear</Link>{!context.userId && <p><Link href="/login">Sign in to use account gear & hikes</Link></p>}</section>
+        <section className="planner-memory"><h2>Built around you.</h2><p>{context.userId ? "Using your signed-in account’s equipment and completed hikes." : "Planning as a guest. What you add is kept for this visit only; sign in to keep it on every device."}</p><dl><div><dt>Gear available</dt><dd>{inventory.length} {inventory.length === 1 ? "item" : "items"}</dd></div><div><dt>Recorded hikes</dt><dd>{context.activities.length}</dd></div><div><dt>Trip feedback</dt><dd>{history.completedCount} {history.completedCount === 1 ? "trip" : "trips"}</dd></div></dl>{history.typicalRecordedHike != null && <p className="planner-help">Your typical recorded hike is {history.typicalRecordedHike.toFixed(1)} mi. Add daily-mileage preferences for overnight trips.</p>}<Link className="planner-button secondary" href="/gear">Review my gear</Link>{!context.userId && <p><Link href="/login?next=%2Fplan">Sign in to keep your trips and use account gear & hikes</Link></p>}{memoryLoading && signedIn && <p className="planner-help" role="status">Loading your saved trips…</p>}{memoryError && <p className="planner-alert" role="alert">{memoryError}</p>}</section>
         <details className="planner-details"><summary>My trip preferences</summary><div className="planner-fields one-column">
           <NumberField label="Usual comfortable miles / day" value={memory.profile.usualMilesPerDay} min={0.1} max={100} onChange={usualMilesPerDay => setProfile({ usualMilesPerDay })} />
           <NumberField label="Comfortable loaded pack (lb)" value={memory.profile.comfortablePackLb} min={1} max={150} onChange={comfortablePackLb => setProfile({ comfortablePackLb })} hint={history.basis} />
           <NumberField label="Backpack capacity (liters)" value={memory.profile.packCapacityL} min={1} max={200} onChange={packCapacityL => setProfile({ packCapacityL })} />
           <label>Backpacking experience<select value={memory.profile.experience} onChange={e => setProfile({ experience: e.target.value as PlannerProfile["experience"] })}><option value="new">Getting started</option><option value="some">Some overnight trips</option><option value="experienced">Experienced</option></select></label>
           <label>What matters to you?<textarea rows={3} value={memory.profile.priorities} onChange={e => setProfile({ priorities: e.target.value })} maxLength={500} placeholder="Quieter trails, a warm sleep system…" /></label>
-        </div><p className="planner-help">Saved on this device. Your explicit preferences take priority over learned trip feedback.</p></details>
-        <details className="planner-local planner-details"><summary>Local AI</summary><div className="planner-section-heading"><h3>Browser assistant</h3><span className={`planner-model-status ${model.status === "ready" ? "ready" : ""}`}>{model.status === "ready" ? "On device" : model.status === "thinking" ? "Thinking" : model.status === "loading" ? "Loading" : "Off"}</span></div>
-          <p>No separate app to install. The first load downloads Llama 3.2 3B model files into browser storage (~2 GB). A WebGPU-capable Chrome or Edge browser and available device memory are required.</p>
+        </div><p className="planner-help">{signedIn ? "Saved to your account." : "Kept for this visit; sign in to keep it."} Your explicit preferences take priority over learned trip feedback.</p></details>
+        <details className="planner-local planner-details"><summary>Eco AI</summary><div className="planner-section-heading"><h3>Eco-friendly on-device AI</h3><span className={`planner-model-status ${model.status === "ready" ? "ready" : ""}`}>{model.status === "ready" ? "On device" : model.status === "thinking" ? "Thinking" : model.status === "loading" ? "Loading" : "Off"}</span></div>
+          <p>Hyked Eco AI runs on your own device instead of a data center, so each answer uses no cloud servers and no extra data-center energy or cooling water. No separate app to install. The first load downloads Llama 3.2 3B model files into browser storage (~2 GB). A WebGPU-capable Chrome or Edge browser and available device memory are required.</p>
           <p className="planner-help">Your trip and gear context are processed locally. Online lookup sends only the search terms or product URL. The standard planner works without loading AI.</p>
           {model.status === "loading" && <progress aria-label="Local model loading" value={model.progress} max={1} />}
           <p className="planner-model-message" role="status">{model.message}</p>
-          {model.status === "off" || model.status === "error" ? <button className="planner-button secondary" onClick={() => void model.load()}>{model.status === "error" ? "Retry local AI" : "Enable local AI"}</button> : <button className="planner-link" onClick={model.stop}>{model.status === "loading" ? "Cancel model loading" : model.status === "thinking" ? "Stop AI" : "Turn off local AI"}</button>}
+          {model.status === "off" || model.status === "error" ? <button className="planner-button secondary" onClick={() => void model.load()}>{model.status === "error" ? "Retry Eco AI" : "Turn on Eco AI"}</button> : <button className="planner-link" onClick={model.stop}>{model.status === "loading" ? "Cancel model loading" : model.status === "thinking" ? "Stop AI" : "Turn off Eco AI"}</button>}
         </details>
         <details className="planner-details" open={!started && memory.plans.length > 0}><summary>Saved trips <span>{memory.plans.length}</span></summary>{memory.plans.length === 0 ? <p className="planner-help">Save a trip after preparing your pack. When you return, add feedback here.</p> : memory.plans.map(plan => <div className="planner-saved" key={plan.id}><h4>{plan.route?.name ?? plan.request.region}</h4><p>{plan.route?.distanceMiles ?? plan.request.distanceMiles} mi · {plan.request.days} days{plan.feedback ? " · Completed" : " · Planned"}</p><button className="planner-link" onClick={() => restore(plan)}>Restore trip</button><details><summary>{plan.feedback ? "Review trip feedback" : "How did the trip go?"}</summary><FeedbackForm key={`${plan.id}-${JSON.stringify(plan.feedback)}`} plan={plan} onSave={feedback => { update(m => ({ ...m, plans: m.plans.map(p => p.id === plan.id ? { ...p, feedback } : p) })); setNotice("Trip feedback remembered. Future plans will use it."); }} /></details></div>)}</details>
-        <details className="planner-details"><summary>Privacy & memory</summary><p>Only this account’s data is used. Other users’ accounts and external apps are not connected. Guest and signed-in planning memories are separate.</p><p>Local planning data stays in this browser profile until you remove it or clear site data. It is not encrypted or synced to your account. Use a separate browser profile on shared devices.</p>{forgetPending ? <div role="group" aria-label="Confirm forgetting local planning data"><p>This removes this profile’s local preferences, gear additions, and saved trips. Account gear and activities stay in your account.</p><div className="planner-actions"><button className="planner-button secondary" onClick={() => { if (update(() => emptyMemory())) { setActivePlanId(null); setSavedSignature(""); setStarted(false); setExcluded([]); setPacked([]); setShopping([]); setRoute(null); setExplanation([]); model.stop(); setForgetPending(false); setNotice("Local planning memory cleared."); } }}>Confirm forget</button><button className="planner-link" onClick={() => setForgetPending(false)}>Keep my data</button></div></div> : <button className="planner-link" onClick={() => setForgetPending(true)}>Forget local planning data</button>}</details>
+        <details className="planner-details"><summary>Privacy & memory</summary><p>Only this account’s data is used; it is never shared with other users or outside apps.</p><p>{signedIn ? "Your preferences, saved trips and gear are stored in your Hyked account, protected so only you can read them, and available on every device you sign in on. Nothing is kept on this device." : "As a guest, nothing is written to this device: what you add is held in this tab and cleared when you leave. Sign in to keep it."}</p>{forgetPending ? <div role="group" aria-label="Confirm deleting planning data"><p>{signedIn ? "This deletes your planner preferences and saved trips from your account. Gear and recorded activities stay." : "This clears your preferences, gear additions and saved trips for this visit."}</p><div className="planner-actions"><button className="planner-button secondary" onClick={() => { if (update(() => emptyMemory())) { setActivePlanId(null); setSavedSignature(""); setStarted(false); setExcluded([]); setPacked([]); setShopping([]); setRoute(null); setExplanation([]); model.stop(); setForgetPending(false); setNotice(signedIn ? "Planner preferences and saved trips deleted." : "Planning memory cleared."); } }}>Confirm</button><button className="planner-link" onClick={() => setForgetPending(false)}>Keep my data</button></div></div> : <button className="planner-link" onClick={() => setForgetPending(true)}>{signedIn ? "Delete saved trips and preferences" : "Clear planning memory"}</button>}</details>
         {context.messages.map(message => <p className="planner-alert" key={message}>{message}</p>)}
       </aside>
     </div>

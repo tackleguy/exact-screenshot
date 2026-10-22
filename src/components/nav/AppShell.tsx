@@ -4,9 +4,10 @@ import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { NavBar } from "./NavBar";
 import { BottomNav } from "./BottomNav";
+import { AccountSync } from "./AccountSync";
 import { AccessibilityAudit } from "@/components/dev/AccessibilityAudit";
 
-export function AppShell({ children, notice }: { children: ReactNode; notice: ReactNode }) {
+export function AppShell({ children, notice }: { children: ReactNode; notice?: ReactNode }) {
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const recording = pathname.startsWith("/record/live");
@@ -17,6 +18,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice: Re
     <div
       className={`app-shell${sidebarCollapsed ? " app-shell--collapsed" : ""}${standalone ? " app-shell--standalone" : ""}${recording ? " app-shell--recording" : ""}${fullMap ? " app-shell--map" : ""}`}
     >
+      <AccountSync />
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
