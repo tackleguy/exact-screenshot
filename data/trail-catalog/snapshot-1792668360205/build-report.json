@@ -1,0 +1,154 @@
+{
+  "tiers": {
+    "verified": 144754,
+    "mapped": 204609
+  },
+  "total": 349363,
+  "bySource": {
+    "STATE_AGENCY": 42595,
+    "USFS_OFFICIAL": 39786,
+    "USGS_NTD": 4287,
+    "BLM_OFFICIAL": 6122,
+    "NPS_OFFICIAL": 6798,
+    "VERIFIED_ORGANIZATION": 2801,
+    "LOCAL_AGENCY": 4411,
+    "PARKS_CANADA_OFFICIAL": 477,
+    "OpenStreetMap route relation": 37477,
+    "OpenStreetMap named ways": 204609
+  },
+  "byRegion": {
+    "Massachusetts, US": 5402,
+    "New Mexico, US": 8060,
+    "New York, US": 12173,
+    "New Hampshire, US": 8431,
+    "Hawaii, US": 241,
+    "West Virginia, US": 3694,
+    "Washington, US": 13714,
+    "Vermont, US": 6415,
+    "Idaho, US": 10104,
+    "Florida, US": 5334,
+    "Illinois, US": 2934,
+    "Colorado, US": 19632,
+    "Alabama, US": 1469,
+    "Oregon, US": 24540,
+    "Montana, US": 8766,
+    "Ohio, US": 4255,
+    "Delaware, US": 548,
+    "Utah, US": 11639,
+    "California, US": 29596,
+    "Missouri, US": 2585,
+    "Arizona, US": 11719,
+    "Alaska, US": 1494,
+    "Indiana, US": 3122,
+    "Michigan, US": 13607,
+    "Iowa, US": 2845,
+    "Kentucky, US": 2317,
+    "New Jersey, US": 4299,
+    "Texas, US": 4725,
+    "Virginia, US": 5801,
+    "Ontario, CA": 11670,
+    "Maine, US": 3752,
+    "Minnesota, US": 6344,
+    "Maryland, US": 2948,
+    "Pennsylvania, US": 9886,
+    "Wyoming, US": 4002,
+    "Nevada, US": 4236,
+    "Louisiana, US": 571,
+    "Tennessee, US": 3286,
+    "Arkansas, US": 2866,
+    "British Columbia, CA": 17804,
+    "Georgia, US": 2355,
+    "South Dakota, US": 1525,
+    "North Carolina, US": 4247,
+    "Wisconsin, US": 4069,
+    "Mississippi, US": 670,
+    "South Carolina, US": 1369,
+    "Nebraska, US": 892,
+    "North Dakota, US": 13698,
+    "District of Columbia, US": 262,
+    "Connecticut, US": 2450,
+    "Alberta, CA": 4784,
+    "Oklahoma, US": 1287,
+    "Kansas, US": 1362,
+    "Rhode Island, US": 534,
+    "Saskatchewan, CA": 931,
+    "Northwest Territories, CA": 49,
+    "Manitoba, CA": 735,
+    "Québec, CA": 8129,
+    "New Brunswick, CA": 780,
+    "Nova Scotia, CA": 1059,
+    "Newfoundland and Labrador, CA": 675,
+    "Prince Edward Island, CA": 283,
+    "Nunavut, CA": 49,
+    "Yukon, CA": 343
+  },
+  "rejected": {
+    "R1_no_name": {
+      "osm-relation": 2721,
+      "osm-way": 15332,
+      "official": 16533
+    },
+    "R2_too_short": {
+      "osm-relation": 689,
+      "osm-way": 104744
+    },
+    "R3_sidewalk": {
+      "osm-way": 50027
+    },
+    "R4_indoor": {
+      "osm-way": 2075
+    },
+    "R5_road": {
+      "osm-way": 106167
+    },
+    "R6_private_closed": {
+      "osm-relation": 695,
+      "osm-way": 8008,
+      "official": 60
+    },
+    "R7_duplicate": {
+      "osm-way": 3412
+    },
+    "R8_degenerate": {
+      "osm-relation": 402,
+      "osm-way": 17007
+    },
+    "R9_climbing": {
+      "osm-way": 689
+    },
+    "R10_outside": {
+      "osm-relation": 5,
+      "osm-way": 177,
+      "official": 167
+    }
+  },
+  "rules": {
+    "R1_no_name": "Unnamed, or a generic/placeholder name (path, trail, unnamed, a bare number) without an official ID",
+    "R2_too_short": "Under 0.3 mi, unless an official-layer trail or a named loop inside a park",
+    "R3_sidewalk": "Sidewalk, crosswalk, driveway, parking aisle, golf-cart path, steps only, or a street-name sidepath",
+    "R4_indoor": "Indoor, building passage, airport or campus service path",
+    "R5_road": "A road mapped as a trail (motor vehicles allowed on a track with a road name)",
+    "R6_private_closed": "Private or no access, disused/abandoned/under construction, or closed/decommissioned in the official layer",
+    "R7_duplicate": "Duplicate of another record (same name within 2 km with overlapping line); the record with more sources is kept",
+    "R8_degenerate": "Degenerate geometry: fewer than 3 points, self-intersecting zig-zags, or a scribble (length far exceeds its extent)",
+    "R9_climbing": "Climbing approach or descent path not part of a named route relation",
+    "R10_outside": "Outside every country/region outline (open water), or outside its claimed state/province"
+  },
+  "guides": [
+    "The Colorado Trail: relation 3445384 (476 mi mapped of 486); 12/13 sections cut from it",
+    "John Muir Trail: relation 1244828 (206 mi mapped of 211); 6/6 sections cut from it",
+    "Appalachian National Scenic Trail: relation 156553 (2100 mi mapped of 2190); 3/5 sections cut from it",
+    "Pacific Crest National Scenic Trail: relation 1225378 (2609 mi mapped of 2650); 3/5 sections cut from it",
+    "Continental Divide National Scenic Trail: relation 921198 (3022 mi mapped of 3100); 1/4 sections cut from it",
+    "Tahoe Rim Trail: relation 3094865 (167 mi mapped of 165); 8/8 sections cut from it",
+    "Arizona National Scenic Trail: relation 2804113 (777 mi mapped of 800); 2/4 sections cut from it",
+    "Wonderland Trail: relation 4111743 (86 mi mapped of 93); 3/3 sections cut from it",
+    "Peaks: 17 of 44 linked to a mapped route (the rest show summit and trailhead only)"
+  ],
+  "matching": {
+    "officialMatched": 20055,
+    "mergedOfficial": 6027,
+    "namedIntoVerified": 55552,
+    "wikiMatched": 1235
+  }
+}
