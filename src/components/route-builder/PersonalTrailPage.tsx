@@ -63,7 +63,8 @@ export function PersonalTrailPage({ id, token }: { id?: string; token?: string }
   const own = Boolean(id);
   const profile = elevation?.key === trail.id ? elevation.value : null;
   const gainFt = trail.stats.gainFt ?? profile?.gainFt ?? null;
-  const level = computeDifficulty({ miles: trail.stats.miles, gainFt }) ?? "moderate";
+  // No rating rather than a made-up one when the route has no measurable length.
+  const level = computeDifficulty({ miles: trail.stats.miles, gainFt });
   const start = trail.geometry[0], finish = trail.geometry[trail.geometry.length - 1];
   const loop = metersBetween(start, finish) < 200;
   const water = trail.features.filter((f) => featureGroup(f.type) === "water").length;
@@ -92,7 +93,7 @@ export function PersonalTrailPage({ id, token }: { id?: string; token?: string }
       <header className="trail-hero">
         <div className={`trail-hero-photo${trail.photoUrl ? "" : " trail-hero-photo--none"}`} style={trail.photoUrl ? { backgroundImage: `url("${trail.photoUrl}")` } : undefined}>
           <div className="trail-hero-text">
-            <span className={`trail-chip ${CHIP[level] ?? ""}`}>{DIFFICULTY_LABELS[level]}</span>
+            {level && <span className={`trail-chip ${CHIP[level] ?? ""}`}>{DIFFICULTY_LABELS[level]}</span>}
             <span className="trail-confidence trail-confidence--personal" title="A route built in Hyked from mapped trails">{own ? "Personal · your route" : "Personal · shared route"}</span>
             <h1>{trail.name}</h1>
             <p>{join([`${trail.trails.filter((t) => t.id).length} ${trail.trails.filter((t) => t.id).length === 1 ? "trail" : "trails"}`, trail.days?.length ? `${trail.days.length} days` : null])}</p>
@@ -103,7 +104,7 @@ export function PersonalTrailPage({ id, token }: { id?: string; token?: string }
           {duration(trail.stats.hours) && <div><dt>Est. time</dt><dd title="Naismith's rule: 3 mph plus 1 hour per 2,000 ft of climb">{duration(trail.stats.hours)}</dd></div>}
           {feet(gainFt) && <div><dt>Climb</dt><dd>{feet(gainFt)}</dd></div>}
           <div><dt>Route type</dt><dd>{loop ? "Loop" : "Point to point"}</dd></div>
-          <div><dt>Difficulty</dt><dd title={DIFFICULTY_FORMULA}>{DIFFICULTY_LABELS[level]}<small className="trail-stat-note">How it’s rated: distance{feet(gainFt) ? " and climb" : ""}</small></dd></div>
+          {level && <div><dt>Difficulty</dt><dd title={DIFFICULTY_FORMULA}>{DIFFICULTY_LABELS[level]}<small className="trail-stat-note">How it’s rated: distance{feet(gainFt) ? " and climb" : ""}</small></dd></div>}
         </dl>
         <div className="trail-actions">
           <a className="catalog-button" href={googleMapsDirectionsUrl(start[1], start[0])} target="_blank" rel="noopener noreferrer">Directions to start</a>
