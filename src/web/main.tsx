@@ -35,7 +35,7 @@ import type { CatalogManifest, CatalogTrail, CatalogMapResult } from "@/lib/trai
 import { CATALOG_ACTIVITIES, type CatalogActivity } from "@/lib/trail-catalog/activity";
 import mountainNight from "@/assets/mountain-night.jpg";
 import { apiOrigin, installApiBridge } from "./api";
-import { trailPageMeta, usePageMeta } from "./seo";
+import { RouteMeta, trailPageMeta, usePageMeta } from "./seo";
 import { useAccount } from "./session";
 import "@/app/globals.css";
 import "./web.css";
@@ -170,7 +170,8 @@ function Home() {
 function BackendPage() { const location = useLocation(); return <Status title="This page is unavailable right now">{apiOrigin ? <a className="btn-primary" href={`${apiOrigin}${location.pathname}${location.search}`}>Open this page</a> : "Please try again later."}</Status>; }
 function App() {
   const { user } = useAccount();
-  return <><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><AppShell><Routes>
+  const { pathname } = useLocation();
+  return <><RouteMeta pathname={pathname} /><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><AppShell><Routes>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<Navigate to="/explore/trails" replace />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />

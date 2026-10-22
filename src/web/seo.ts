@@ -73,3 +73,28 @@ export function trailPageMeta(t: CatalogTrail): PageMeta {
     },
   };
 }
+
+const DEFAULT_META: PageMeta = { title: "Hyked — Trails, Maps & Adventure", description: "Find real, verified trails across the U.S. and Canada, see water and campsites by mile, build routes and plan your trip." };
+const ROUTE_META: [RegExp, PageMeta][] = [
+  [/^\/(explore\/trails|map)\/?$/, { title: "Trail map | Hyked", description: "Topographic trail map of the U.S. and Canada with water, campsites and a route builder." }],
+  [/^\/explore\/trails\/catalog/, { title: "Trail catalog | Hyked", description: "Search verified and mapped trails near you by name, park or region." }],
+  [/^\/plan/, { title: "Plan a trip | Hyked", description: "Build a trip around a trail, prepare your gear and get a pack list." }],
+  [/^\/gear/, { title: "Your gear | Hyked", description: "Your gear closet and pack weights." }],
+  [/^\/login/, { title: "Log in | Hyked" }],
+  [/^\/signup/, { title: "Create an account | Hyked", description: "Save trips, gear and routes to your account so they're on every device." }],
+  [/^\/you/, { title: "Your profile | Hyked" }],
+  [/^\/record/, { title: "Record an outing | Hyked" }],
+  [/^\/activit/, { title: "Activity log | Hyked", description: "Your recorded hikes, runs, rides and ski days." }],
+  [/^\/ski-areas/, { title: "Ski areas | Hyked", description: "Ski areas and winter resorts with their mapped runs." }],
+  [/^\/explore\/ski/, { title: "Nordic ski trails | Hyked" }],
+  [/^\/trails\/?$/, { title: "Explore trails | Hyked" }],
+  [/^\/my\/trails/, { title: "My trail | Hyked" }],
+];
+
+/** Default title and description for each route; pages with their own meta (trail pages) override it. */
+export function RouteMeta({ pathname }: { pathname: string }) {
+  useEffect(() => {
+    applyPageMeta(ROUTE_META.find(([re]) => re.test(pathname))?.[1] ?? DEFAULT_META);
+  }, [pathname]);
+  return null;
+}
