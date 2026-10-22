@@ -11,7 +11,7 @@
  * Only shown trails are shipped (verified or mapped tier; nothing rejected, merged or a fragment). Everything here
  * is generated, so public/trail-data, public/sitemaps, public/sitemap.xml and public/robots.txt are not committed.
  */
-import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { gunzipSync, gzipSync } from "node:zlib";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -90,13 +90,19 @@ async function main() {
   const clusters = { grids: GRIDS, sections: Object.fromEntries(Object.entries(acc).map(([section, byGrid]) => [section, Object.fromEntries(Object.entries(byGrid).map(([g, bucket]) => [g, [...bucket.values()].map((a) => [r4(a[0] / a[2]), r4(a[1] / a[2]), a[2], a[3], r4(a[4]), r4(a[5]), r4(a[6]), r4(a[7])])]))])) };
   await writeFile(path.join(output, "clusters.json.gz"), zipped(clusters));
 
-  await writeFile(path.join(output, "manifest.json"), JSON.stringify({ ...manifest, total: rows.length, cells: [...cells.keys()], directory: pointer.directory }));
+  await writeFile(path.join(output, "manifest.json"), JSON.stringify({ ...manifest, total: rows.length, cells: [...cells.keys()], featureCells: (await readdir(path.join(source, "features")).catch(() => [] as string[])).map((f) => f.slice(2, -8)), directory: pointer.directory }));
   await writeFile(path.resolve("public/trail-data/current.json"), JSON.stringify(pointer));
   await Promise.all([
     copyFile("data/sources/trailheads-na.json.gz", path.join(output, "trailheads.json.gz")),
     copyFile("data/towns/towns.json.gz", path.join(output, "towns.json.gz")),
     copyFile(path.join(source, "curated.json.gz"), path.join(output, "curated.json.gz")).catch((error) => { if (error.code !== "ENOENT") throw error; }),
   ]);
+  // Hike-feature layer (pipeline/steps/features.ts), already sharded by 1° cell.
+  const featureFiles = await readdir(path.join(source, "features")).catch(() => [] as string[]);
+  if (featureFiles.length) {
+    await mkdir(path.join(output, "features"), { recursive: true });
+    await Promise.all(featureFiles.map((f) => copyFile(path.join(source, "features", f), path.join(output, "features", f))));
+  }
 
   // Sitemaps: one file per 45,000 trail pages plus the main pages, and robots.txt pointing at the index.
   await rm(path.resolve("public/sitemaps"), { recursive: true, force: true });

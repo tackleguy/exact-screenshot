@@ -83,6 +83,23 @@ vertex-count lengths, packet defaults) were deleted.
 - **Guard helper:** `src/lib/display.ts` formats every number and string and returns nothing for missing, NaN
   or "undefined" values, so no section prints them.
 
+## Hike-feature layer
+
+- **What:** springs, drinking water, lakes and rivers within 200 m of a trail, stream and river crossings, fords,
+  waterfalls, campsites and camp pitches, shelters and huts, trailheads, parking, toilets, ranger stations, picnic
+  sites, viewpoints, peaks, passes and bridges, all from OpenStreetMap (the same Geofabrik extracts, a second
+  pass in `pipeline/steps/extract-osm.py`). Points within 300 m of a trail are kept; crossings are computed where
+  a mapped stream or river line crosses a trail line; lakes and rivers are placed at their nearest shore point.
+- **Placed on trails:** `pipeline/steps/features.ts` measures each feature's mile marker along every trail it is on
+  or near (the same ordering trail pages use), keeps up to 12 trails per feature, and writes 1° cell shards
+  (`features/f-<cell>.json.gz`). The map loads only the cells in view from zoom 11; trail pages, water lists,
+  GPX waypoints and the route builder all read the same layer, so a feature appears at the same mile everywhere.
+- **NHD and agency campsites:** the USGS National Hydrography Dataset is not ingested separately: OpenStreetMap
+  streams and lakes in most states were imported from NHD and have since been edited by mappers, and NHD's
+  flowlines (tens of millions of segments) would multiply the build for little gain. NPS/USFS designated sites
+  are covered where OpenStreetMap maps them; there is no national open layer of backcountry sites to add.
+- Parking lots and bridges are shown on the map but left out of a trail page's mile-by-mile list to keep it readable.
+
 ## Ranking and search
 
 - **Quality score** (`src/lib/trail-catalog/score.ts`): verified +15, route relation +25, official source +20,
@@ -131,4 +148,4 @@ JavaScript; other crawlers and link previews see the generic tags from `index.ht
 The app is deployed from git, not Lovable. Lovable's badge and its `/~flock.js` and `/__l5e/` scripts are injected
 by Lovable's hosting (they are not in this repository), so they disappear when the app is served from another
 host. The Lovable-only preview-auth module (`src/integrations/supabase`) and `bun.lock` were removed, and the
-"Local preview · Account sign-in and cloud sync are not connected" footer now shows only in development builds.
+"Local preview · Account sign-in and cloud sync are not connected" footer was deleted.

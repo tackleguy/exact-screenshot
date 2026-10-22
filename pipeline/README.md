@@ -4,7 +4,7 @@ One command rebuilds the trail catalog from public sources. It is safe to re-run
 inputs under `.cache/`, so an interrupted run resumes where it stopped.
 
 ```bash
-npm run pipeline                  # OSM extracts (cached regions skipped) → Wikidata → build → validation report
+npm run pipeline                  # OSM extracts (cached regions skipped) → Wikidata → build → features → validation report
 npm run pipeline -- --refresh     # re-download every OSM region and refresh Wikidata
 npm run pipeline -- --official    # also rebuild the official-agency layer (slow; cached ArcGIS pages reused)
 npm run build                     # turns the snapshot into the app's sharded files, sitemap and robots.txt
@@ -18,11 +18,12 @@ disk. A full run takes roughly an hour (most of it downloading the OSM extracts)
 | step | file | output |
 |---|---|---|
 | 1. Official layers (`--official`) | `scripts/ingestion/source-catalog.ts`, `trail-uses.ts`, `reclassify-winter.ts` | an official snapshot in `data/trail-catalog/`; `official-base.json` points at it |
-| 2. OpenStreetMap | `pipeline/steps/extract-osm.py` | `.cache/osm-pbf/<region>.json.gz` per U.S. state / Canadian province |
+| 2. OpenStreetMap | `pipeline/steps/extract-osm.py` | `.cache/osm-pbf/<region>.json.gz` (trails) and `.cache/osm-features/<region>.json.gz` (hike features) per U.S. state / Canadian province |
 | 3. Wikidata / Wikipedia | `pipeline/steps/wiki.ts` | `data/sources/wiki-trails.json.gz` |
 | 4. Build | `pipeline/steps/build.ts` | a new `data/trail-catalog/snapshot-<time>/` (the previous one is kept) and `current.json` |
-| 5. Validation report | `pipeline/steps/validate.ts` | printed; the build also writes `build-report.json` in the snapshot |
-| 6. App files (`npm run build`) | `scripts/prepare-trail-assets.ts` | `public/trail-data/…`, `public/sitemap.xml`, `public/sitemaps/*.xml`, `public/robots.txt` (generated, not committed) |
+| 5. Hike features | `pipeline/steps/features.ts` | `features/f-<cell>.json.gz` in the snapshot: every feature with its mile on each nearby trail, plus `features-report.json` |
+| 6. Validation report | `pipeline/steps/validate.ts` | printed; the build also writes `build-report.json` in the snapshot |
+| 7. App files (`npm run build`) | `scripts/prepare-trail-assets.ts` | `public/trail-data/…`, `public/sitemap.xml`, `public/sitemaps/*.xml`, `public/robots.txt` (generated, not committed) |
 
 ### 1. Official layers
 USGS National Digital Trails (which already compiles many state and local layers: Colorado COTREX via Colorado
@@ -35,6 +36,10 @@ and the source link. Endpoints are listed in `scripts/ingestion/source-catalog.t
 Each Geofabrik extract is streamed into memory and read with pyosmium; the raw extract is never written to disk.
 Kept: every route relation with `route=hiking|foot|bicycle|mtb|horse|ski` and its member ways, and every
 `highway=path|footway|track|bridleway|cycleway` way with a name, with the tags the verification rules need.
+
+A second pass over the same extract keeps hike features within 300 m of those trail ways: springs, drinking
+water, campsites, shelters, huts, trailheads, parking, toilets, viewpoints, peaks, passes, fords, waterfalls,
+picnic sites and ranger stations, plus computed stream crossings, bridges, and nearby named lakes and rivers.
 
 ### 3. Wikidata
 Trails in the U.S. and Canada (instances of trail, Q628179, and subclasses) plus items OSM relations link with a

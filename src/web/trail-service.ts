@@ -8,7 +8,9 @@ import { nearbyCatalogPhotos, wikiPhotos } from "@/lib/trail-catalog/photos";
 import { matchScore, placeMatch, searchEntry, searchRank, type SearchEntry } from "@/lib/trail-catalog/fuzzy";
 import type { LngLat } from "@/lib/geo/tiles";
 import { elevationProfile } from "@/lib/trip/elevation";
-import { waterAlong } from "@/lib/trip/water";
+import { waterAlong, waterFromFeatures } from "@/lib/trip/water";
+import { featureFromRow, featuresAlong, FEATURE_LABELS, type FeatureRow, type TrailFeature } from "@/lib/trail-catalog/features";
+import { cellsInBounds, geometryCell } from "@/lib/trail-catalog/cells";
 import { parseTowns, townServices, townsNear, type Town } from "@/lib/trip/towns-core";
 import { planTownDays } from "@/lib/trip/town-days";
 import { tripGpx, tripPacketHtml, waterCsv, type PackItem, type TripBundle } from "@/lib/trip/packet";
@@ -22,11 +24,10 @@ import {
   DETAILED_THRU_HIKES,
   getDetailedThruHikeTrails,
 } from "@/lib/trail-catalog/through-hikes-data";
-import { fetchLiveOsmTrails } from "@/lib/geo/overpass";
 import { snapPointToNearestLine, simplifyForZoom } from "@/lib/geo/snap";
 import { trailSacScale } from "@/lib/trail-catalog/types";
 
-type Metadata = CatalogManifest & { directory: string; cells: string[] };
+type Metadata = CatalogManifest & { directory: string; cells: string[]; featureCells?: string[] };
 type Lines = [number, number][][];
 const cache = new Map<string, Promise<unknown>>();
 let metadata: Promise<Metadata> | undefined;
@@ -255,6 +256,29 @@ async function detail(
   return { trail, lines, manifest: m };
 }
 
+/** Rows of the hike-feature layer for the given 1° cells (cells without features are skipped). */
+async function featureRows(cellIds: string[], m: Metadata, fetcher: typeof fetch): Promise<FeatureRow[]> {
+  const have = new Set(m.featureCells ?? []);
+  const parts = await Promise.all(cellIds.filter((c) => have.has(c)).map((c) => asset<FeatureRow[]>(`${m.directory}/features/f-${c}.json.gz`, fetcher)));
+  return parts.flat();
+}
+
+/** Features on or near one trail with their mile markers, or null when this build has no feature layer. */
+async function trailFeatures(d: { trail: CatalogTrail; lines: Lines }, fetcher: typeof fetch): Promise<TrailFeature[] | null> {
+  const m = await meta(fetcher);
+  if (!m.featureCells?.length) return null;
+  const cellIds = new Set<string>();
+  for (const line of d.lines) for (const p of line) cellIds.add(geometryCell(p[0], p[1]));
+  return memo(`features:${d.trail.id}`, async () => featuresAlong(await featureRows([...cellIds].slice(0, 80), m, fetcher), d.trail.id));
+}
+
+/** Water along a trail: from the feature layer when the build has one, otherwise read from map tiles. */
+async function waterFor(d: { trail: CatalogTrail; lines: Lines }, chained: LngLat[][], fetcher: typeof fetch) {
+  const features = await trailFeatures(d, fetcher).catch(() => null);
+  if (features) return waterFromFeatures(features, measureLines(chained).meters / 1609.344);
+  return memo(`water:${d.trail.id}`, () => waterAlong(chained));
+}
+
 /** The 2–3 nearest real towns for a day hike (more, spread along the route, for long trails), with services. */
 function townsFor(d: { trail: CatalogTrail }, chained: LngLat[][], maxMilesOff: number, limit: number | undefined, fetcher: typeof fetch) {
   const lines = chained.length ? chained : [[[d.trail.longitude, d.trail.latitude], [d.trail.longitude + 0.00001, d.trail.latitude]] as LngLat[]];
@@ -271,7 +295,7 @@ function townsFor(d: { trail: CatalogTrail }, chained: LngLat[][], maxMilesOff: 
 /** Everything a packet or download needs, all from real sources (missing parts are left out, never filled in). */
 async function tripBundle(d: { trail: CatalogTrail; lines: Lines }, chained: LngLat[][], options: ReturnType<typeof townDayOptions>, pack: PackItem[], fetcher: typeof fetch): Promise<TripBundle> {
   const [water, towns, elevation] = await Promise.all([
-    chained.length ? memo(`water:${d.trail.id}`, () => waterAlong(chained)).catch(() => null) : Promise.resolve(null),
+    chained.length ? waterFor(d, chained, fetcher).catch(() => null) : Promise.resolve(null),
     townsFor(d, chained, options?.maxMilesOffTrail ?? 15, undefined, fetcher).catch(() => []),
     chained.length ? memo(`elev:${d.trail.id}`, () => elevationProfile(chained)).catch(() => null) : Promise.resolve(null),
   ]);
@@ -342,20 +366,20 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       return Response.json({ type: "FeatureCollection", features });
     }
 
-    // Dedicated endpoint for Mountain POIs (Trailheads, Water, Campsites, Summits, Parking)
-    if (suffix[0] === "pois") {
-      const f = parseCatalogFilters(params);
-      const bbox = f.bbox;
-      if (!bbox) {
-        return Response.json({ type: "FeatureCollection", features: [] });
+    // Hike features in view (water, campsites, shelters, trailheads, viewpoints…) from the build-time feature layer.
+    // `pois` is the GeoJSON form of the same data.
+    if (suffix[0] === "features" || suffix[0] === "pois") {
+      const m = await meta(fetcher);
+      const bbox = parseCatalogFilters(params).bbox;
+      const types = new Set((params.get("types") ?? "").split(",").filter(Boolean));
+      const rows = bbox
+        ? (await featureRows(cellsInBounds(bbox, 0, 16), m, fetcher)).filter((r) => r[3] >= bbox[0] && r[3] <= bbox[2] && r[4] >= bbox[1] && r[4] <= bbox[3] && (!types.size || types.has(r[1])))
+        : [];
+      const features = rows.slice(0, 5000).map(featureFromRow);
+      if (suffix[0] === "pois") {
+        return Response.json({ type: "FeatureCollection", features: features.map((f) => ({ type: "Feature", id: f.id, properties: { id: f.id, type: f.type, kind: f.type, name: f.name, label: FEATURE_LABELS[f.type] }, geometry: { type: "Point", coordinates: [f.lon, f.lat] } })) });
       }
-      try {
-        const live = await fetchLiveOsmTrails([bbox[1], bbox[0], bbox[3], bbox[2]]);
-        const poiFeatures = live.features.filter((feat) => feat.geometry.type === "Point");
-        return Response.json({ type: "FeatureCollection", features: poiFeatures });
-      } catch {
-        return Response.json({ type: "FeatureCollection", features: [] });
-      }
+      return Response.json({ features, total: rows.length, source: "© OpenStreetMap contributors (ODbL)" });
     }
 
     // Dedicated Snap-to-Trail endpoint (Projects user click or GPS waypoint directly to trail vector geometry)
@@ -516,7 +540,14 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
     // Water: OpenStreetMap springs, drinking water, lakes and stream crossings, each at its real trail mile.
     if (suffix[1] === "water") {
       if (!chained.length) return noLine("water along it");
-      return Response.json(await memo(`water:${d.trail.id}`, () => waterAlong(chained)));
+      return Response.json(await waterFor(d, chained, fetcher));
+    }
+
+    // Every hike feature on or near the trail (water, campsites, shelters, viewpoints…), by mile.
+    if (suffix[1] === "features") {
+      if (!chained.length) return noLine("features along it");
+      const features = await trailFeatures(d, fetcher);
+      return Response.json({ features: features ?? [], available: features !== null, source: "© OpenStreetMap contributors (ODbL)" });
     }
 
     // Downloads: GPX with water and towns, water CSV, printable packet — built from the same real data.

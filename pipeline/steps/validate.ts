@@ -41,6 +41,11 @@ async function main() {
     console.log("Rejected by rule:");
     for (const [rule, bySrc] of Object.entries(report.rejected)) console.log(`  ${rule.padEnd(18)} ${String(Object.values(bySrc).reduce((a, b) => a + b, 0).toLocaleString("en-US")).padStart(9)}  ${Object.entries(bySrc).map(([k, v]) => `${k} ${v.toLocaleString("en-US")}`).join(", ")}`);
   } catch { console.log("No build-report.json in this snapshot (built before the verification filter)."); }
+  try {
+    const features = JSON.parse(await readFile(path.join(dir, "features-report.json"), "utf8")) as { total: number; trailLinks: number; byType: Record<string, number>; bytes: number };
+    console.log(`Hike features:             ${features.total.toLocaleString("en-US")} on or near trails (${features.trailLinks.toLocaleString("en-US")} trail–feature links, ${(features.bytes / 1e6).toFixed(1)} MB)`);
+    console.log(`  by type:                 ${Object.entries(features.byType).map(([k, v]) => `${k} ${v.toLocaleString("en-US")}`).join(" · ")}`);
+  } catch { console.log("No features-report.json yet (run pipeline/steps/features.ts)."); }
   console.log(`Named:                     ${pct((r) => !/^unnamed/i.test(r.name) && !r.originalName)}`);
   console.log(`OSM route relation:        ${pct((r) => Boolean(r.osm))}`);
   console.log(`Official source match:     ${pct((r) => Boolean((r.sourceType && OFFICIAL.has(r.sourceType)) || r.sources?.some((s) => OFFICIAL.has(s.type))))}`);

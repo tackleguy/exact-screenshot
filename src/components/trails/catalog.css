@@ -248,3 +248,20 @@
 .trail-confidence--mapped { color: #5a4310; }
 .trail-confidence--guide { color: #3a3f8f; }
 .trail-stat-note { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--sage); }
+
+/* Along the trail: hike features by mile */
+.trail-features { margin: 2rem 0; }
+.trail-features-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.trail-features-head h2 { margin: 0; }
+.trail-features-filter { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.trail-features-filter button { font: inherit; font-size: 0.82rem; padding: 0.3rem 0.7rem; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--sage); cursor: pointer; }
+.trail-features-filter button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--forest); }
+.trail-features-list { list-style: none; margin: 1rem 0 0; padding: 0; border-top: 1px solid var(--border); }
+.trail-feature { display: grid; grid-template-columns: 5.5rem 1fr; gap: 0.75rem; padding: 0.6rem 0.25rem; border-bottom: 1px solid var(--border); align-items: baseline; }
+.trail-feature-mile { font-variant-numeric: tabular-nums; color: var(--sage); font-size: 0.85rem; }
+.trail-feature-name { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.trail-feature-name strong { color: var(--cream); font-weight: 600; overflow-wrap: anywhere; }
+.trail-feature-name small { color: var(--sage); font-size: 0.8rem; }
+.trail-feature-water { box-shadow: inset 3px 0 0 #5aa9e6; }
+.trail-feature-camping { box-shadow: inset 3px 0 0 #e0a458; }
+.trail-features-note { color: var(--sage); font-size: 0.8rem; margin-top: 0.75rem; }

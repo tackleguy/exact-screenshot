@@ -58,6 +58,7 @@ export function CatalogTrailHero({ trail: t, difficulty, distance, hasLines }: {
         {hasLines && <a className="catalog-button secondary" href={`/api/trail-catalog/${encodeURIComponent(t.id)}/gpx`} download>Download GPX</a>}
         <Link className="catalog-button secondary" href={`/explore/trails?trail=${encodeURIComponent(t.id)}&lat=${t.latitude}&lng=${t.longitude}&z=13`}>View on map</Link>
         <Link className="catalog-button secondary" href={`/plan?${new URLSearchParams({ prompt: planPrompt ?? t.name, ...(t.region ? { region: t.region } : {}) })}`}>Plan a trip</Link>
+        {hasLines && <Link className="catalog-button secondary" href={`/explore/trails?${new URLSearchParams({ routeFrom: `${head.latitude.toFixed(5)},${head.longitude.toFixed(5)}`, routeFromName: t.trailhead?.name ?? t.name, lat: String(head.latitude), lng: String(head.longitude), z: "13" })}`}>Build a route from here</Link>}
       </div>
     </header>
   );

@@ -40,9 +40,10 @@ async function main() {
     const current = await readFile(path.join(root, "data/trail-catalog/current.json"), "utf8");
     await writeFile(path.join(root, "data/trail-catalog/official-base.json"), current);
   }
-  step("OpenStreetMap extracts (Geofabrik, in memory)", "python3", ["pipeline/steps/extract-osm.py", "--workers", "3"]);
+  step("OpenStreetMap extracts (Geofabrik, in memory)", "python3", ["pipeline/steps/extract-osm.py", "--workers", "2"]);
   step("Wikidata / Wikipedia", "npx", ["tsx", "pipeline/steps/wiki.ts"]);
   step("Build catalog", "node", ["--max-old-space-size=12288", "node_modules/.bin/tsx", "pipeline/steps/build.ts"]);
+  step("Hike features along trails", "node", ["--max-old-space-size=8192", "node_modules/.bin/tsx", "pipeline/steps/features.ts"]);
   step("Validation report", "npx", ["tsx", "pipeline/steps/validate.ts"]);
   console.log("\nDone. `npm run build` turns the new snapshot into the app's sharded files, sitemap and robots.txt.");
 }

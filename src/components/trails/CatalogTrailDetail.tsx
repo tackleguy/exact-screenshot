@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CatalogMapView } from "./CatalogMapView";
 import { TrailMapAndDirections } from "./TrailMapAndDirections";
 import { TripTools } from "./TripTools";
+import { TrailFeatureList } from "./TrailFeatureList";
 import { CatalogPhotos } from "./CatalogPhotos";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { TrailWeatherForecast } from "./TrailWeatherForecast";
@@ -249,6 +250,7 @@ export function CatalogTrailDetail({
         />
       )}
       <TripTools trailId={t.id} hasLine={hasLines} miles={t.miles} />
+      <TrailFeatureList trailId={t.id} hasLine={hasLines} />
       {hasLocation && <CatalogPhotos trailId={t.id} />}
       {t.sections && t.sections.length > 0 && (
         <section className="catalog-sections-breakdown" style={{ marginTop: "2rem", marginBottom: "2rem" }}>
