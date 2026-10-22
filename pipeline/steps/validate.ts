@@ -57,6 +57,15 @@ async function main() {
   for (const r of shown) bySection[r.osm?.route ?? "official"] = (bySection[r.osm?.route ?? "official"] ?? 0) + 1;
   console.log(`By source kind:            ${JSON.stringify(bySection)}`);
 
+  // Worldwide trails (world.ts), country by country.
+  try {
+    const world = JSON.parse(await readFile(path.join(dir, "world", "report.json"), "utf8")) as { world: { verified: number; mapped: number; countries: Record<string, number>; geometryBytes: number }; rejected: Record<string, Record<string, number>> };
+    const top = Object.entries(world.world.countries).sort((a, b) => b[1] - a[1]);
+    console.log(`Worldwide:                 ${(world.world.verified + world.world.mapped).toLocaleString("en-US")} = ${world.world.verified.toLocaleString("en-US")} verified + ${world.world.mapped.toLocaleString("en-US")} mapped in ${top.length} countries (lines ${(world.world.geometryBytes / 1e6).toFixed(0)} MB)`);
+    console.log(`  most trails:             ${top.slice(0, 12).map(([c, n]) => `${c} ${n.toLocaleString("en-US")}`).join(" · ")}`);
+    console.log(`  rejected by rule:        ${Object.entries(world.rejected).map(([r, bySrc]) => `${r} ${Object.values(bySrc).reduce((a, b) => a + b, 0).toLocaleString("en-US")}`).join(" · ")}`);
+  } catch { console.log("Worldwide:                 not in this snapshot (npm run pipeline -- --world)"); }
+
   let seed = Number(process.argv.find((a) => a.startsWith("--seed="))?.slice(7) ?? 7);
   const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
   console.log("\n10 random trails:");
