@@ -1,7 +1,6 @@
-import { cleanStoredProductDetails } from "./product-details";
 import { getAuthUser } from "@/lib/supabase/server";
 import { getTrails } from "@/lib/data";
-import { CATEGORY_ORDER, type GearCategory, type GearType } from "@/lib/gear";
+import { rowToGear } from "@/lib/account/planner-cloud";
 import { REFERENCE_ROUTES } from "./catalog";
 import type { PlannerContext } from "./types";
 export async function getPlannerContext(): Promise<PlannerContext> {
@@ -16,7 +15,7 @@ export async function getPlannerContext(): Promise<PlannerContext> {
     supabase.from("user_trails").select("id,name,location,distance,elevation,difficulty").eq("user_id", user.id).limit(100),
   ]);
   if (gear.error) context.messages.push("Your account gear could not be loaded. Refresh to try again.");
-  else context.gear = (gear.data ?? []).map(g => ({ ...cleanStoredProductDetails(g.product_details), price: Number(g.price), id: String(g.id), name: String(g.name), category: CATEGORY_ORDER.includes(g.category as GearCategory) ? g.category as GearCategory : "Misc", type: ["Base", "Worn", "Consumable"].includes(g.type) ? g.type as GearType : "Base", qty: Math.max(1, Number(g.qty) || 1), weightOz: Number(g.weight) > 0 ? Number(g.weight) : null, packedSize: cleanStoredProductDetails(g.product_details).packedSize ?? null, sourceUrl: /^https:\/\//i.test(g.link ?? "") ? g.link : null }));
+  else context.gear = (gear.data ?? []).map(rowToGear);
   if (history.error) context.messages.push("Your activity history could not be loaded. You can still enter preferences below.");
   else context.activities = (history.data ?? []).map(a => ({ id: a.id, title: a.title, miles: Number(a.distance_m)/1609.344, hours: Number(a.duration_sec)/3600, date: a.started_at }));
   if (custom.error) context.messages.push("Your custom routes could not be loaded.");

@@ -149,3 +149,56 @@ The app is deployed from git, not Lovable. Lovable's badge and its `/~flock.js` 
 by Lovable's hosting (they are not in this repository), so they disappear when the app is served from another
 host. The Lovable-only preview-auth module (`src/integrations/supabase`) and `bun.lock` were removed, and the
 "Local preview · Account sign-in and cloud sync are not connected" footer was deleted.
+
+## Backend and accounts
+
+**Supabase** (already the project's backend; free tier is enough to start) holds everything a person creates.
+The browser is only a thin cache: nothing a person makes is written to the device.
+
+| data | table | before |
+|---|---|---|
+| Gear | `gear_items` | account (signed in) / localStorage (guests, planner additions) |
+| Trip-planner preferences | `user_preferences.planner_profile` | localStorage |
+| Saved trips (request, route, pack, shopping list, packed items, feedback) | `trips` | localStorage |
+| Routes joined on the map | `saved_routes` | localStorage (`hyked-connected-route`) |
+| Personal trails (route builder: geometry, stats, features, days, photo) | `personal_trails` + private `trail-photos` bucket | — (new) |
+| Recorded activities | `activities` | account |
+| Eco AI chat history | `ai_chat_messages` | not kept |
+
+- **Row-level security** on every table: a row is readable and writable only by its owner (`auth.uid() = user_id`).
+  A personal trail is visible to anyone else only when its owner turns sharing on; then it is read through
+  `get_shared_personal_trail(token)` with a random 64-character token (turning sharing off deletes the token).
+  Photos live in `<user id>/…` folders of the private `trail-photos` bucket and are served by short-lived signed
+  URLs; others can read a photo only while the trail using it is shared. Migration:
+  `supabase/migrations/20261021000001_cloud_user_data.sql` (idempotent; also appended to `full-bootstrap.sql`).
+- **Guests** can use everything. What they make is held in memory for the visit only, the sidebar says
+  "Guest · not saved", and a one-time banner asks them to create an account. Signing in moves this visit's work into
+  the account. Google sign-in leaves the page, so just before that redirect the guest's work is handed over through
+  `sessionStorage` and deleted as soon as it reaches the account (a guest's trail photo can't make that trip; it is
+  kept when signing in with email and password).
+- **Migration of old device data:** on the first sign-in on a device, planner data that earlier versions kept in
+  `localStorage` (`outdoor-os:planner:v1:<guest | user id>`) and the map's last joined route are copied into the
+  account and then removed from the device. Other accounts' keys on a shared device are left for those accounts.
+- **Sync status** in the sidebar: "Synced · just now", "Syncing…", "Offline — changes will sync" (writes that fail
+  for lack of a connection are retried when it returns, while the tab is open) or "Sync problem".
+- **What still uses the device:** the Supabase sign-in session (a cookie), small one-visit flags (the dismissed
+  save banner, the Google sign-in handoff), the cached search index (Cache Storage, rebuilt from the server), and
+  the Eco AI model itself (~2 GB of model files the browser caches so the model can run on the device; that is the
+  point of an on-device model and contains no personal data).
+- **Sign-in:** email + password (with the email-confirmation link returning to `/auth/callback`) and Google OAuth.
+  Both the static app and the Next.js app handle `/auth/callback`.
+
+### Hosting setup (one time, in the Supabase and hosting dashboards)
+
+1. Create a Supabase project (free tier). Run the migrations: `npx supabase link --project-ref <ref>` then
+   `npx supabase db push`, or paste `supabase/full-bootstrap.sql` followed by the later files in
+   `supabase/migrations/` into Dashboard → SQL Editor.
+2. Authentication → URL Configuration: Site URL = the live site (e.g. `https://hyked.lovable.app`); add
+   `https://<site>/auth/callback` (and `http://localhost:8080/auth/callback` for development) to Redirect URLs.
+3. Authentication → Providers → Google: enable it with a Google Cloud OAuth client (free); in Google Cloud add
+   `https://<project-ref>.supabase.co/auth/v1/callback` as an authorized redirect URI.
+4. Storage: the migration creates the private `trail-photos` bucket; nothing else to do.
+5. Hosting environment variables (public values only; never put the service-role key in the client):
+   `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` for the static app (or `NEXT_PUBLIC_SUPABASE_URL` /
+   `NEXT_PUBLIC_SUPABASE_ANON_KEY`, which both apps read). `SUPABASE_SERVICE_ROLE_KEY` is only for server-side
+   ingestion scripts and must stay out of the static build.

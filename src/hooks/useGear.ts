@@ -25,7 +25,7 @@ export function useGear(userId: string) {
   const [gear, setGear] = useState<GearItem[]>([]);
   const [storageMissing, setStorageMissing] = useState(false);
   const [loading, setLoading] = useState(isSupabaseConfigured);
-  const [error, setError] = useState<string | null>(() => isSupabaseConfigured() ? null : "Account gear is unavailable in this preview.");
+  const [error, setError] = useState<string | null>(() => isSupabaseConfigured() ? null : "Sign-in is unavailable right now.");
 
   useEffect(() => {
     const supabase = createClient();

@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
+import { GoogleButton } from "./GoogleButton";
+import { callbackUrl, nextFromLocation, SIGN_IN_UNAVAILABLE } from "@/lib/account/auth";
 import { TRAIL_SECTIONS, type TrailSectionKey } from "@/lib/trail-catalog/activity";
 import { storeSection } from "@/lib/preferred-section";
 import { SectionIcon } from "@/components/explore/SectionIcon";
@@ -20,6 +22,7 @@ export function SignupForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [section, setSection] = useState<TrailSectionKey>("foot");
+  const [confirmSent, setConfirmSent] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -29,15 +32,17 @@ export function SignupForm() {
 
     const supabase = createClient();
     if (!supabase) {
-      setError("Sign-in is unavailable right now. You can still explore trails and plan trips as a guest; your plans are saved on this device.");
+      setError(SIGN_IN_UNAVAILABLE);
       setLoading(false);
       return;
     }
-    const { error } = await supabase.auth.signUp({
+    const next = nextFromLocation("/explore/trails");
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { first_name: firstName, last_name: lastName, preferred_section: section },
+        emailRedirectTo: callbackUrl(next),
       },
     });
 
@@ -46,13 +51,31 @@ export function SignupForm() {
       setLoading(false);
       return;
     }
+    // Projects that require email confirmation return no session until the link in the email is opened.
+    if (!data.session) {
+      setConfirmSent(email);
+      setLoading(false);
+      return;
+    }
 
-    router.push("/map");
+    router.push(next);
     router.refresh();
+  }
+
+  if (confirmSent) {
+    return (
+      <div className="space-y-3" role="status">
+        <p className="text-cream">Check your email.</p>
+        <p className="text-sm text-mist">We sent a confirmation link to {confirmSent}. Open it to finish creating your account, then sign in here: anything you made as a guest in this tab moves into your account.</p>
+        <Link className="btn-primary" href={`/login?next=${encodeURIComponent(nextFromLocation("/explore/trails"))}`}>Sign in</Link>
+      </div>
+    );
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <GoogleButton next={() => nextFromLocation("/explore/trails")} label="Sign up with Google" />
+      <p className="auth-divider"><span>or with email</span></p>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label htmlFor="firstName" className="mb-1 block text-sm font-medium text-sage">

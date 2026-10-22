@@ -112,6 +112,15 @@ input,textarea { caret-color: var(--accent); }
 .fieldbook-profile { margin-top: 20px; }
 .fieldbook-auth { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 4px 16px; color: #c4d7ca; font-size: 12px; }
 .fieldbook-auth a,.fieldbook-auth button { display: inline-flex; align-items: center; min-height: 44px; }
+.fieldbook-sync { display: flex; align-items: center; gap: 8px; margin: 0; padding: 4px 16px 0; font-size: 12px; color: var(--sage); }
+.fieldbook-sync-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--sage); }
+.fieldbook-sync--synced .fieldbook-sync-dot { background: var(--accent); }
+.fieldbook-sync--syncing .fieldbook-sync-dot { background: var(--accent); animation: fieldbook-sync-pulse 1s ease-in-out infinite alternate; }
+.fieldbook-sync--offline .fieldbook-sync-dot { background: #e0b04a; }
+.fieldbook-sync--error .fieldbook-sync-dot { background: #e5675a; }
+.fieldbook-sync--guest .fieldbook-sync-dot { background: transparent; border: 1px solid var(--sage); }
+@keyframes fieldbook-sync-pulse { from { opacity: .35; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .fieldbook-sync--syncing .fieldbook-sync-dot { animation: none; } }
 @media(min-width:768px) {
   .app-shell--collapsed { --rail-width: 64px; }
   .app-shell--collapsed .fieldbook-nav { padding: 16px 8px; align-items: center; }
@@ -119,6 +128,7 @@ input,textarea { caret-color: var(--accent); }
   .app-shell--collapsed .fieldbook-nav-toggle { justify-content: center; padding: 10px; margin-bottom: 12px; }
   .app-shell--collapsed .fieldbook-nav-label,
   .app-shell--collapsed .fieldbook-auth { display: none; }
+  .app-shell--collapsed .fieldbook-sync { justify-content: center; padding: 4px 0; }
   .app-shell--collapsed .fieldbook-brand { justify-content: center; width: 44px; min-height: 44px; margin-inline: auto; }
   .app-shell--collapsed .fieldbook-destinations { width: 100%; margin-top: 20px; gap: 4px; }
   .app-shell--collapsed .fieldbook-destinations a,
@@ -305,6 +315,8 @@ html { scroll-padding-block:20px 100px; }
 
 /* Sign-up: preferred trail section */
 .section-picker { border: 0; margin: 0; padding: 0; }
+.auth-divider { display: flex; align-items: center; gap: 12px; margin: 4px 0; color: var(--mist); font-size: 12px; }
+.auth-divider::before,.auth-divider::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 .section-picker-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .section-option { position: relative; display: grid; align-content: start; grid-template-columns: auto 1fr; column-gap: 10px; row-gap: 2px; align-items: center; padding: 12px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--surface); color: var(--foreground); cursor: pointer; transition: border-color 160ms ease-out, background-color 160ms ease-out; }
 .section-option input { position: absolute; opacity: 0; inset: 0; cursor: pointer; }

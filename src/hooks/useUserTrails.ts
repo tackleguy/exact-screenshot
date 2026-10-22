@@ -10,7 +10,7 @@ export type UserPackTrail = PackTrail & { id: string };
 export function useUserTrails(userId: string) {
   const [trails, setTrails] = useState<UserPackTrail[]>([]);
   const [loading, setLoading] = useState(isSupabaseConfigured);
-  const [message, setMessage] = useState<string | null>(() => isSupabaseConfigured() ? null : "Account trails are unavailable in this preview.");
+  const [message, setMessage] = useState<string | null>(() => isSupabaseConfigured() ? null : "Sign-in is unavailable right now.");
 
   useEffect(() => {
     const supabase = createClient();

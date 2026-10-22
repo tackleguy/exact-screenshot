@@ -2,6 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Markdown } from "./Markdown";
+import { createClient } from "@/lib/supabase/client";
+import { useSessionUserId } from "@/lib/account/session";
+import { cloudWrite } from "@/lib/account/sync";
 
 interface ChatMessage {
   id: string;
@@ -163,20 +166,36 @@ I analyzed your query: **"${query}"**
 Feel free to ask about specific **14ers**, **8,000m peaks**, **Seven Summits**, **thru-hikes**, resupply logistics, or pack weight optimization!`;
 }
 
+const WELCOME: ChatMessage = {
+  id: "welcome",
+  sender: "ai",
+  text: "👋 Welcome to **Hyked Eco AI**, an eco-friendly outdoor assistant that runs entirely on your device: no data-center servers, no cloud compute per answer, and your questions stay private. Ask about Colorado 14ers, 8,000m summits, through-hike resupplies, pack weight reduction, or high-altitude safety.",
+  timestamp: "Ready",
+};
+/** A guest's conversation is kept in memory for this visit; signed in, it is saved to the account (ai_chat_messages). */
+const guestChat: ChatMessage[] = [];
+const clock = (d: Date) => d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
 export function LocalOutdoorAiChat({
   onApplyPrompt,
 }: {
   onApplyPrompt?: (prompt: string) => void;
 }) {
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "welcome",
-      sender: "ai",
-      text: "👋 Welcome to **Hyked Eco AI**, an eco-friendly outdoor assistant that runs entirely on your device: no data-center servers, no cloud compute per answer, and your questions stay private. Ask about Colorado 14ers, 8,000m summits, through-hike resupplies, pack weight reduction, or high-altitude safety.",
-      timestamp: "Ready",
-    },
-  ]);
+  const { userId } = useSessionUserId();
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [WELCOME, ...guestChat]);
+  useEffect(() => {
+    const client = createClient();
+    if (!userId || !client) return;
+    let active = true;
+    void client.from("ai_chat_messages").select("id, role, content, created_at").eq("user_id", userId).order("created_at", { ascending: false }).limit(40)
+      .then(({ data }) => {
+        if (!active || !data) return;
+        const saved = data.reverse().map((m): ChatMessage => ({ id: String(m.id), sender: m.role === "user" ? "user" : "ai", text: String(m.content), timestamp: clock(new Date(m.created_at)) }));
+        setMessages(current => [WELCOME, ...saved, ...current.filter(m => m.id !== "welcome" && !guestChat.includes(m))]);
+      });
+    return () => { active = false; };
+  }, [userId]);
   const [isThinking, setIsThinking] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -204,6 +223,9 @@ export function LocalOutdoorAiChat({
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
       setMessages((prev) => [...prev, aiMsg]);
+      const client = createClient();
+      if (userId && client) void cloudWrite(() => client.from("ai_chat_messages").insert([{ user_id: userId, role: "user", content: text }, { user_id: userId, role: "assistant", content: responseText }]));
+      else guestChat.push(userMsg, aiMsg);
       setIsThinking(false);
       setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
     }, 400);
@@ -275,7 +297,7 @@ export function LocalOutdoorAiChat({
           {messages.length > 2 && (
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
                 setMessages([
                   {
                     id: "welcome",
@@ -283,8 +305,11 @@ export function LocalOutdoorAiChat({
                     text: "Chat cleared. What outdoor topic or route would you like to explore?",
                     timestamp: "Ready",
                   },
-                ])
-              }
+                ]);
+                guestChat.length = 0;
+                const client = createClient();
+                if (userId && client) void cloudWrite(() => client.from("ai_chat_messages").delete().eq("user_id", userId));
+              }}
               className="planner-link"
               style={{ fontSize: "0.78rem", minHeight: "auto", cursor: "pointer" }}
             >

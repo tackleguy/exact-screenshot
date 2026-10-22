@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 const EVENT = "hyked:guest-progress";
@@ -13,6 +14,7 @@ export function noteGuestProgress() {
 
 export function GuestSaveBanner({ signedIn }: { signedIn: boolean }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
   useEffect(() => {
     if (signedIn) return;
     const show = () => {
@@ -28,8 +30,8 @@ export function GuestSaveBanner({ signedIn }: { signedIn: boolean }) {
   if (!open || signedIn) return null;
   return (
     <aside className="guest-save-banner" role="status">
-      <p>Save this to your account so it’s here on every device.</p>
-      <Link className="btn-primary" href="/signup">Create a free account</Link>
+      <p>Save this to your account so it’s here on every device. As a guest it’s kept only until you leave.</p>
+      <Link className="btn-primary" href={`/signup?next=${encodeURIComponent(pathname)}`}>Create a free account</Link>
       <button type="button" className="guest-save-close" aria-label="Dismiss" onClick={() => setOpen(false)}>
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
