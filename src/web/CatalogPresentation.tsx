@@ -114,7 +114,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
         {activity !== "all" && (
           <input type="hidden" name="activity" value={activity} />
         )}
-        {activity === "ski" && <input type="hidden" name="includeWinter" value="true" />}
+        {(activity === "ski" || activity === "sled") && <input type="hidden" name="includeWinter" value="true" />}
         <div className="catalog-search-bar">
           <label className="catalog-query">
             <span className="sr-only">Search trails</span>

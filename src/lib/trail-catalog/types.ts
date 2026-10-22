@@ -75,7 +75,7 @@ export interface CatalogTrail {
   /** OpenStreetMap route relation this trail is (or was merged with). */
   osm?: OsmRouteInfo;
   /** Named OpenStreetMap ways joined into this trail (same name, connected within 25 m). */
-  osmWay?: { ids: number[]; highway: string; sacScale?: string; mtbScale?: string };
+  osmWay?: { ids: number[]; highway: string; sacScale?: string; mtbScale?: string; pisteType?: string };
   /**
    * verified: an official agency record or an OpenStreetMap route relation.
    * mapped: named OpenStreetMap ways that passed every verification rule. Nothing below "mapped" is shown.
@@ -96,8 +96,10 @@ export interface CatalogTrail {
 }
 export interface OsmRouteInfo {
   relation: number;
-  /** route tag: hiking, foot, bicycle, mtb, horse or ski. */
+  /** route tag: hiking, foot, walking, running, fitness_trail, bicycle, mtb, horse, ski, piste, canoe or inline_skates. */
   route: string;
+  /** piste:type of a piste route (nordic, downhill, skitour, sled, hike, …). */
+  pisteType?: string;
   network?: string;
   ref?: string;
   symbol?: string;
@@ -214,7 +216,16 @@ const COUNTRY_NAMES: Record<string, string> = {
   AQ: "Antarctica",
 };
 
-export const countryName = (country: string) => COUNTRY_NAMES[country] ?? country;
+let regionNames: Intl.DisplayNames | null | undefined;
+/** English name of an ISO 3166-1 alpha-2 country code (the catalog spans every country with mapped trails). */
+export const countryName = (country: string) => {
+  if (COUNTRY_NAMES[country]) return COUNTRY_NAMES[country];
+  if (regionNames === undefined) {
+    try { regionNames = new Intl.DisplayNames(["en"], { type: "region" }); } catch { regionNames = null; }
+  }
+  if (!regionNames || !/^[A-Z]{2}$/.test(country)) return country;
+  try { return regionNames.of(country) ?? country; } catch { return country; }
+};
 
 const SOURCE_NAMES: Record<CatalogTrail["source"], string> = {
   usgs: "USGS",

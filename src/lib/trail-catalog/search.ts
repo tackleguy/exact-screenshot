@@ -44,7 +44,7 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     .split(/\s+/)
     .filter(Boolean);
   const activity = filters.activity ?? "hike";
-  const includeWinter = filters.includeWinter === true || activity === "ski";
+  const includeWinter = filters.includeWinter === true || activity === "ski" || activity === "sled";
   const difficulties = filters.difficulty ? new Set(filters.difficulty.split(",").map((d) => normalize(d))) : null;
   const query = (filters.q ?? "").slice(0, 180);
   return rows.filter((r, i) => {
@@ -208,7 +208,7 @@ export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
     difficulty: params.get("difficulty")?.slice(0, 40) || undefined,
     routeType: (["loop", "point-to-point", "network"] as const).find((t) => t === params.get("routeType")),
     dogFriendly: params.get("dogFriendly") === "true",
-    includeWinter: params.get("includeWinter") === "true" || activity === "ski",
+    includeWinter: params.get("includeWinter") === "true" || activity === "ski" || activity === "sled",
     activity,
     kind,
     uniqueNames: params.get("uniqueNames") === "true",

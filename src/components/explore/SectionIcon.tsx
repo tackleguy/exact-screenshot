@@ -23,6 +23,13 @@ export function SectionIcon({ section, size = 22 }: { section: TrailSectionKey; 
           <path d="M4.5 20h3M16.5 20h3M8.5 15.5v.01M15.5 15.5v.01M9.5 10.5v.01M14.5 10.5v.01" />
         </>
       )}
+      {section === "water" && (
+        <>
+          <path d="M3 17c2 0 2-1.5 4.5-1.5S10 17 12 17s2.5-1.5 4.5-1.5S19 17 21 17" />
+          <path d="M3 21c2 0 2-1.5 4.5-1.5S10 21 12 21s2.5-1.5 4.5-1.5S19 21 21 21" />
+          <path d="m15 3-6 11M7.5 13.5l3 1.5" />
+        </>
+      )}
       {section === "snow" && (
         <>
           <path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9" />

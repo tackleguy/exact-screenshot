@@ -5,7 +5,7 @@ import { isWinterActivityTrail } from "./winter";
  * Trail sections. Official allowed uses (USGS, USFS, BLM) decide bike and horse access when they are
  * known; names and surfaces fill in the rest. "bike" is every bikeable trail (mountain + path).
  */
-export type CatalogActivity = "hike" | "walk" | "backpack" | "run" | "bike" | "mtb" | "path-bike" | "horse" | "ski";
+export type CatalogActivity = "hike" | "walk" | "backpack" | "run" | "bike" | "mtb" | "path-bike" | "horse" | "ski" | "sled" | "paddle";
 /** Internal / explicit “no activity filter” for winter-inclusive browse. */
 export type CatalogActivityFilter = CatalogActivity | "all";
 
@@ -19,6 +19,8 @@ export const CATALOG_ACTIVITIES: readonly CatalogActivity[] = [
   "path-bike",
   "horse",
   "ski",
+  "sled",
+  "paddle",
 ] as const;
 
 export const CATALOG_ACTIVITY_LABELS: Record<CatalogActivity, string> = {
@@ -31,6 +33,8 @@ export const CATALOG_ACTIVITY_LABELS: Record<CatalogActivity, string> = {
   "path-bike": "Road & path biking",
   horse: "Horseback riding",
   ski: "Ski & snow",
+  sled: "Sledding",
+  paddle: "Paddling",
 };
 
 const BIKE =
@@ -46,8 +50,9 @@ const SNOWMOBILE = /\b(snow[\s-]?mobile|snowmobile|snowmobiling)\b/i;
 const BIKE_PRIMARY =
   /\b(mountain[\s-]?bike|\bmtb\b|bike[\s-]?only|cycling|bicycle)\b/i;
 
-type ActivityFields = Pick<CatalogTrail, "name" | "manager" | "tags" | "surface" | "kind" | "miles"> & Partial<Pick<CatalogTrail, "winterUse" | "flags" | "source" | "uses" | "osm">>;
+type ActivityFields = Pick<CatalogTrail, "name" | "manager" | "tags" | "surface" | "kind" | "miles"> & Partial<Pick<CatalogTrail, "winterUse" | "flags" | "source" | "uses" | "osm" | "osmWay">>;
 
+const SLED = new Set(["sled", "sleigh"]);
 /** Sections an OSM route relation belongs to, from its route tag; null for foot routes (classified as trails). */
 function osmRouteActivities(trail: ActivityFields): CatalogActivity[] | null {
   switch (trail.osm?.route) {
@@ -55,8 +60,16 @@ function osmRouteActivities(trail: ActivityFields): CatalogActivity[] | null {
     case "mtb": return ["bike", "mtb"];
     case "horse": return ["horse"];
     case "ski": return ["ski"];
+    case "piste": return SLED.has(trail.osm.pisteType ?? "") ? ["ski", "sled"] : ["ski"];
+    case "canoe": return ["paddle"];
+    case "running": case "fitness_trail": return ["run", "hike"];
     default: return null;
   }
+}
+
+/** A sled run or sledding hill (OpenStreetMap piste:type=sled), from the relation or the mapped ways. */
+export function isSledActivityTrail(trail: Partial<Pick<CatalogTrail, "osm" | "osmWay" | "uses">>) {
+  return SLED.has(trail.osm?.pisteType ?? trail.osmWay?.pisteType ?? "") || Boolean(trail.uses?.includes("Sledding"));
 }
 
 const PAVED = /\b(paved|asphalt|concrete|boardwalk|brick|bituminous|pavement)\b/i;
@@ -119,6 +132,7 @@ export function trailActivities(trail: ActivityFields): CatalogActivity[] {
   const text = haystack(trail);
   const out: CatalogActivity[] = [];
   if (isSkiActivityTrail(trail)) out.push("ski");
+  if (isSledActivityTrail(trail)) out.push("sled");
   // Nordic tracks stay summer trails; downhill runs and over-snow routes are winter-only.
   const winter = isWinterActivityTrail(trail);
   // Road sidepaths and cycle tracks are paved bike routes even when the name doesn't say "bike".
@@ -158,7 +172,8 @@ export const TRAIL_SECTIONS = [
   { key: "foot", label: "Hike & walk", activity: "hike", activities: ["hike", "walk", "backpack", "run"], blurb: "Hiking, walking, backpacking and trail running" },
   { key: "bike", label: "Bike", activity: "bike", activities: ["bike", "mtb", "path-bike"], blurb: "Mountain biking, rail trails and paved paths" },
   { key: "horse", label: "Horseback", activity: "horse", activities: ["horse"], blurb: "Trails open to horses and pack stock" },
-  { key: "snow", label: "Snow", activity: "ski", activities: ["ski"], blurb: "Nordic ski, snowshoe, snowmobile and ski-area routes" },
+  { key: "snow", label: "Snow", activity: "ski", activities: ["ski", "sled"], blurb: "Nordic ski, ski touring, sledding, snowshoe and ski-area routes" },
+  { key: "water", label: "Paddle", activity: "paddle", activities: ["paddle"], blurb: "Canoe and kayak routes (water trails)" },
 ] as const satisfies readonly { key: string; label: string; activity: CatalogActivity; activities: readonly CatalogActivity[]; blurb: string }[];
 export type TrailSectionKey = (typeof TRAIL_SECTIONS)[number]["key"];
 export const sectionOf = (activity: CatalogActivityFilter | undefined) =>

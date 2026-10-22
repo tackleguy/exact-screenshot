@@ -62,7 +62,8 @@ const SUB_ACTIVITIES: Record<TrailSectionKey, CatalogActivity[]> = {
   foot: ["hike", "walk", "backpack", "run"],
   bike: ["bike", "mtb", "path-bike"],
   horse: ["horse"],
-  snow: ["ski"],
+  snow: ["ski", "sled"],
+  water: ["paddle"],
 };
 const ALL_LABEL: Partial<Record<CatalogActivity, string>> = { hike: "All on foot", bike: "All biking" };
 const LINE_ZOOM = TRAIL_DETAIL_ZOOM;

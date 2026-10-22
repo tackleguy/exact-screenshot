@@ -15,6 +15,24 @@ Choices made while rebuilding Hyked's trail data and app, and why. Numbers marke
   needs thousands of queries. Geofabrik serves one extract per state/province. Each extract is streamed into
   memory and read there; at the owner's request the raw extracts are never written to disk. Only the reduced
   result (route relations, their ways and named trail ways) is cached in `.cache/osm-pbf/`.
+- **Cloud runs and the OSM France mirror.** The cloud container that ran the October 2026 rebuild can't reach
+  Geofabrik (connection reset by the network policy), so the U.S. and Canada came from download.openstreetmap.fr:
+  four U.S. regional extracts and every province (`--mirror openstreetmap.fr`). It has no Alaska or Hawaii extract;
+  those two states come from the worldwide planet step. With `--disk` the extracts and pyosmium's node index live
+  on disk (the container has 16 GB of memory; a 4.6 GB regional extract needs ~9 GB of node index).
+- **Worldwide from the planet file, streamed.** Every other country comes from the planet file on the AWS Open
+  Data mirror (~95 GB, ~170 MB/s over parallel range requests). It is never stored: three streaming passes keep
+  only route relations, the ways they use, named trail ways and pistes, their nodes and hike-feature nodes (a few
+  GB), which `osmium extract` splits per country. Overpass and per-country extracts were ruled out: Overpass is
+  blocked here and can't serve a planet-wide pull, and the France mirror lacks many countries (Greece, the Balkans,
+  New Zealand, Nepal, Peru…).
+- **Countries and regions** come from Natural Earth 1:10m admin-0/admin-1 outlines (public domain). A trail that
+  crosses a border is built once, by the country holding its map pin; route relations are kept whole in each
+  country's file, so the trail is complete either way.
+- **Every trail type.** Route relations of every non-motorized type are kept (hiking, foot, walking, running,
+  fitness, bicycle, mtb, horse, ski, piste, canoe, inline skating), and named pistes (`piste:type`) are trail
+  candidates. Sled runs show under Snow → Sledding, canoe/kayak routes under the new Paddle section. Swimming has
+  no trail data in OpenStreetMap (open-water swim routes are not mapped as routes), so there is no swim section.
 - **State datasets.** USGS National Digital Trails already compiles the state layers that were candidates:
   Colorado Parks and Wildlife (COTREX, 4,479 trails), California Department of Parks and Recreation (2,020), Utah
   AGRC (1,583), Washington State Parks (780), and dozens more. Ingesting them separately would only add
@@ -50,7 +68,7 @@ end of this file).
 | R7 | Duplicates: same name within 2 km with overlapping lines; the record with more sources (then the longer) is kept |
 | R8 | Degenerate geometry: fewer than 3 points, under 20 m across, zig-zag self-crossings (≥3 and >4 per km), or a scribble (line >8× its extent under 1.5 km) |
 | R9 | Climbing approach/descent paths not part of a named route relation |
-| R10 | Outside the U.S. and Canada, in open water, or outside every state/province polygon (10 km tolerance for generalized coastlines) |
+| R10 | In open water or outside every state/province/region outline (10 km tolerance for generalized coastlines); U.S./Canada use their own state and province polygons, the rest of the world Natural Earth admin-1 |
 
 Only `highway=path|footway|track|bridleway|cycleway` ways are candidates, so residential/service/unclassified
 roads with trail-like names never enter. **Not implemented:** an exact building-footprint test (it needs every
@@ -111,6 +129,12 @@ vertex-count lengths, packet defaults) were deleted.
   the browser's Cache Storage per snapshot. Matching is word-prefix and typo-tolerant (edit distance 1–2); a
   query naming a park ranks that park's trails by quality.
 
+- **Worldwide search.** The main search index holds every U.S./Canada trail plus the 250,000 best worldwide trails
+  (route relations first, then by quality score). Each country also has its own index; a query that names a
+  country or one of its regions ("Adlerweg Tirol", "trails in Norway") loads that country's index too, so every
+  worldwide trail is findable without a multi-hundred-MB download. Trail pages find a trail through a 256-file
+  id lookup instead of the search index.
+
 ## Map
 
 - **Basemaps (licences):** Topo = OpenFreeMap "liberty" vector tiles (free for any use, OpenMapTiles schema, ©
@@ -131,6 +155,16 @@ vertex-count lengths, packet defaults) were deleted.
 - `npm run build` = `prebuild` (map assets + `prepare-trail-assets.ts`) then the Vite build; `build:dev` is the same
   in development mode. `npm run build:server` builds the Next.js app (API routes and the server-rendered pages),
   which reads `data/trail-catalog` directly and serves its own sitemap and robots.txt.
+
+- **Worldwide data files.** The snapshot keeps worldwide trails per country (`world/index-<country>.json.gz`) and
+  their lines per 1° cell (`world/geometry-<cell>.json.gz`); `prepare-trail-assets.ts` reads one country at a
+  time, writes cells per country (`cell-<x>_<y>-<country>.json.gz`) and merges lines into the shared geometry
+  cells, so the build's memory doesn't grow with the number of countries.
+- **Server bundle.** The Next.js server (`build:server`, Vercel) bundles only the current snapshot's own files
+  (`next.config.ts`); worldwide files, the hike-feature layer and older snapshots are left out of its functions,
+  which have a size limit. The server API therefore serves the U.S. and Canada; worldwide trails are served by
+  the static web app's files. When `VITE_HYKED_API_URL` points the static app at that server, its trail catalog
+  comes from the server and shows only the U.S. and Canada.
 
 ## Attribution
 

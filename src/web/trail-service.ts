@@ -25,9 +25,23 @@ import {
   getDetailedThruHikeTrails,
 } from "@/lib/trail-catalog/through-hikes-data";
 import { snapPointToNearestLine, simplifyForZoom } from "@/lib/geo/snap";
-import { trailSacScale } from "@/lib/trail-catalog/types";
+import { countryName, trailSacScale } from "@/lib/trail-catalog/types";
+import { cellBounds, cellFile, cellKeyOf, cellRef, lookupShard } from "@/lib/trail-catalog/static-data";
 
-type Metadata = CatalogManifest & { directory: string; cells: string[]; featureCells?: string[] };
+type Metadata = CatalogManifest & {
+  directory: string;
+  /** 2° cells with U.S./Canada trails. */
+  cells: string[];
+  /** 2° cell → countries with worldwide trails in it (one file each). */
+  worldCells?: Record<string, string[]>;
+  /** Countries with their own search index. */
+  searchShards?: string[];
+  /** Normalized region name → countries it is in (to pick country indexes for a query like "trails in Bavaria"). */
+  regionCountries?: Record<string, string[]>;
+  /** Trail ids are found through lookup/l-<hh>.json.gz. */
+  lookupShards?: boolean;
+  featureCells?: string[];
+};
 type Lines = [number, number][][];
 const cache = new Map<string, Promise<unknown>>();
 let metadata: Promise<Metadata> | undefined;
@@ -89,10 +103,24 @@ function meta(fetcher: typeof fetch) {
   return metadata;
 }
 
-async function cells(keys: string[], m: Metadata, fetcher: typeof fetch) {
+/** Every cell file of the given 2° cells: the U.S./Canada file and one file per country with worldwide trails. */
+function cellRefs(keys: string[], m: Metadata) {
+  return keys.flatMap((k) => [...(m.cells.includes(k) ? [k] : []), ...(m.worldCells?.[k] ?? []).map((c) => cellRef(k, c))]);
+}
+/** 2° cells (U.S./Canada or worldwide) that overlap a box. */
+function cellKeysIn(m: Metadata, box: [number, number, number, number]) {
+  return [...new Set([...m.cells, ...Object.keys(m.worldCells ?? {})])].filter((key) => {
+    const [w, s, e, n] = cellBounds(key);
+    return w <= box[2] && e >= box[0] && s <= box[3] && n >= box[1];
+  });
+}
+
+/** Rows of the given cell files (refs from cellRefs or the search index). */
+async function cells(refs: string[], m: Metadata, fetcher: typeof fetch) {
+  const known = (ref: string) => (ref.includes("~") ? (m.worldCells?.[cellKeyOf(ref)] ?? []).includes(ref.split("~")[1]) : m.cells.includes(ref));
   const rows = (
     await Promise.all(
-      keys.filter((k) => m.cells.includes(k)).map((k) => asset<CatalogTrail[]>(`${m.directory}/cell-${k}.json.gz`, fetcher)),
+      [...new Set(refs)].filter(known).map((ref) => asset<CatalogTrail[]>(`${m.directory}/${cellFile(ref)}`, fetcher)),
     )
   ).flat();
   return rows.filter((t) => t.confidence !== "REJECTED").map((t) => ({ ...t, name: readableTrailName(t.name, t.id) }));
@@ -121,12 +149,35 @@ function searchIndex(m: Metadata, fetcher: typeof fetch) {
       rows = await asset<IndexRow[]>(file, fetcher);
       await store?.put(key, new Response(JSON.stringify(rows), { headers: { "Content-Type": "application/json" } })).catch(() => undefined);
     }
-    return rows.map(([id, name, alt, place, cell, score]) => ({
-      id, cell, score: Number(score) || 0,
-      entry: searchEntry({ name, altNames: alt ? alt.split(" | ") : [], manager: place }),
-    }));
+    return toEntries(rows);
   })().catch((error) => { indexPromise = undefined; throw error; });
   return indexPromise;
+}
+
+const toEntries = (rows: IndexRow[]): IndexEntry[] => rows.map(([id, name, alt, place, cell, score]) => ({
+  id, cell, score: Number(score) || 0,
+  entry: searchEntry({ name, altNames: alt ? alt.split(" | ") : [], manager: place }),
+}));
+const shardEntries = new Map<string, Promise<IndexEntry[]>>();
+/** Every trail of one country (the main index holds only the best worldwide trails). */
+function countryIndex(m: Metadata, code: string, fetcher: typeof fetch) {
+  let hit = shardEntries.get(code);
+  if (!hit) {
+    hit = asset<IndexRow[]>(`${m.directory}/search/s-${code}.json.gz`, fetcher).then(toEntries).catch((error) => { shardEntries.delete(code); throw error; });
+    shardEntries.set(code, hit);
+  }
+  return hit;
+}
+/** Countries a query names (by country or region name) or the country filter picks, that have their own index. */
+function queryCountries(m: Metadata, q: string, country?: string) {
+  const shards = new Set(m.searchShards ?? []);
+  if (!shards.size) return [];
+  const text = ` ${normalize(q).replace(/[^\p{L}\p{N}]+/gu, " ")} `;
+  const out = new Set<string>();
+  if (country && shards.has(country)) out.add(country);
+  for (const code of shards) if (text.includes(` ${normalize(countryName(code))} `)) out.add(code);
+  for (const [region, codes] of Object.entries(m.regionCountries ?? {})) if (region.length > 3 && text.includes(` ${region} `)) for (const c of codes) if (shards.has(c)) out.add(c);
+  return [...out].slice(0, 4);
 }
 
 function getCuratedExtraTrails(): CatalogTrail[] {
@@ -143,7 +194,11 @@ async function select(params: URLSearchParams, fetcher: typeof fetch): Promise<{
   if (f.q) {
     const terms = normalize(f.q).split(/\s+/).filter(Boolean);
     // Fuzzy match over names, other names and places; keep the best-ranked hits and load only their cells.
-    const all = (await searchIndex(m, fetcher))
+    // A query naming a country or region also searches every trail of that country.
+    const [main, ...extra] = await Promise.all([searchIndex(m, fetcher), ...queryCountries(m, f.q, f.country).map((c) => countryIndex(m, c, fetcher).catch(() => []))]);
+    const seenIds = new Set<string>();
+    const all = [...main, ...extra.flat()]
+      .filter((e) => !seenIds.has(e.id) && Boolean(seenIds.add(e.id)))
       .map((e) => ({ e, rank: searchRank(matchScore(f.q!, e.entry), e.score, placeMatch(f.q!, e.entry)) }))
       .filter((x) => x.rank >= 100)
       .sort((a, b) => b.rank - a.rank);
@@ -176,13 +231,8 @@ async function select(params: URLSearchParams, fetcher: typeof fetch): Promise<{
       lng + pad / Math.max(0.2, Math.cos((lat * Math.PI) / 180)),
       lat + pad,
     ];
-    const keys = m.cells.filter((key) => {
-      const [x, y] = key.split("_").map(Number);
-      const w = x * 2 - 180,
-        s = y * 2 - 90;
-      return w <= box[2] && w + 2 >= box[0] && s <= box[3] && s + 2 >= box[1];
-    });
-    const cellRows = keys.length <= 16 ? await cells(keys, m, fetcher) : [];
+    const keys = cellKeysIn(m, box as [number, number, number, number]);
+    const cellRows = keys.length <= 16 ? await cells(cellRefs(keys, m), m, fetcher) : [];
     const seen = new Set(curated.map((r) => r.id));
     return { rows: [...curated, ...cellRows.filter((r) => !seen.has(r.id))], manifest: m };
   }
@@ -225,6 +275,13 @@ async function detail(
   }
 
   // 4. Check Sharded Source Trails (merged records redirect to the whole trail)
+  if (m.lookupShards) {
+    const where = (await asset<Record<string, string>>(`${m.directory}/lookup/l-${lookupShard(id)}.json.gz`, fetcher))[id];
+    if (!where) return null;
+    if (where.startsWith("r:")) return where.slice(2) !== id ? detail(where.slice(2), fetcher) : null;
+    const found = (await cells([where.slice(2)], m, fetcher)).find((t) => t.id === id);
+    return found ? withLines(found, m, fetcher) : null;
+  }
   const index = await searchIndex(m, fetcher);
   const entry = index.find((r) => r.id === id);
   if (!entry) {
@@ -233,9 +290,14 @@ async function detail(
   }
   const trail = (await cells([entry.cell], m, fetcher)).find((t) => t.id === id);
   if (!trail) return null;
+  return withLines(trail, m, fetcher);
+}
+
+/** A catalog trail with its mapped line and nearest trailhead. */
+async function withLines(trail: CatalogTrail, m: Metadata, fetcher: typeof fetch): Promise<{ trail: CatalogTrail; lines: Lines; manifest: Metadata }> {
   let lines: Lines = [];
   if (trail.geometryShard !== "route" && trail.source !== "resort") {
-    lines = (await asset<Record<string, Lines>>(`${m.directory}/geometry-${trail.geometryShard}.json.gz`, fetcher))[id] ?? [];
+    lines = (await asset<Record<string, Lines>>(`${m.directory}/geometry-${trail.geometryShard}.json.gz`, fetcher))[trail.id] ?? [];
   } else if (trail.memberIds?.length) {
     for (const memberId of trail.memberIds) {
       const member = await detail(memberId, fetcher);
@@ -337,12 +399,8 @@ export async function tripPacket(body: Record<string, unknown>, fetcher: typeof 
 async function routingNetwork(box: [number, number, number, number], fetcher: typeof fetch): Promise<GeoJSON.FeatureCollection> {
   const m = await meta(fetcher);
   const pad = 0.25;
-  const keys = m.cells.filter((key) => {
-    const [x, y] = key.split("_").map(Number);
-    const w = x * 2 - 180, s = y * 2 - 90;
-    return w <= box[2] + pad && w + 2 >= box[0] - pad && s <= box[3] + pad && s + 2 >= box[1] - pad;
-  });
-  const rows = (await cells(keys, m, fetcher)).filter((t) =>
+  const keys = cellKeysIn(m, [box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad]);
+  const rows = (await cells(cellRefs(keys, m), m, fetcher)).filter((t) =>
     !t.mergedInto && !t.winterUse && t.source !== "resort" && t.geometryShard && t.geometryShard !== "route" &&
     t.longitude >= box[0] - pad && t.longitude <= box[2] + pad && t.latitude >= box[1] - pad && t.latitude <= box[3] + pad,
   ).sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0));

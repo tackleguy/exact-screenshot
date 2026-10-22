@@ -16,7 +16,7 @@ const DATA = path.resolve(argData > 0 ? process.argv[argData + 1] : "public/trai
 const realFetch = globalThis.fetch;
 
 type Json = Record<string, unknown>;
-type Trail = { id: string; name: string; miles?: number | null; region?: string | null; park?: string | null; tier?: string | null };
+type Trail = { id: string; name: string; miles?: number | null; region?: string | null; country?: string; park?: string | null; tier?: string | null };
 
 // Relative URLs (as the browser app uses them) resolve against a fake origin.
 const ORIGIN = "http://qa.local";
@@ -188,6 +188,61 @@ async function main() {
     const days = splitDays(route.miles, route.features, route.miles / 2);
     assert(days.length === 2, `split into ${days.length} days`);
     return `${route.miles.toFixed(1)} mi via ${route.trails.slice(0, 4).map((t) => t.name).join(" → ")}; ${water.length} water, ${camps.length} camps; night 1 at ${days[0].stop?.name ?? "no campsite"} (mi ${days[0].toMile.toFixed(1)})`;
+  });
+
+  // ---- worldwide (skipped when the build has no worldwide trails) ----
+  const pointer = JSON.parse(await readFile(path.join(DATA, "current.json"), "utf8")) as { directory: string };
+  const manifest = JSON.parse(await readFile(path.join(DATA, pointer.directory, "manifest.json"), "utf8")) as { searchShards?: string[] };
+  const world = (manifest.searchShards ?? []).length > 0;
+  const worldSearch = (label: string, q: string, name: RegExp, country: string) => check(label, async () => {
+    if (!world) return { skip: "no worldwide trails in this build" };
+    const { ok, data } = await search(q);
+    assert(ok, `search "${q}" failed: ${String(data.error ?? "")}`);
+    const hit = trailsOf(data).find((t) => name.test(t.name) && t.country === country);
+    assert(hit, `no ${name} in ${country}; top 3: ${top(data)}`);
+    return `${hit.name} (${hit.region ?? hit.country}) · ${hit.miles ?? "?"} mi · ${Number(data.total).toLocaleString("en-US")} matches`;
+  });
+  let whw: Trail | undefined;
+  await check(`search "west highland way" → Scotland`, async () => {
+    if (!world) return { skip: "no worldwide trails in this build" };
+    const { data } = await search("west highland way");
+    whw = trailsOf(data).find((t) => /west highland way/i.test(t.name) && t.country === "GB");
+    assert(whw, `not found; top 3: ${top(data)}`);
+    return `${whw.name} (${whw.region}) · ${whw.miles} mi`;
+  });
+  await worldSearch(`search "tour du mont blanc" → Alps`, "tour du mont blanc", /tour du mont.?blanc/i, "FR");
+  await worldSearch(`search "milford track" → New Zealand`, "milford track", /milford track/i, "NZ");
+  await worldSearch(`search "kungsleden" → Sweden`, "kungsleden", /kungsleden/i, "SE");
+  await worldSearch(`search "adlerweg tirol" → Austria (country index)`, "adlerweg tirol", /adlerweg/i, "AT");
+  await check("West Highland Way page: whole trail with a line", async () => {
+    if (!world) return { skip: "no worldwide trails in this build" };
+    assert(whw, "West Highland Way not found by search");
+    const { ok, data } = await api(`/${encodeURIComponent(whw.id)}`);
+    assert(ok, `detail failed: ${String(data.error ?? "")}`);
+    const t = data.trail as Trail;
+    assert(typeof t.miles === "number" && t.miles >= 80 && t.miles <= 110, `length ${t.miles} mi (expected 80–110, the whole trail)`);
+    assert((data.lines as unknown[]).length > 0, "no line");
+    const bad = badStrings(data);
+    assert(!bad.length, `bad values: ${bad.slice(0, 3).join("; ")}`);
+    const feats = await api(`/${encodeURIComponent(whw.id)}/features`);
+    const list = (feats.data.features as unknown[] | undefined) ?? [];
+    return `${t.miles} mi · ${t.tier} · ${(data.lines as unknown[]).length} line pieces · ${list.length} features along it`;
+  });
+  await check("sledding near Innsbruck", async () => {
+    if (!world) return { skip: "no worldwide trails in this build" };
+    const { data } = await api(`?${new URLSearchParams({ activity: "sled", bbox: "10.5,46.8,12.5,47.6", limit: "20" })}`);
+    assert(trailsOf(data).length > 0, `no sled runs (${String(data.error ?? "")})`);
+    return `${Number(data.total).toLocaleString("en-US")} sled runs; ${top(data)}`;
+  });
+  await check("clusters worldwide: every section, paddling included", async () => {
+    if (!world) return { skip: "no worldwide trails in this build" };
+    const out: string[] = [];
+    for (const activity of ["hike", "bike", "horse", "ski", "paddle"]) {
+      const { data } = await api(`/clusters?zoom=3&activity=${activity}`);
+      assert(Number(data.total) > 0, `no ${activity} trails worldwide`);
+      out.push(`${activity} ${Number(data.total).toLocaleString("en-US")}`);
+    }
+    return out.join(" · ");
   });
 
   const width = Math.max(...results.map((r) => r.check.length));
