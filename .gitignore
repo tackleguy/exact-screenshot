@@ -48,3 +48,6 @@ vendor/opentrailmap/dist/
 /public/sitemaps/
 /public/sitemap.xml
 /public/robots.txt
+
+# Python bytecode
+__pycache__/

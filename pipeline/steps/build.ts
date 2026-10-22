@@ -1,7 +1,7 @@
 /**
  * Catalog build: whole, verified trails from three sources, in priority order.
  *
- *   1. OpenStreetMap route relations (hiking, foot, bicycle, mtb, horse, ski)       → tier "verified"
+ *   1. OpenStreetMap route relations (hiking, foot, bicycle, mtb, horse, ski, …)    → tier "verified"
  *   2. Official agency records (the official snapshot: USGS NTD, NPS, USFS, BLM,
  *      Parks Canada, Ontario)                                                       → tier "verified"
  *   3. Named OpenStreetMap ways (path, footway, track, bridleway, cycleway), joined
@@ -13,140 +13,49 @@
  *
  * Inputs: .cache/osm-pbf/<region>.json.gz (extract-osm.py), data/sources/wiki-trails.json.gz (wiki.ts),
  * data/trail-catalog/official-base.json → the official snapshot directory.
+ * The OSM rules and row builders are shared with the worldwide build (osm-trails.ts, world.ts).
  */
 import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { gunzipSync, gzipSync } from "node:zlib";
 import path from "node:path";
-import type { CatalogManifest, CatalogTrail, OsmRouteInfo, WikiInfo } from "../../src/lib/trail-catalog/types";
+import type { CatalogManifest, CatalogTrail, WikiInfo } from "../../src/lib/trail-catalog/types";
 import type { SourceRef } from "../../src/lib/trail-catalog/agencies";
 import { sourceTypeFor } from "../../src/lib/trail-catalog/agencies";
 import { LineIndex } from "../../src/lib/trail-catalog/additions";
-import { MILE_METERS, isSidewalkName, measureLines, metersBetween, routeTypeOf } from "../../src/lib/trail-catalog/quality";
-import { geometryCell } from "../../src/lib/trail-catalog/cells";
-import { THROUGH_HIKE_PATTERNS, normalizeTrailName } from "../../src/lib/trail-catalog/through-hikes";
+import { MILE_METERS, measureLines, metersBetween } from "../../src/lib/trail-catalog/quality";
+import { THROUGH_HIKE_PATTERNS } from "../../src/lib/trail-catalog/through-hikes";
 import { qualityScore, SCORE_DOC } from "../../src/lib/trail-catalog/score";
 import { DIFFICULTY_FORMULA } from "../../src/lib/trail-difficulty";
 import { DETAILED_THRU_HIKES } from "../../src/lib/trail-catalog/through-hikes-data";
 import { PEAK_DEFINITIONS } from "../../src/lib/trail-catalog/peaks";
 import { sliceRoute } from "../../src/lib/trail-catalog/curated-geometry";
 import { simplifyLine } from "../../src/lib/geo/simplify";
-import { chainLines } from "../../src/lib/geo/line";
+import {
+  RULES, type Rule, type Pt, type Lines, type Tags, type Candidate, type RegionShape,
+  inside, placeIn, boundsOf, nameKey, sameName, joinNamedWays, readOsmRegion, relationRows, namedRows,
+} from "./osm-trails";
 
-type Pt = [number, number];
-type Lines = Pt[][];
+export { RULES };
 const root = process.cwd();
 const catalogRoot = path.join(root, "data/trail-catalog");
 const OSM_DIR = path.join(root, ".cache/osm-pbf");
 const MATCH_METERS = 100;
 const MATCH_SHARE = 0.5;
-const JOIN_METERS = 25;
 const MIN_MILES = 0.3;
 const DUPLICATE_KM = 2;
 const WIKI_KM = 20;
-const SIMPLIFY = 0.00003; // ~3 m
 const sha = (v: string | Buffer) => createHash("sha256").update(v).digest("hex");
 const aliasShard = (id: string) => (parseInt(sha(id).slice(0, 2), 16) % 64).toString().padStart(2, "0");
-const round = (n: number, d = 3) => Math.round(n * 10 ** d) / 10 ** d;
 const km = (a: Pt, b: Pt) => metersBetween(a, b) / 1000;
 
-// ---------------------------------------------------------------- verification rules
-export const RULES = {
-  R1_no_name: "Unnamed, or a generic/placeholder name (path, trail, unnamed, a bare number) without an official ID",
-  R2_too_short: "Under 0.3 mi, unless an official-layer trail or a named loop inside a park",
-  R3_sidewalk: "Sidewalk, crosswalk, driveway, parking aisle, golf-cart path, steps only, or a street-name sidepath",
-  R4_indoor: "Indoor, building passage, airport or campus service path",
-  R5_road: "A road mapped as a trail (motor vehicles allowed on a track with a road name)",
-  R6_private_closed: "Private or no access, disused/abandoned/under construction, or closed/decommissioned in the official layer",
-  R7_duplicate: "Duplicate of another record (same name within 2 km with overlapping line); the record with more sources is kept",
-  R8_degenerate: "Degenerate geometry: fewer than 3 points, self-intersecting zig-zags, or a scribble (length far exceeds its extent)",
-  R9_climbing: "Climbing approach or descent path not part of a named route relation",
-  R10_outside: "Outside the United States and Canada, in open water, or outside its claimed state/province",
-} as const;
-type Rule = keyof typeof RULES;
 const rejected: Record<Rule, Record<string, number>> = Object.fromEntries(Object.keys(RULES).map((r) => [r, {}])) as Record<Rule, Record<string, number>>;
 const reject = (rule: Rule, source: string) => { rejected[rule][source] = (rejected[rule][source] ?? 0) + 1; };
 
-const GENERIC = /^(path|paths|trail|trails|track|footpath|foot path|footway|walkway|walk way|walking path|walking trail|unnamed|unnamed trail|unnamed path|no name|noname|none|unknown|bike path|bikeway|bike trail|cycleway|cycle path|sidewalk|connector|connector trail|spur|spur trail|access|access trail|access path|fire road|service road|road|loop|loop trail|nature trail|hiking trail|multi use path|multi use trail|shared use path|greenway|bridle path|bridleway|horse trail|mtb trail|singletrack|\d+[a-z]?|[a-z]|[a-z]\d+|trail \d+|path \d+|t\d+)$/;
-const CLIMB = /\b(climbers?|climbing)\s+(trail|path|access|approach)\b|\b(approach|descent)\b/;
-const ROAD_NAME = /\b(road|rd|street|st|avenue|ave|drive|dr|lane|ln|boulevard|blvd|highway|hwy|parkway|pkwy|court|ct|place|pl)\.?$/i;
-const INDOOR_NAME = /\b(concourse|terminal|hallway|corridor|skyway|skybridge|skywalk|tunnel|mall|atrium|lobby|parking (lot|garage|deck)|campus walk|quad)\b/i;
-const OPEN = new Set(["yes", "designated", "permissive", "official"]);
-
-interface Tags { [k: string]: string }
-
-/** Rule check for named OSM candidates; returns the first rule that rejects it, or null. */
-function osmRule(name: string, tags: Tags[], miles: number, geometry: { points: number; crossings: number; extentM: number; meters: number }): Rule | null {
-  const n = normalizeTrailName(name);
-  if (!n || GENERIC.test(n)) return "R1_no_name";
-  const all = (k: string) => tags.map((t) => t[k]).filter(Boolean);
-  const share = (pred: (t: Tags) => boolean) => tags.filter(pred).length / tags.length;
-  if (share((t) => ["sidewalk", "crossing", "traffic_island", "access_aisle"].includes(t.footway ?? "") || ["driveway", "parking_aisle", "drive-through", "alley"].includes(t.service ?? "") || ["cartpath", "path"].includes(t.golf ?? "") ) >= 0.5) return "R3_sidewalk";
-  if (isSidewalkName(name, miles, tags[0].operator ?? null)) return "R3_sidewalk";
-  if (share((t) => t.indoor === "yes" || t.indoor === "corridor" || t.location === "indoor" || t.tunnel === "building_passage" || t.level !== undefined && t.level !== "0") >= 0.5 || INDOOR_NAME.test(name)) return "R4_indoor";
-  if (share((t) => t.highway === "track" && OPEN.has(t.motor_vehicle ?? t.motorcar ?? "") && !OPEN.has(t.foot ?? "") && !OPEN.has(t.bicycle ?? "")) >= 0.5) return "R5_road";
-  if (share((t) => t.highway === "track") >= 0.5 && ROAD_NAME.test(name) && !all("foot").some((v) => v === "designated")) return "R5_road";
-  const closed = (t: Tags) => {
-    const access = t.access ?? "";
-    const someoneAllowed = OPEN.has(t.foot ?? "") || OPEN.has(t.bicycle ?? "") || OPEN.has(t.horse ?? "");
-    return (["private", "no", "customers", "military"].includes(access) && !someoneAllowed) || (t.foot === "no" && t.bicycle === "no" && !OPEN.has(t.horse ?? "")) || ["yes"].includes(t.disused ?? "") || ["yes"].includes(t.abandoned ?? "") || t.construction !== undefined || t["highway:disused"] !== undefined;
-  };
-  if (share(closed) >= 0.5) return "R6_private_closed";
-  if (geometry.points < 3 || geometry.extentM < 20 || (geometry.crossings >= 3 && geometry.crossings / Math.max(0.1, geometry.meters / 1000) > 4) || (geometry.meters < 1500 && geometry.meters / Math.max(1, geometry.extentM) > 8)) return "R8_degenerate";
-  if (CLIMB.test(n) || tags.some((t) => t.climbing !== undefined)) return "R9_climbing";
-  return null;
-}
-
-/** Self-crossings within each line (zig-zag drawing errors) — O(n²) on short simplified lines. */
-function selfCrossings(lines: Lines) {
-  let crossings = 0;
-  for (const line of lines) {
-    const n = Math.min(line.length, 400);
-    for (let i = 1; i < n; i++) for (let j = i + 2; j < n; j++) {
-      const [a, b, c, d] = [line[i - 1], line[i], line[j - 1], line[j]];
-      const o = (p: Pt, q: Pt, r: Pt) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
-      if (o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0) crossings++;
-    }
-  }
-  return crossings;
-}
-
 // ---------------------------------------------------------------- regions and parks
-type Region = { name: string; country: "US" | "CA"; rings: number[][][]; bounds: number[] };
-const regions: Region[] = [];
-function inside(p: Pt, ring: number[][]) {
-  let r = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [x, y] = ring[i], [xj, yj] = ring[j];
-    if ((y > p[1]) !== (yj > p[1]) && p[0] < ((xj - x) * (p[1] - y)) / (yj - y) + x) r = !r;
-  }
-  return r;
-}
-function distanceToRing(p: Pt, ring: number[][]) {
-  const k = Math.cos((p[1] * Math.PI) / 180);
-  let best = Infinity;
-  for (let i = 1; i < ring.length; i++) {
-    const ax = ring[i - 1][0] * k, ay = ring[i - 1][1], bx = ring[i][0] * k, by = ring[i][1], px = p[0] * k, py = p[1];
-    const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
-    const t = l === 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / l));
-    best = Math.min(best, Math.hypot(px - (ax + t * dx), py - (ay + t * dy)));
-  }
-  return best;
-}
+const regions: RegionShape[] = [];
 /** State/province containing the point; within ~10 km of a generalized coastline or border counts. */
-function placeOf(p: Pt): { country: "US" | "CA"; region: string } | null {
-  for (const b of regions) {
-    if (p[0] < b.bounds[0] || p[1] < b.bounds[1] || p[0] > b.bounds[2] || p[1] > b.bounds[3]) continue;
-    if (inside(p, b.rings[0]) && !b.rings.slice(1).some((r) => inside(p, r))) return { country: b.country, region: b.name };
-  }
-  let best: Region | null = null, bestD = 0.1;
-  for (const b of regions) {
-    if (p[0] < b.bounds[0] - bestD || p[0] > b.bounds[2] + bestD || p[1] < b.bounds[1] - bestD || p[1] > b.bounds[3] + bestD) continue;
-    const d = distanceToRing(p, b.rings[0]);
-    if (d < bestD) { bestD = d; best = b; }
-  }
-  return best ? { country: best.country, region: best.name } : null;
-}
+const placeOf = (p: Pt) => placeIn(regions, p);
 
 async function npsParks(): Promise<{ name: string; rings: number[][][]; bounds: number[] }[]> {
   const file = path.join(root, ".cache/nps-parks.json.gz");
@@ -169,80 +78,6 @@ async function npsParks(): Promise<{ name: string; rings: number[][][]; bounds: 
   });
 }
 
-// ---------------------------------------------------------------- names
-const STOP = /\b(the|trail|trails|path|loop|route|tr|trl)\b/g;
-const nameKey = (s: string) => normalizeTrailName(s).replace(STOP, " ").replace(/\s+/g, " ").trim();
-function sameName(a: string, b: string) {
-  const x = nameKey(a), y = nameKey(b);
-  if (!x || !y) return false;
-  if (x === y) return true;
-  const tx = new Set(x.split(" ")), ty = new Set(y.split(" "));
-  return [...tx].filter((t) => ty.has(t)).length / Math.max(tx.size, ty.size) >= 0.75;
-}
-
-// ---------------------------------------------------------------- named OSM ways → candidates
-interface Candidate { id: string; name: string; tags: Tags[]; wayIds: number[]; lines: Lines }
-
-/** Joins same-name ways whose ends touch (within 25 m) any vertex of each other, per region. */
-function joinNamedWays(trails: Record<string, Tags>, ways: Record<string, Pt[]>, used: Set<number>): Candidate[] {
-  const groups = new Map<string, number[]>();
-  for (const [id, tags] of Object.entries(trails)) {
-    const wid = Number(id);
-    if (used.has(wid) || !ways[id]) continue;
-    const name = tags.name ?? tags.official_name ?? tags.ref ?? "";
-    const k = normalizeTrailName(name);
-    if (!k) continue;
-    (groups.get(k) ?? groups.set(k, []).get(k)!).push(wid);
-  }
-  const out: Candidate[] = [];
-  const cell = (p: Pt) => `${Math.floor((p[0] * 111_320 * Math.cos((p[1] * Math.PI) / 180)) / JOIN_METERS)}:${Math.floor((p[1] * 110_540) / JOIN_METERS)}`;
-  for (const ids of groups.values()) {
-    const parent = ids.map((_, i) => i);
-    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-    if (ids.length > 1) {
-      const grid = new Map<string, number[]>();
-      ids.forEach((id, i) => { for (const p of ways[id]) { const c = cell(p); (grid.get(c) ?? grid.set(c, []).get(c)!).push(i); } });
-      ids.forEach((id, i) => {
-        const line = ways[id];
-        for (const end of [line[0], line[line.length - 1]]) {
-          const [cx, cy] = cell(end).split(":").map(Number);
-          for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
-            for (const j of grid.get(`${cx + dx}:${cy + dy}`) ?? []) {
-              if (j === i) continue;
-              if (ways[ids[j]].some((q) => metersBetween(end, q) <= JOIN_METERS)) parent[find(i)] = find(j);
-            }
-          }
-        }
-      });
-    }
-    const comps = new Map<number, number[]>();
-    ids.forEach((id, i) => { const r = find(i); (comps.get(r) ?? comps.set(r, []).get(r)!).push(id); });
-    for (const members of comps.values()) {
-      for (const m of members) used.add(m);
-      const tags = members.map((m) => trails[m]);
-      out.push({ id: `osm-w${Math.min(...members)}`, name: tags[0].name ?? tags[0].official_name ?? tags[0].ref, tags, wayIds: members, lines: chainLines(members.map((m) => ways[m])) as Lines });
-    }
-  }
-  return out;
-}
-
-const majority = (values: (string | undefined)[]) => {
-  const counts = new Map<string, number>();
-  for (const v of values) if (v) counts.set(v, (counts.get(v) ?? 0) + 1);
-  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
-};
-const SAC_ORDER = ["hiking", "mountain_hiking", "demanding_mountain_hiking", "alpine_hiking", "demanding_alpine_hiking", "difficult_alpine_hiking"];
-
-/** Allowed uses from OSM access tags (the same labels the official records use). */
-function osmUses(tags: Tags[]) {
-  const any = (pred: (t: Tags) => boolean) => tags.some(pred);
-  const uses: string[] = [];
-  if (any((t) => t.highway !== "cycleway" && t.foot !== "no" && t.foot !== "private") || any((t) => OPEN.has(t.foot ?? ""))) uses.push("Hiking");
-  if (any((t) => OPEN.has(t.bicycle ?? "") || t.highway === "cycleway" || t["mtb:scale"] !== undefined || t["mtb:scale:imba"] !== undefined)) uses.push("Bikes");
-  if (any((t) => OPEN.has(t.horse ?? "") || t.highway === "bridleway")) uses.push("Horses");
-  return uses;
-}
-
 // ---------------------------------------------------------------- main
 interface WikiTrail { qid: string; label: string; aliases: string[]; coord: Pt | null; osmRelation: number | null; wikipedia: { title: string; url: string; extract: string } | null; image: WikiInfo["image"] | null }
 
@@ -260,7 +95,7 @@ async function main() {
     const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates as number[][][]] : (f.geometry.coordinates as number[][][][]);
     for (const rings of polys) {
       const pts = rings[0];
-      regions.push({ name: f.properties.name, country: f.properties.admin === "Canada" ? "CA" : "US", rings, bounds: [Math.min(...pts.map((p) => p[0])), Math.min(...pts.map((p) => p[1])), Math.max(...pts.map((p) => p[0])), Math.max(...pts.map((p) => p[1]))] });
+      regions.push({ name: f.properties.name, country: f.properties.admin === "Canada" ? "CA" : "US", rings, bounds: boundsOf(pts) });
     }
   }
   const cells = new Map<string, Record<string, Lines>>();
@@ -279,112 +114,35 @@ async function main() {
   const usedWays = new Set<number>();
   const regionFiles = (await readdir(OSM_DIR)).filter((f) => f.endsWith(".json.gz")).sort();
   for (const file of regionFiles) {
-    const data = JSON.parse(gunzipSync(await readFile(path.join(OSM_DIR, file))).toString()) as { relations: Record<string, { tags: Tags; members: [string, number, string][] }>; ways: Record<string, Pt[]>; trails: Record<string, Tags> };
+    const data = await readOsmRegion(path.join(OSM_DIR, file));
     for (const [id, r] of Object.entries(data.relations)) if (!relTags.has(Number(id))) { relTags.set(Number(id), r.tags); relMembers.set(Number(id), r.members); }
     const needed = new Set<number>();
     for (const r of Object.values(data.relations)) for (const [t, ref] of r.members) if (t === "w") needed.add(ref);
     for (const id of needed) if (!memberWays.has(id) && data.ways[id]) memberWays.set(id, data.ways[id]);
-    candidates.push(...joinNamedWays(data.trails ?? {}, data.ways, usedWays));
+    for (const c of joinNamedWays(data.trails ?? {}, data.ways, usedWays)) candidates.push(c);
   }
   log(`OSM: ${relTags.size.toLocaleString("en-US")} route relations, ${usedWays.size.toLocaleString("en-US")} named trail ways joined into ${candidates.length.toLocaleString("en-US")} candidates, from ${regionFiles.length} regions.`);
 
   // ---- assemble relations ----
-  const SKIP_ROLES = /^(alternative|excursion|approach|connection|link|platform|stop|guidepost|start|end|information|parking|shelter)/;
-  const resolved = new Map<number, Lines>();
-  const relLinesOf = (id: number, stack = new Set<number>()): Lines => {
-    if (resolved.has(id)) return resolved.get(id)!;
-    if (stack.has(id)) return [];
-    stack.add(id);
-    const out: Lines = [];
-    for (const [t, ref, role] of relMembers.get(id) ?? []) {
-      if (SKIP_ROLES.test(role)) continue;
-      if (t === "w" && memberWays.has(ref)) out.push(memberWays.get(ref)!);
-      else if (t === "r") out.push(...relLinesOf(ref, stack));
-    }
-    resolved.set(id, out);
-    return out;
-  };
   const throughNames = THROUGH_HIKE_PATTERNS.map((p) => nameKey(p.name));
-  const routeLabel: Record<string, string> = { hiking: "Trail", foot: "Footpath", bicycle: "Bike Route", mtb: "MTB Route", horse: "Horse Trail", ski: "Ski Route" };
-  const relRows: CatalogTrail[] = [];
-  const allLines = new Map<string, Lines>();
-  const relationLinesById = new Map<number, Lines>();
   const retrievedAt = new Date().toISOString();
-  for (const [rid, t] of relTags) {
-    const raw = relLinesOf(rid);
-    if (!raw.length) continue;
-    const lines = chainLines(raw).map((l) => simplifyLine(l, SIMPLIFY).map(([x, y]) => [round(x, 5), round(y, 5)] as Pt)).filter((l) => l.length > 1);
-    relationLinesById.set(rid, lines);
-    const name = (t.name ?? t["name:en"] ?? (t.ref ? `${routeLabel[t.route] ?? "Route"} ${t.ref}` : "")).trim();
-    if (!name) { reject("R1_no_name", "osm-relation"); continue; }
-    if ((t.route === "hiking" || t.route === "foot") && throughNames.includes(nameKey(name))) continue; // shown by the curated guide
-    const measure = measureLines(lines);
-    const miles = measure.meters / MILE_METERS;
-    if (!measure.valid || lines.flat().length < 3) { reject("R8_degenerate", "osm-relation"); continue; }
-    if (["private", "no"].includes(t.access ?? "") || t.state === "proposed" || t["disused:route"] !== undefined) { reject("R6_private_closed", "osm-relation"); continue; }
-    const longest = lines.reduce((a, b) => (b.length > a.length ? b : a));
-    const pin = longest[0];
-    const place = placeOf(pin) ?? placeOf(longest[Math.floor(longest.length / 2)]);
-    if (!place) { reject("R10_outside", "osm-relation"); continue; }
-    if (miles < 0.1) { reject("R2_too_short", "osm-relation"); continue; }
-    const distance = Number.parseFloat(t.distance ?? "");
-    const reported = Number.isFinite(distance) ? (/mi/i.test(t.distance) ? distance : distance / 1.609344) : null;
-    const info: OsmRouteInfo = { relation: rid, route: t.route, network: t.network, ref: t.ref, symbol: t["osmc:symbol"], description: t.description, distance: t.distance, sacScale: t.sac_scale, website: t.website };
-    const row: CatalogTrail = {
-      id: `osm-r${rid}`, name, country: place.country, region: place.region, kind: "segment",
-      miles: round(miles), distanceBasis: "geometry", latitude: pin[1], longitude: pin[0],
-      difficulty: null, dogs: t.dog === "yes" ? true : t.dog === "no" ? false : null,
-      source: "osm", sourceId: String(rid), sourceUrl: `https://www.openstreetmap.org/relation/${rid}`,
-      officialUrl: /^https:\/\//.test(t.website ?? "") ? t.website : null, sourceDate: retrievedAt,
-      manager: t.operator ?? null, surface: t.surface ?? null, season: null, geometryShard: geometryCell(pin[0], pin[1]),
-      quality: "ok", flags: [], routeType: routeTypeOf(measure) ?? undefined, tier: "verified",
-      sourceType: "OPENSTREETMAP", confidence: "VERIFIED", osm: info,
-      altNames: [...new Set([t.alt_name, t.official_name, t.short_name, t.loc_name, t["name:en"]].flatMap((v) => (v ?? "").split(";")).map((v) => v.trim()).filter((v) => v && v !== name))],
-      factSources: { name: "OpenStreetMap relation name", miles: "Measured along the OpenStreetMap relation's member ways", line: "OpenStreetMap relation (ODbL)" },
-      ...(reported && miles > 0 && Math.abs(reported - miles) / miles > 0.1 ? { reportedMiles: round(reported) } : {}),
-    };
-    if (!row.altNames!.length) delete row.altNames;
-    relRows.push(row);
-    allLines.set(row.id, lines);
-  }
+  const allLines = new Map<string, Lines>();
+  const rel = relationRows({
+    relTags, relMembers, memberWays, placeOf, reject, retrievedAt,
+    // Through-hikes with a curated guide are shown by the guide.
+    linesOnly: (_id, name, t) => (t.route === "hiking" || t.route === "foot") && throughNames.includes(nameKey(name)),
+  });
+  const relRows = rel.rows;
+  const relationLinesById = rel.relationLinesById;
+  for (const [id, l] of rel.lines) allLines.set(id, l);
   log(`Relations: ${relRows.length.toLocaleString("en-US")} trails.`);
 
   // ---- named OSM candidates → filtered rows ----
-  const namedRows: CatalogTrail[] = [];
-  for (const c of candidates) {
-    const lines = c.lines.map((l) => simplifyLine(l, SIMPLIFY).map(([x, y]) => [round(x, 5), round(y, 5)] as Pt)).filter((l) => l.length > 1);
-    const measure = measureLines(lines);
-    const miles = measure.meters / MILE_METERS;
-    const [w, s, e, n] = measure.bounds ?? [0, 0, 0, 0];
-    const extentM = metersBetween([w, s], [e, n]);
-    const rule = osmRule(c.name, c.tags, miles, { points: lines.flat().length, crossings: measure.meters < 20_000 ? selfCrossings(lines) : 0, extentM, meters: measure.meters });
-    if (rule) { reject(rule, "osm-way"); continue; }
-    const longest = lines.reduce((a, b) => (b.length > a.length ? b : a), lines[0] ?? []);
-    if (!longest?.length) { reject("R8_degenerate", "osm-way"); continue; }
-    const pin = longest[0];
-    const place = placeOf(pin);
-    if (!place) { reject("R10_outside", "osm-way"); continue; }
-    const highway = majority(c.tags.map((t) => t.highway)) ?? "path";
-    const sac = c.tags.map((t) => t.sac_scale).filter(Boolean).sort((a, b) => SAC_ORDER.indexOf(b!) - SAC_ORDER.indexOf(a!))[0];
-    const routeType = routeTypeOf(measure) ?? undefined;
-    const row: CatalogTrail = {
-      id: c.id, name: c.name.trim(), country: place.country, region: place.region, kind: "segment",
-      miles: round(miles), distanceBasis: "geometry", latitude: pin[1], longitude: pin[0], difficulty: null, dogs: null,
-      source: "osm", sourceId: String(c.wayIds[0]), sourceUrl: `https://www.openstreetmap.org/way/${Math.min(...c.wayIds)}`,
-      officialUrl: c.tags.find((t) => /^https:\/\//.test(t.website ?? ""))?.website ?? null, sourceDate: retrievedAt,
-      manager: majority(c.tags.map((t) => t.operator)) ?? null, surface: majority(c.tags.map((t) => t.surface)) ?? null, season: null,
-      geometryShard: geometryCell(pin[0], pin[1]), sectionCount: c.wayIds.length, quality: miles < 0.3 ? "short" : "ok", flags: [], routeType,
-      tier: "mapped", sourceType: "OPENSTREETMAP", confidence: "VERIFIED", uses: osmUses(c.tags),
-      osmWay: { ids: c.wayIds.slice(0, 50), highway, ...(sac ? { sacScale: sac } : {}), ...(majority(c.tags.map((t) => t["mtb:scale"] ?? t["mtb:scale:imba"])) ? { mtbScale: majority(c.tags.map((t) => t["mtb:scale"] ?? t["mtb:scale:imba"])) } : {}) },
-      altNames: [...new Set(c.tags.flatMap((t) => [t.alt_name, t.official_name]).filter((v): v is string => Boolean(v) && v !== c.name))],
-      factSources: { name: "OpenStreetMap way name", miles: `Measured along ${c.wayIds.length} joined OpenStreetMap way${c.wayIds.length > 1 ? "s" : ""}`, line: "OpenStreetMap ways (ODbL)" },
-    };
-    if (!row.altNames!.length) delete row.altNames;
-    namedRows.push(row);
-    allLines.set(row.id, lines);
-  }
+  const named = namedRows({ candidates, placeOf, reject, retrievedAt });
+  const namedRows_ = named.rows;
+  for (const [id, l] of named.lines) allLines.set(id, l);
   candidates.length = 0;
-  log(`Named ways: ${namedRows.length.toLocaleString("en-US")} passed the tag and geometry rules.`);
+  log(`Named ways: ${namedRows_.length.toLocaleString("en-US")} passed the tag and geometry rules.`);
 
   // ---- official records: rules that apply to them ----
   const officialRows: CatalogTrail[] = [];
@@ -459,7 +217,7 @@ async function main() {
   const verifiedById = new Map(verified.map((r) => [r.id, r]));
   let namedIntoVerified = 0;
   const namedKept: CatalogTrail[] = [];
-  for (const r of namedRows) {
+  for (const r of namedRows_) {
     const lines = allLines.get(r.id)!;
     let target: CatalogTrail | null = null;
     if (lines.some((l) => l.some(([x, y]) => vCoarse.has(coarseKey(x, y))))) {

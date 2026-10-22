@@ -25,7 +25,7 @@
     "source:resorts": "tsx scripts/ingestion/resort-trails.ts",
     "source:towns": "tsx scripts/ingestion/towns.ts",
     "bootstrap": "tsx scripts/bootstrap-and-ingest.ts",
-    "test": "tsx --test src/lib/ingestion/parsers/gpx.test.ts src/lib/assistant/*.test.ts src/lib/trail-catalog/*.test.ts src/lib/ingestion/*.test.ts src/lib/opentrailmap.test.ts src/lib/trip/*.test.ts src/lib/trail-difficulty.test.ts src/lib/account/*.test.ts src/lib/routing/*.test.ts",
+    "test": "tsx --test src/lib/ingestion/parsers/gpx.test.ts src/lib/assistant/*.test.ts src/lib/trail-catalog/*.test.ts src/lib/ingestion/*.test.ts src/lib/opentrailmap.test.ts src/lib/trip/*.test.ts src/lib/trail-difficulty.test.ts src/lib/account/*.test.ts src/lib/routing/*.test.ts pipeline/steps/*.test.ts",
     "pipeline": "tsx pipeline/run.ts"
   },
   "dependencies": {
