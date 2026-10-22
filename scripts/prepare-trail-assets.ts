@@ -21,7 +21,7 @@ import { normalizeSeason, titleCaseName } from "../src/lib/trail-catalog/agencie
 import { sectionOf, trailActivities } from "../src/lib/trail-catalog/activity";
 import type { CatalogTrail } from "../src/lib/trail-catalog/types";
 
-const SITE = (process.env.SITE_URL ?? process.env.VITE_SITE_URL ?? "https://hyked.lovable.app").replace(/\/+$/, "");
+const SITE = (process.env.SITE_URL ?? process.env.VITE_SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "https://hyked.lovable.app").replace(/\/+$/, "");
 const GRIDS = [8, 4, 2, 1, 0.5, 0.25];
 const SITEMAP_URLS = 45_000;
 
@@ -108,7 +108,7 @@ async function main() {
   await rm(path.resolve("public/sitemaps"), { recursive: true, force: true });
   await mkdir(path.resolve("public/sitemaps"), { recursive: true });
   const today = new Date().toISOString().slice(0, 10);
-  const pages = ["/", "/map", "/explore/trails", "/explore/trails/catalog", "/plan", "/gear", "/ski-areas"];
+  const pages = ["/", "/map", "/explore/trails", "/explore/trails/catalog", "/plan", "/gear", "/ski-areas", "/about/data"];
   const trailUrls = rows.filter((t) => t.kind === "segment" || t.source === "route-aggregate").map((t) => `/explore/trails/${encodeURIComponent(t.id)}`);
   const shards: string[][] = [pages];
   for (let i = 0; i < trailUrls.length; i += SITEMAP_URLS) shards.push(trailUrls.slice(i, i + SITEMAP_URLS));

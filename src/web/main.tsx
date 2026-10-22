@@ -37,6 +37,7 @@ import { CATALOG_ACTIVITIES, type CatalogActivity } from "@/lib/trail-catalog/ac
 import mountainNight from "@/assets/mountain-night.jpg";
 import { apiOrigin, installApiBridge } from "./api";
 import { RouteMeta, trailPageMeta, usePageMeta } from "./seo";
+import { DataSources } from "@/components/about/DataSources";
 import { useAccount } from "./session";
 import "@/app/globals.css";
 import "./web.css";
@@ -187,7 +188,7 @@ function App() {
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
-    <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
+    <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/about/data" element={<DataSources />} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
     <Route path="/parks/:id" element={<BackendPage />} /><Route path="/admin/*" element={<BackendPage />} /><Route path="*" element={<Status title="Page not found"><Link className="btn-ghost" href="/">Return to Hyked</Link></Status>} />
   </Routes></AppShell></>;
 }

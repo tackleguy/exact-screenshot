@@ -331,7 +331,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       if (disposed || !containerRef.current) return;
       const map = new maplibregl.Map({ container: containerRef.current, style, center: startCenter, zoom: startZoom, maxPitch: 80, attributionControl: false, hash: false });
       mapRef.current = map;
-      map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+      map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "Trails © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors (ODbL), NPS, USFS, BLM, USGS, Parks Canada · <a href=\"/about/data\">Data sources</a>" }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "imperial", maxWidth: 90 }), "bottom-left");
       // Blue dot for the visitor's position; our "Show my location" button triggers it.
       const geolocate = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true, timeout: 12_000 }, trackUserLocation: false, showUserLocation: true, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 12 } });

@@ -43,6 +43,7 @@ const tools = [
   { href: "/explore/trails/catalog?collection=community", label: "Community & GPX trails" },
   { href: "/explore/ski", label: "Ski trails" },
   { href: "/ski-areas", label: "Ski areas" },
+  { href: "/about/data", label: "Data sources & licences" },
 ];
 
 const goRoutes: Record<string, string> = {};
