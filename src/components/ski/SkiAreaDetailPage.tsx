@@ -33,7 +33,7 @@ export function SkiAreaDetailPage({ slug }: { slug: string }) {
   const [area, setArea] = useState<SkiAreaRow | null>(null);
   const [detail, setDetail] = useState<SkiAreaDetail | null>(null);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [loadedSlug, setLoadedSlug] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("ski");
   const [expanded, setExpanded] = useState(false);
   const openFeature = useOpenSkiFeature();
@@ -42,7 +42,6 @@ export function SkiAreaDetailPage({ slug }: { slug: string }) {
     const client = createClient();
     if (!client) return;
     let active = true;
-    setLoading(true);
     Promise.all([
       client.from("ski_areas").select("*").eq("slug", slug).maybeSingle(),
       client.from("ski_area_details").select("data").eq("slug", slug).maybeSingle(),
@@ -50,10 +49,11 @@ export function SkiAreaDetailPage({ slug }: { slug: string }) {
       if (!active) return;
       if (a.error || !a.data) setError(a.error?.message ?? "Ski area not found. You may need to sign in.");
       else { setArea(a.data as SkiAreaRow); setDetail((d.data?.data as SkiAreaDetail | undefined) ?? null); }
-      setLoading(false);
+      setLoadedSlug(slug);
     });
     return () => { active = false; };
   }, [slug]);
+  const loading = loadedSlug !== slug;
 
   const lists = useMemo(() => {
     const listed = detail?.resortListedSummerTrails ?? [];

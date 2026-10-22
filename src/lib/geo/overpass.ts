@@ -121,7 +121,7 @@ interface OverpassRelation {
   tags?: Record<string, string>;
 }
 
-type OverpassElement = OverpassNode | OverpassWay | OverpassRelation;
+export type OverpassElement = OverpassNode | OverpassWay | OverpassRelation;
 
 /**
  * Parses raw Overpass JSON response into normalized GeoJSON

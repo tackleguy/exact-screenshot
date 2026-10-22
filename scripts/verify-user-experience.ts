@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { searchCatalog } from "../src/lib/trail-catalog/server";
 import { trailService } from "../src/web/trail-service";
 import { snapPointToNearestLine, toWebMercator, toWgs84, haversineMeters, simplifyForZoom } from "../src/lib/geo/snap";
-import { normalizeSacScale, normalizePisteDifficulty, parseOverpassJson } from "../src/lib/geo/overpass";
+import { normalizeSacScale, normalizePisteDifficulty, parseOverpassJson, type OverpassElement } from "../src/lib/geo/overpass";
 
 async function verifyAsUser() {
   console.log("=== 1. VERIFYING OVERALL TRAIL CATALOG EXISTENCE ===");
@@ -47,7 +47,7 @@ async function verifyAsUser() {
       console.log(`  ✓ ${found.properties.name} (${found.properties.shortName}): ${found.properties.miles} mi (${(found.properties.miles * 1.60934).toFixed(1)} km)`);
     } else {
       // Also check catalog search collection
-      const catalogHit = (await searchCatalog({ query: name })).trails[0];
+      const catalogHit = (await searchCatalog({ q: name })).trails[0];
       assert.ok(catalogHit, `Thru-hike '${name}' must exist in the catalog`);
       console.log(`  ✓ ${catalogHit.name} (in catalog): ${catalogHit.miles} mi`);
     }
@@ -154,7 +154,7 @@ async function verifyAsUser() {
   assert.ok(farZoom.length <= 3, "Far zoom must reduce vertex density");
 
   console.log("\n=== 7. VERIFYING SKI PISTES, LIFTS & POI PARSING ===");
-  const testOverpassData = [
+  const testOverpassData: OverpassElement[] = [
     { type: "node" as const, id: 1, lat: 39.60, lon: -106.00 },
     { type: "node" as const, id: 2, lat: 39.61, lon: -106.01 },
     {
