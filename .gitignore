@@ -41,3 +41,4 @@ supabase/.temp/
 
 # Generated OpenTrailMap styles (shipped copies live in public/opentrailmap)
 vendor/opentrailmap/dist/
+/exports/

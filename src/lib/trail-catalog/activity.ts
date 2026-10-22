@@ -46,7 +46,18 @@ const SNOWMOBILE = /\b(snow[\s-]?mobile|snowmobile|snowmobiling)\b/i;
 const BIKE_PRIMARY =
   /\b(mountain[\s-]?bike|\bmtb\b|bike[\s-]?only|cycling|bicycle)\b/i;
 
-type ActivityFields = Pick<CatalogTrail, "name" | "manager" | "tags" | "surface" | "kind" | "miles"> & Partial<Pick<CatalogTrail, "winterUse" | "flags" | "source" | "uses">>;
+type ActivityFields = Pick<CatalogTrail, "name" | "manager" | "tags" | "surface" | "kind" | "miles"> & Partial<Pick<CatalogTrail, "winterUse" | "flags" | "source" | "uses" | "osm">>;
+
+/** Sections an OSM route relation belongs to, from its route tag; null for foot routes (classified as trails). */
+function osmRouteActivities(trail: ActivityFields): CatalogActivity[] | null {
+  switch (trail.osm?.route) {
+    case "bicycle": return ["bike", "path-bike"];
+    case "mtb": return ["bike", "mtb"];
+    case "horse": return ["horse"];
+    case "ski": return ["ski"];
+    default: return null;
+  }
+}
 
 const PAVED = /\b(paved|asphalt|concrete|boardwalk|brick|bituminous|pavement)\b/i;
 const GRAVEL = /\b(gravel|crushed|aggregate|stone ?dust|cinder|limestone)\b/i;
@@ -103,6 +114,8 @@ export function isSkiActivityTrail(trail: Pick<CatalogTrail, "name" | "manager">
 
 /** Activities a catalog row is suitable for (best-effort from name and length). */
 export function trailActivities(trail: ActivityFields): CatalogActivity[] {
+  const fromRoute = osmRouteActivities(trail);
+  if (fromRoute) return fromRoute;
   const text = haystack(trail);
   const out: CatalogActivity[] = [];
   if (isSkiActivityTrail(trail)) out.push("ski");

@@ -1,12 +1,17 @@
 import type { Difficulty } from "@/lib/types";
 
-export type DifficultySource = "community" | "reported" | "estimated";
+export type DifficultySource = "community" | "computed" | "reported" | "unknown";
 
 export interface DifficultyInput {
   name?: string | null;
   description?: string | null;
   miles?: number | null;
+  /** @deprecated elevation range; pass gainFt (measured climb) instead. */
   elevationFt?: number | null;
+  /** Measured climb in feet along the trail (from a DEM profile). */
+  gainFt?: number | null;
+  /** OpenStreetMap sac_scale value. */
+  sacScale?: string | null;
   reported?: string | null;
   communityDifficulty?: string | null;
   difficultyRatingCount?: number | null;
@@ -55,53 +60,35 @@ export function averageDifficulties(levels: TrailDifficulty[]): TrailDifficulty 
 }
 
 /**
- * Feature-based AI estimate when a source difficulty is missing.
- * Uses length, climb, and language cues — clearly labeled as estimated, never as measured.
+ * The one difficulty scale (Easy · Moderate · Hard · Very hard), computed the same way for every trail:
  */
-export function estimateDifficulty(input: DifficultyInput): TrailDifficulty {
-  const text = `${input.name ?? ""} ${input.description ?? ""}`.toLowerCase();
-  const fromText = normalizeDifficulty(text);
-  if (fromText && /(easy|moderate|hard|expert|strenuous|beginner|scramble|technical)/.test(text)) {
-    return fromText;
-  }
+export const DIFFICULTY_FORMULA =
+  "Effort = miles + 2 × (feet of climb ÷ 1,000), so 1,000 ft of climbing counts like 2 flat miles. Easy under 4, Moderate 4–9, Hard 9–16, Very hard 16 and over. The OpenStreetMap sac_scale tag sets a minimum: mountain_hiking is at least Moderate, demanding_mountain_hiking at least Hard, alpine_hiking or harder Very hard. Without a measured climb, distance alone is used.";
 
-  let score = 2; // baseline moderate
-  const miles = Number.isFinite(input.miles) ? Math.max(0, Number(input.miles)) : null;
-  const elev = Number.isFinite(input.elevationFt) ? Math.max(0, Number(input.elevationFt)) : null;
+export const DIFFICULTY_LABELS: Record<TrailDifficulty, string> = { easy: "Easy", moderate: "Moderate", hard: "Hard", expert: "Very hard" };
 
-  if (miles != null) {
-    // Short trails are easy unless the climb or the name says otherwise.
-    if (miles < 1) score -= 0.8;
-    else if (miles < 3) score -= 0.55;
-    else if (miles < 6) score -= 0.1;
-    else if (miles < 10) score += 0.25;
-    else if (miles < 16) score += 0.7;
-    else score += 1.15;
-  }
+const SAC_FLOOR: Record<string, TrailDifficulty> = {
+  mountain_hiking: "moderate",
+  demanding_mountain_hiking: "hard",
+  alpine_hiking: "expert",
+  demanding_alpine_hiking: "expert",
+  difficult_alpine_hiking: "expert",
+};
 
-  if (elev != null) {
-    if (elev < 400) score -= 0.35;
-    else if (elev < 1000) score += 0.1;
-    else if (elev < 2000) score += 0.55;
-    else if (elev < 3500) score += 1.0;
-    else score += 1.4;
+export function computeDifficulty({ miles, gainFt, sacScale }: { miles?: number | null; gainFt?: number | null; sacScale?: string | null }): TrailDifficulty | null {
+  // Accepts the OSM value (mountain_hiking) or the "T3 Demanding Mountain" label form.
+  const t = sacScale?.match(/^T(\d)/)?.[1];
+  const floor = sacScale ? SAC_FLOOR[sacScale] ?? (t ? ([null, null, "moderate", "hard", "expert", "expert", "expert"] as const)[Number(t)] ?? null : null) : null;
+  if (!Number.isFinite(miles) && !floor) return null;
+  const effort = (Number.isFinite(miles) ? Number(miles) : 0) + (Number.isFinite(gainFt) ? (2 * Math.max(0, Number(gainFt))) / 1000 : 0);
+  const fromEffort: TrailDifficulty = effort < 4 ? "easy" : effort < 9 ? "moderate" : effort < 16 ? "hard" : "expert";
+  return floor && difficultyScore(floor) > difficultyScore(fromEffort) ? floor : fromEffort;
+}
 
-    if (miles && miles > 0) {
-      const ftPerMile = elev / miles;
-      if (ftPerMile > 800) score += 0.55;
-      else if (ftPerMile > 500) score += 0.3;
-      else if (ftPerMile < 150) score -= 0.2;
-    }
-  }
-
-  if (/\b(summit|peak|ridge|pass|alpine|exposed|scramble|class\s*[345]|knife.?edge)\b/.test(text)) {
-    score += 0.7;
-  }
-  if (/\b(loop|nature|boardwalk|interpretive|family|wheelchair|paved)\b/.test(text)) {
-    score -= 0.35;
-  }
-
-  return scoreToDifficulty(Math.min(4.2, Math.max(1, score)));
+/** Naismith's rule: 3 mph plus an hour per 2,000 ft of climb. Null over 50 miles or without a measured climb. */
+export function naismithHours(miles: number | null | undefined, gainFt: number | null | undefined) {
+  if (!Number.isFinite(miles) || !Number.isFinite(gainFt) || Number(miles) <= 0 || Number(miles) >= 50) return null;
+  return Number(miles) / 3 + Math.max(0, Number(gainFt)) / 2000;
 }
 
 export function resolveDifficulty(input: DifficultyInput): ResolvedDifficulty {
@@ -115,29 +102,15 @@ export function resolveDifficulty(input: DifficultyInput): ResolvedDifficulty {
       ratingCount,
     };
   }
-
-  const reported = normalizeDifficulty(input.reported);
-  if (reported) {
-    return {
-      difficulty: reported,
-      label: ratingCount > 0
-        ? `Source · ${ratingCount}/5 community ratings`
-        : "Source reported",
-      source: "reported",
-      ratingCount,
-    };
+  const gainFt = input.gainFt ?? null;
+  const computed = computeDifficulty({ miles: input.miles, gainFt, sacScale: input.sacScale });
+  if (computed) {
+    const basis = [Number.isFinite(input.miles) && "distance", Number.isFinite(gainFt) && "climb", input.sacScale && "terrain"].filter(Boolean).join(", ");
+    return { difficulty: computed, label: `Computed from ${basis}`, source: "computed", ratingCount };
   }
-
-  const estimated = estimateDifficulty(input);
-  return {
-    difficulty: estimated,
-    label:
-      ratingCount > 0
-        ? `AI estimate · ${ratingCount}/5 community ratings`
-        : "AI estimate",
-    source: "estimated",
-    ratingCount,
-  };
+  const reported = normalizeDifficulty(input.reported);
+  if (reported) return { difficulty: reported, label: "Source reported", source: "reported", ratingCount };
+  return { difficulty: "moderate", label: "Not enough data to rate", source: "unknown", ratingCount };
 }
 
 export const DIFFICULTY_OPTIONS: { value: TrailDifficulty; label: string }[] = [

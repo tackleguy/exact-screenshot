@@ -570,8 +570,9 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
   const cards = useMemo(() => {
     if (!localTrailsVisible(zoom)) return [];
-    // Nearest first, with short stubs and connectors yielding to real trails a little farther away.
-    const list = (points?.trails ?? []).map((t) => ({ t, km: distanceKm(center, [t[2], t[3]]) / Math.min(3, 0.4 + Math.sqrt(t[4] ?? 0.2)) }));
+    // Nearest first, discounted by the quality score (40 points halve the distance), so whole, well-sourced
+    // trails come before stubs and connectors that happen to be closer.
+    const list = (points?.trails ?? []).map((t) => ({ t, km: distanceKm(center, [t[2], t[3]]) / (1 + Math.max(0, t[8] ?? 0) / 40) }));
     list.sort((a, b) => a.km - b.km);
     const out = list.slice(0, TRAIL_CARD_LIMIT).map((x) => x.t);
     if (selectedId && !out.some((t) => t[0] === selectedId)) {
@@ -579,7 +580,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       if (hit) out.unshift(hit);
       else if (detail?.trail.id === selectedId) {
         const t = detail.trail;
-        out.unshift([t.id, t.name, t.longitude, t.latitude, t.miles, "m", t.park ?? t.forest ?? t.region, t.routeType ?? null]);
+        out.unshift([t.id, t.name, t.longitude, t.latitude, t.miles, "m", t.park ?? t.forest ?? t.region, t.routeType ?? null, t.qualityScore ?? 0]);
       }
     }
     return out.slice(0, TRAIL_CARD_LIMIT);

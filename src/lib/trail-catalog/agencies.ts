@@ -11,7 +11,8 @@ export type SourceType =
   | "VERIFIED_ORGANIZATION"
   | "SKI_RESORT_OFFICIAL"
   | "USGS_NTD"
-  | "CURATED_GUIDE";
+  | "CURATED_GUIDE"
+  | "OPENSTREETMAP";
 
 export const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   NPS_OFFICIAL: "National Park Service",
@@ -24,6 +25,7 @@ export const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   SKI_RESORT_OFFICIAL: "Ski resort",
   USGS_NTD: "USGS National Digital Trails",
   CURATED_GUIDE: "Curated guide",
+  OPENSTREETMAP: "OpenStreetMap route relation",
 };
 
 /**
@@ -87,6 +89,7 @@ export function sourceTypeFor(row: Pick<CatalogTrail, "source" | "manager">): So
     case "parks-canada": return "PARKS_CANADA_OFFICIAL";
     case "ontario": return /\b(county|city|town|municipal|region)\b/i.test(row.manager ?? "") ? "LOCAL_AGENCY" : "VERIFIED_ORGANIZATION";
     case "resort": return "SKI_RESORT_OFFICIAL";
+    case "osm": return "OPENSTREETMAP";
     case "guide":
     case "route-aggregate": return "CURATED_GUIDE";
     default: return sourceTypeForManager(row.manager);

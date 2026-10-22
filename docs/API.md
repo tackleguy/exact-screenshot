@@ -71,13 +71,15 @@ Response: `{ trails: Trail[], total, page, pages, limit, manifest }`.
 Same filters as search. Returns `{ points: { id, latitude, longitude, count, bounds?, trail? }[], total, bounds, grouped }`. When `grouped` is true, points with `count > 1` are clusters: zoom to `bounds`.
 
 ### `GET /api/trail-catalog/points?bbox=…&<filters>` — compact pins for a map view
-Same filters as search. Returns `{ total, trails, clusters }`. When up to 2,500 trails match, `trails` lists every one as a tuple `[id, name, lng, lat, miles, difficulty, place, routeType]` (difficulty `e`/`m`/`h`/`x`) and `clusters` is empty: cluster them client-side (MapLibre `cluster: true`). Above that, `trails` is empty and `clusters` is `[lng, lat, count, west, south, east, north][]`: zoom to the bounds on tap.
+Same filters as search. Returns `{ total, trails, clusters }`. When up to 2,500 trails match, `trails` lists every one as a tuple `[id, name, lng, lat, miles, difficulty, place, routeType, qualityScore]` (difficulty `e`/`m`/`h`/`x`; sort cards by distance ÷ (1 + qualityScore/40)) and `clusters` is empty: cluster them client-side (MapLibre `cluster: true`). Above that, `trails` is empty and `clusters` is `[lng, lat, count, west, south, east, north][]`: zoom to the bounds on tap.
 
 ### `GET /api/trail-catalog/lines?bbox=…&zoom=…&<filters>` — trail lines in view
 GeoJSON `FeatureCollection` of `MultiLineString` features with `properties: { id, name, d, miles }` (`d` = difficulty letter), simplified for `zoom`. Use from zoom ~10; views wider than 4° × 3° return no features (`truncated: true`). Colour lines by `d` and open the trail on click.
 
 ### `GET /api/trail-catalog/{id}` — one trail with its line
-Returns `{ trail: Trail, lines: [lng, lat][][] }`. `lines` is empty for resort-listed trails and guides without a mapped route. Draw `lines` as a multi-line on the map.
+Returns `{ trail: Trail, lines: [lng, lat][][] }`. `lines` is empty for resort-listed trails and guides without a mapped route. Draw `lines` as a multi-line on the map. Ids of official records merged into a whole trail return that trail (compare `trail.id` with the id you asked for and update the URL).
+
+New `Trail` fields (catalog v3): `osm` (`{ relation, route, network, ref, symbol, description, distance, sacScale, website }` for OpenStreetMap route relations; ids `osm-r<relation>`), `altNames`, `wiki` (`{ qid, title, url, extract, image: { url, pageUrl, license, licenseUrl, artist } }` — show the extract with "From Wikipedia (CC BY-SA 4.0)" and the image credit), `qualityScore`, `factSources` (where `name`, `miles` and `line` came from), `sources` (every official record merged in), `park` (NPS unit), `linkedTrailId` on curated guides. Show "© OpenStreetMap contributors" when `osm` is set. Hide any section whose data is missing; nothing is filled in.
 
 ### `GET /api/trail-catalog/{id}/elevation`
 `{ profile: [mile, feet][], gainFt, lossFt, minFt, maxFt, trailMiles, attribution }`. 422 when the trail has no mapped line.
@@ -123,7 +125,8 @@ Query: `days` (required, hiking days), `startDate` (YYYY-MM-DD), `maxCarryDays` 
 JSON body: `{ trailId, format: "html" | "json" | "gpx" | "csv", days?, startDate?, maxCarryDays?, foodLbPerDay?, maxMilesOffTrail?, zeroDays?, pack?: { name, quantity?, weightOz?, category?, consumable? }[] }`. `html` returns a self-contained printable page (open it in a new tab; the user prints or saves as PDF).
 
 ### `GET /api/trail-catalog/{id}/gpx` — plain GPX of the trail line
-### `GET /api/trail-catalog/{id}/photos` — nearby Wikimedia Commons photos (with license and credit)
+### `GET /api/trail-catalog/{id}/photos` — the trail's own photo
+`{ photos: [{ id, url, title, artist, license, licenseUrl, sourceUrl }] }`: only the main Commons image of the trail's matched Wikidata item, or an empty list. Always show the artist and licence.
 
 ---
 

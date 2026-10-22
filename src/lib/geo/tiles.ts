@@ -1,8 +1,6 @@
 import { VectorTile, type VectorTileFeature } from "@mapbox/vector-tile";
 import Protobuf from "pbf";
-import { PNG } from "pngjs";
-
-/** Server-side readers for public map tiles: OpenStreetMap US vector tiles and AWS Terrarium elevation. */
+/** Readers for public map tiles (OpenStreetMap US vector tiles, AWS Terrarium elevation), on the server or in the browser. */
 
 export type LngLat = [number, number];
 
@@ -30,13 +28,15 @@ class Lru<V> {
   }
 }
 
-const VECTOR_BASE = process.env.VECTOR_TILE_URL || "https://tiles.openstreetmap.us/vector";
-const TERRARIUM_BASE = process.env.TERRARIUM_TILE_URL || "https://s3.amazonaws.com/elevation-tiles-prod/terrarium";
+const env = (name: string) => (typeof process !== "undefined" ? process.env?.[name] : undefined);
+const VECTOR_BASE = env("VECTOR_TILE_URL") || "https://tiles.openstreetmap.us/vector";
+const TERRARIUM_BASE = env("TERRARIUM_TILE_URL") || "https://s3.amazonaws.com/elevation-tiles-prod/terrarium";
+const inBrowser = typeof window !== "undefined" && typeof createImageBitmap === "function";
 const vectorCache = new Lru<Promise<VectorTile | null>>(600);
 const demCache = new Lru<Promise<Float32Array | null>>(400);
 
 async function fetchBytes(url: string) {
-  const response = await fetch(url, { headers: { "User-Agent": "Hyked/1.0 (https://github.com/tackleguy/health)" }, signal: AbortSignal.timeout(15_000), cache: "no-store" });
+  const response = await fetch(url, { ...(inBrowser ? {} : { headers: { "User-Agent": "Hyked/1.0 (https://github.com/tackleguy/health)" }, cache: "no-store" as const }), signal: AbortSignal.timeout(15_000) });
   if (response.status === 204 || response.status === 404) return null;
   if (!response.ok) throw new Error(`Tile ${response.status}: ${url}`);
   return new Uint8Array(await response.arrayBuffer());
@@ -83,17 +83,32 @@ export async function tileFeatures(set: "openmaptiles" | "trails", z: number, x:
   return (await tileFeaturesOrNull(set, z, x, y, layers)) ?? [];
 }
 
+/** RGBA pixels of a PNG: canvas in the browser, pngjs on the server (loaded only there). */
+async function decodePng(bytes: Uint8Array): Promise<{ data: Uint8Array | Uint8ClampedArray; width: number; height: number }> {
+  if (inBrowser) {
+    const bitmap = await createImageBitmap(new Blob([bytes as BlobPart], { type: "image/png" }), { colorSpaceConversion: "none", premultiplyAlpha: "none" });
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+    ctx.drawImage(bitmap, 0, 0);
+    return { data: ctx.getImageData(0, 0, bitmap.width, bitmap.height).data, width: bitmap.width, height: bitmap.height };
+  }
+  const name = "pngjs";
+  const { PNG } = (await import(/* @vite-ignore */ name)) as typeof import("pngjs");
+  const png = PNG.sync.read(Buffer.from(bytes));
+  return { data: png.data, width: png.width, height: png.height };
+}
+
 /** Terrarium elevation (meters) for a 256×256 tile, row-major. */
 function demTile(z: number, x: number, y: number) {
   const key = `${z}/${x}/${y}`;
   let tile = demCache.get(key);
   if (!tile) {
-    tile = fetchBytes(`${TERRARIUM_BASE}/${key}.png`).then((bytes) => {
+    tile = fetchBytes(`${TERRARIUM_BASE}/${key}.png`).then(async (bytes) => {
       if (!bytes) return null;
-      const png = PNG.sync.read(Buffer.from(bytes));
-      const out = new Float32Array(png.width * png.height);
+      const { data, width, height } = await decodePng(bytes);
+      const out = new Float32Array(width * height);
       for (let i = 0; i < out.length; i++) {
-        const r = png.data[i * 4], g = png.data[i * 4 + 1], b = png.data[i * 4 + 2];
+        const r = data[i * 4], g = data[i * 4 + 1], b = data[i * 4 + 2];
         out[i] = r * 256 + g + b / 256 - 32768;
       }
       return out;

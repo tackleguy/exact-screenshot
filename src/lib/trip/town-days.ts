@@ -1,4 +1,4 @@
-import type { TownNearTrail } from "./towns";
+import type { TownNearTrail } from "./towns-core";
 import { SERVICE_LABELS, type ServiceKey, type TownServices } from "./services";
 import { round } from "@/lib/geo/line";
 

@@ -51,3 +51,21 @@ Run `npm run source:trails -- --refresh` to fetch new responses. Once complete, 
 Run `npm test` to check search boundaries, count consistency, source links, IDs and every geometry shard. `GET /api/trail-catalog` supports `q`, `country=US|CA`, `region`, `page`, `limit` (maximum 48), `minMiles`, `maxMiles`, `difficulty`, `dogFriendly`, and optional point/radius filtering. `GET /api/trail-catalog/download` exports the compressed index. The catalog is not silently inserted into Supabase.
 
 Catalog maps use interactive OpenStreetMap raster tiles with visible attribution and browser caching, under the [tile usage policy](https://operations.osmfoundation.org/policies/tiles/). There is no tile prefetch or offline map download. Set `NEXT_PUBLIC_CATALOG_TILE_URL` and `NEXT_PUBLIC_CATALOG_TILE_ATTRIBUTION` to use another licensed provider.
+
+## Catalog v3: whole trails, sourced facts, ranking
+
+Built on top of the official snapshot by these steps (each is cached and can be rerun):
+
+1. `python3 scripts/ingestion/osm-routes-pbf.py` downloads the Geofabrik extract of every U.S. state and Canadian province/territory, keeps only OpenStreetMap route relations (`route=hiking|foot|bicycle|mtb|horse|ski`, type route or superroute) and their member ways, and deletes each extract. `npx tsx scripts/ingestion/osm-routes.ts --pbf` joins the regions, chains each relation's main ways in order (alternatives, excursions and approaches left out; parent routes include their child routes) and writes `data/sources/osm-routes.json.gz`. (`osm-routes.ts` without `--pbf` does the same through Overpass when a public instance is responsive.)
+2. `npx tsx scripts/ingestion/wiki-trails.ts` fetches Wikidata trails in the U.S. and Canada (instances of trail, Q628179) plus items linked from relations' `wikidata` tags, with the English Wikipedia lead paragraph and the main Commons image's licence and author → `data/sources/wiki-trails.json.gz`.
+3. `node --max-old-space-size=8192 node_modules/.bin/tsx scripts/ingestion/rebuild-catalog.ts` writes a **new** snapshot (the previous one is kept) and points `current.json` at it:
+   - Each named relation becomes one trail (`source: "osm"`, id `osm-r<relation>`), length measured along its ordered ways. Relations named like a curated through-hike guide (AT, PCT, …) are left to the guides.
+   - An official record with ≥50% of its line within 100 m of a relation, and the same name, is merged into it: the trail keeps the official name (and the official length when one record covers the whole relation), uses the more complete line, lists every contributor in `sources`, and the absorbed id redirects (`mergedInto`, alias files, `redirects.json.gz` for the static app).
+   - Unnamed pieces under 0.5 mi are hidden as fragments.
+   - Trails inside a National Park Service unit (NPS Land Resources Division boundaries, public domain) get `park`.
+   - Wikidata items are matched by OSM relation id, the relation's `wikidata` tag, or name + location within 20 km → `wiki` (lead paragraph, CC BY-SA; image with licence and author).
+   - `qualityScore` (`src/lib/trail-catalog/score.ts`) orders search, map lists and near-you suggestions.
+   - Curated guides get real lines in `curated.json.gz`: a through-hike uses its relation, each section is cut from it between the section's listed endpoints (refused if an endpoint is over 3 km off the line), and a peak uses the catalog trail named for its standard route near its trailhead. Without a match no line is drawn.
+4. `npx tsx scripts/ingestion/validate-catalog.ts` prints the validation report.
+
+Facts on trail pages are computed from the trail's real line when the page opens, never generated: elevation profile, gain and loss from AWS Terrain Tiles (Terrarium; USGS 3DEP and SRTM), water from OpenStreetMap springs, drinking water, lakes and stream crossings at their real trail mile, towns from GeoNames with services counted from OpenStreetMap. Difficulty is one formula (`DIFFICULTY_FORMULA` in `src/lib/trail-difficulty.ts`); estimated time is Naismith's rule from distance and measured climb, only under 50 miles and not for expeditions. Photos are only the trail's own Wikidata/Commons image. Sections with no data are hidden.

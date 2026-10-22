@@ -11,7 +11,7 @@ export interface CatalogTrail {
   longitude: number;
   difficulty: string | null;
   dogs: boolean | null;
-  source: "usgs" | "parks-canada" | "ontario" | "nps" | "usfs" | "blm" | "resort" | "guide" | "route-aggregate" | "peak";
+  source: "usgs" | "parks-canada" | "ontario" | "nps" | "usfs" | "blm" | "resort" | "guide" | "route-aggregate" | "peak" | "osm";
   sourceId: string;
   sourceUrl: string;
   officialUrl: string | null;
@@ -72,6 +72,40 @@ export interface CatalogTrail {
   sections?: { id: string; name: string; miles: number; difficulty?: string | null; elevationFt?: number | null }[];
   /** When this trail is a section/segment, the parent through-hike route it belongs to. */
   partOfRoute?: { id: string; name: string; totalMiles: number };
+  /** OpenStreetMap route relation this trail is (or was merged with). */
+  osm?: OsmRouteInfo;
+  /** Other names: OSM alt/official/short names and Wikidata aliases. */
+  altNames?: string[];
+  /** Matched Wikidata item, with the Wikipedia lead paragraph and main Commons image when they exist. */
+  wiki?: WikiInfo;
+  /** Set on an official record whose line is now part of a merged trail; links redirect there. */
+  mergedInto?: string;
+  /** For a curated guide (peak, through-hike, section): the catalog trail whose real line it shows. */
+  linkedTrailId?: string;
+  /** Ranking signal (see src/lib/trail-catalog/score.ts); higher is a more complete, better-sourced trail. */
+  qualityScore?: number;
+  /** Where each derived fact came from, e.g. { miles: "OpenStreetMap geometry", difficulty: "Hyked formula: …" }. */
+  factSources?: Record<string, string>;
+}
+export interface OsmRouteInfo {
+  relation: number;
+  /** route tag: hiking, foot, bicycle, mtb, horse or ski. */
+  route: string;
+  network?: string;
+  ref?: string;
+  symbol?: string;
+  description?: string;
+  /** distance tag as mapped (km unless a unit is given). */
+  distance?: string;
+  sacScale?: string;
+  website?: string;
+}
+export interface WikiInfo {
+  qid: string;
+  title?: string;
+  url?: string;
+  extract?: string;
+  image?: { url: string; pageUrl: string; license: string | null; licenseUrl: string | null; artist: string | null };
 }
 export interface CatalogManifest {
   version: number;
@@ -184,6 +218,7 @@ const SOURCE_NAMES: Record<CatalogTrail["source"], string> = {
   guide: "Curated guide",
   "route-aggregate": "Mapped corridor",
   peak: "Mountain Summit Guide",
+  osm: "OpenStreetMap route",
 };
 
 export const sourceName = (source: CatalogTrail["source"]) => SOURCE_NAMES[source] ?? source;

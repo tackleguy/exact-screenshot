@@ -14,7 +14,7 @@ test("filters remain bounded and reject malformed numeric input",()=>{
 });
 test("search handles accents, combined geography and unknown measurements",()=>{
   const base = { name:"Sentier de la Forêt",country:"CA",region:"Ontario",latitude:45,longitude:-75,miles:null,difficulty:null,dogs:null,manager:null } as CatalogTrail;
-  const rows = [{...base,id:"one"},{...base,id:"two",miles:4,difficulty:"Easy",dogs:true},{...base,id:"three",country:"US" as const,region:"Colorado",miles:10}];
+  const rows = [{...base,id:"one"},{...base,id:"two",miles:3,difficulty:"Easy",dogs:true},{...base,id:"three",country:"US" as const,region:"Colorado",miles:10}];
   assert.equal(filterCatalog(rows,{q:"foret Ontario",country:"CA"}).total,2);
   assert.deepEqual(filterCatalog(rows,{minMiles:1,maxMiles:6}).trails.map(t=>t.id),["two"]);
   assert.deepEqual(filterCatalog(rows,{difficulty:"easy",dogFriendly:true}).trails.map(t=>t.id),["two"]);

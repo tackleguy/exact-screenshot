@@ -993,27 +993,7 @@ export function peakToCatalogTrail(p: PeakDefinition): CatalogTrail {
 }
 
 /** Generate realistic approach and ascent coordinates from trailhead to summit. */
-export function generatePeakLines(p: PeakDefinition): [number, number][][] {
-  const steps = 24;
-  const line: [number, number][] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    // Add realistic subtle mountain switchback curves
-    const wobble = Math.sin(t * Math.PI * 3) * 0.003 * (1 - t * 0.5);
-    const lng = p.trailheadLng + (p.longitude - p.trailheadLng) * t + wobble;
-    const lat = p.trailheadLat + (p.latitude - p.trailheadLat) * t - Math.abs(wobble) * 0.5;
-    line.push([Number(lng.toFixed(5)), Number(lat.toFixed(5))]);
-  }
-  return [line];
-}
-
 /** Return all summit records formatted as CatalogTrails. */
 export function getAllPeakTrails(): CatalogTrail[] {
   return PEAK_DEFINITIONS.map(peakToCatalogTrail);
-}
-
-/** Lookup peak geometry by ID. */
-export function getPeakGeometry(id: string): [number, number][][] | null {
-  const peak = PEAK_DEFINITIONS.find((p) => p.id === id);
-  return peak ? generatePeakLines(peak) : null;
 }

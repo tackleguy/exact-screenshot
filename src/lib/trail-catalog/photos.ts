@@ -1,3 +1,4 @@
+import type { CatalogTrail } from "./types";
 export interface CatalogPhoto {
   id: string;
   url: string;
@@ -56,4 +57,20 @@ export async function nearbyCatalogPhotos(latitude: number, longitude: number): 
   const images = await commons({ pageids: nearby.map(page => page.pageid).join("|"), prop: "imageinfo", iiprop: "url|mime|extmetadata", iiurlwidth: "720" });
   const pages = (images.query?.pages ?? {}) as Record<string, CommonsPage>;
   return nearby.map(point => pages[String(point.pageid)] ? parseCommonsPhoto(pages[String(point.pageid)], point.dist) : null).filter((photo): photo is CatalogPhoto => photo !== null).slice(0, 6);
+}
+
+/** The trail's own photo: the main Commons image of its matched Wikidata item, with licence and author. */
+export function wikiPhotos(trail: Pick<CatalogTrail, "name" | "wiki">): CatalogPhoto[] {
+  const image = trail.wiki?.image;
+  if (!image) return [];
+  return [{
+    id: image.pageUrl,
+    url: image.url,
+    title: trail.wiki?.title ?? trail.name,
+    artist: image.artist ?? "Unknown author",
+    license: image.license ?? "See file page",
+    licenseUrl: image.licenseUrl ?? image.pageUrl,
+    sourceUrl: image.pageUrl,
+    distanceMeters: 0,
+  }];
 }

@@ -1,4 +1,11 @@
 import { resolveDifficulty } from "@/lib/trail-difficulty";
+import { matchScore, placeMatch, searchEntry, searchRank, type SearchEntry } from "./fuzzy";
+
+const entries = new WeakMap<CatalogTrail, SearchEntry>();
+const entryOf = (t: CatalogTrail) => entries.get(t) ?? (entries.set(t, searchEntry(t)), entries.get(t)!);
+/** Text-match score of the last query each row was checked against, for ranking. */
+const lastMatch = new WeakMap<CatalogTrail, number>();
+const lastPlace = new WeakMap<CatalogTrail, boolean>();
 import type { CatalogBounds, CatalogFilters, CatalogTrail } from "./types";
 import { countryName } from "./types";
 import { withinBounds } from "./map";
@@ -38,7 +45,10 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
   const activity = filters.activity ?? "hike";
   const includeWinter = filters.includeWinter === true || activity === "ski";
   const difficulties = filters.difficulty ? new Set(filters.difficulty.split(",").map((d) => normalize(d))) : null;
+  const query = (filters.q ?? "").slice(0, 180);
   return rows.filter((r, i) => {
+    // Official records merged into a whole trail are only reachable through their redirect.
+    if (r.mergedInto && !filters.includeFragments) return false;
     if (filters.collection === "14ers" && r.peakCategory !== "14er" && !r.tags?.includes("14er")) return false;
     if (filters.collection === "8000m" && r.peakCategory !== "8000m" && !r.tags?.includes("8000m")) return false;
     if (filters.collection === "7summits" && r.peakCategory !== "seven-summits" && !r.tags?.includes("Seven Summits")) return false;
@@ -71,11 +81,18 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
       return false;
     }
     if (filters.region && normalize(filters.region ?? "") !== normalize(r.region ?? "")) return false;
-    if (terms.length && !terms.every((t) => (texts?.[i] ?? searchableText(r)).includes(t))) return false;
+    if (terms.length) {
+      const fuzzy = matchScore(query, entryOf(r));
+      // Keyword fallback keeps searches like "14er" or "thru-hike" that match labels rather than names.
+      const keyword = fuzzy > 0 || terms.every((t) => (texts?.[i] ?? searchableText(r)).includes(t)) ? Math.max(fuzzy, 0.3) : 0;
+      if (!keyword) return false;
+      lastMatch.set(r, keyword);
+      lastPlace.set(r, placeMatch(query, entryOf(r)));
+    }
     if (filters.minMiles !== undefined && (r.miles === null || r.miles < filters.minMiles)) return false;
     if (filters.maxMiles !== undefined && (r.miles === null || r.miles > filters.maxMiles)) return false;
     // Reported difficulty when the source gives one, otherwise the same estimate the trail page shows.
-    if (difficulties && !difficulties.has(resolveDifficulty({ reported: r.difficulty, miles: r.miles, name: r.name, elevationFt: r.elevationFt ? r.elevationFt.max - r.elevationFt.min : null }).difficulty)) return false;
+    if (difficulties && !difficulties.has(resolveDifficulty({ reported: r.difficulty, miles: r.miles, sacScale: r.osm?.sacScale }).difficulty)) return false;
     if (filters.routeType && r.routeType !== filters.routeType) return false;
     if (filters.dogFriendly && r.dogs !== true) return false;
     if (
@@ -100,12 +117,17 @@ export function filterCatalog(rows: CatalogTrail[], filters: CatalogFilters, tex
         a.name.localeCompare(b.name),
     );
   }
-  if (Number.isFinite(filters.lat) && Number.isFinite(filters.lng) && filters.targetMiles === undefined) {
-    matches.sort(
-      (a, b) =>
-        distanceKm(filters.lat!, filters.lng!, a.latitude, a.longitude) -
-          distanceKm(filters.lat!, filters.lng!, b.latitude, b.longitude) || a.id.localeCompare(b.id),
-    );
+  const nearby = Number.isFinite(filters.lat) && Number.isFinite(filters.lng) && filters.targetMiles === undefined;
+  if (filters.q?.trim() && filters.targetMiles === undefined) {
+    // Best text match first; the quality score orders trails that match equally well.
+    const rank = (t: CatalogTrail) => searchRank(lastMatch.get(t) ?? 0, t.qualityScore, lastPlace.get(t));
+    matches.sort((a, b) => rank(b) - rank(a) || a.id.localeCompare(b.id));
+  } else if (nearby) {
+    // Near you: distance, discounted for better-documented trails (40 score points halve the distance).
+    const key = (t: CatalogTrail) => distanceKm(filters.lat!, filters.lng!, t.latitude, t.longitude) / (1 + Math.max(0, t.qualityScore ?? 0) / 40);
+    matches.sort((a, b) => key(a) - key(b) || a.id.localeCompare(b.id));
+  } else if (filters.targetMiles === undefined) {
+    matches.sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0));
   }
   const limit = Number.isFinite(filters.limit) ? Math.min(48, Math.max(1, Math.floor(filters.limit!))) : 24;
   const pages = Math.max(1, Math.ceil(matches.length / limit));

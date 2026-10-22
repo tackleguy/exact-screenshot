@@ -2,16 +2,23 @@ import { parseCatalogFilters, filterCatalog, normalize, distanceKm } from "@/lib
 import type { CatalogTrail, CatalogManifest } from "@/lib/trail-catalog/types";
 import { buildCatalogMap } from "@/lib/trail-catalog/map";
 import { resolveDifficulty } from "@/lib/trail-difficulty";
-import { parseCommonsPhoto, type CommonsPage } from "@/lib/trail-catalog/photos";
+import { chainLines } from "@/lib/geo/line";
+import { measureLines } from "@/lib/trail-catalog/quality";
+import { wikiPhotos } from "@/lib/trail-catalog/photos";
+import { matchScore, placeMatch, searchEntry, searchRank, type SearchEntry } from "@/lib/trail-catalog/fuzzy";
+import type { LngLat } from "@/lib/geo/tiles";
+import { elevationProfile } from "@/lib/trip/elevation";
+import { waterAlong } from "@/lib/trip/water";
+import { parseTowns, townServices, townsNear, type Town } from "@/lib/trip/towns-core";
+import { planTownDays } from "@/lib/trip/town-days";
+import { MIN_MAPPED_SHARE, mappedShare, planningMiles, townDayOptions, unplannable } from "@/lib/trip/planning";
 import { catalogGpx } from "@/lib/trail-catalog/gpx";
 import { readableTrailName, MAP_TRAIL_LIMIT, TRAIL_CARD_LIMIT, localTrailsVisible } from "@/lib/trail-catalog/discovery";
 import { TrailheadIndex, trailEnds, type TrailheadCache } from "@/lib/trail-catalog/access";
-import { getAllPeakTrails, getPeakGeometry } from "@/lib/trail-catalog/peaks";
+import { getAllPeakTrails } from "@/lib/trail-catalog/peaks";
 import {
   DETAILED_THRU_HIKES,
   getDetailedThruHikeTrails,
-  getDetailedThruHikeLines,
-  getSectionLine,
 } from "@/lib/trail-catalog/through-hikes-data";
 import { fetchLiveOsmTrails } from "@/lib/geo/overpass";
 import { snapPointToNearestLine, simplifyForZoom } from "@/lib/geo/snap";
@@ -21,6 +28,25 @@ type Lines = [number, number][][];
 const cache = new Map<string, Promise<unknown>>();
 let metadata: Promise<Metadata> | undefined;
 let trailheads: Promise<TrailheadIndex> | undefined;
+let towns: Promise<Town[]> | undefined;
+const TOWNS_ATTRIBUTION = "Towns from GeoNames (CC BY 4.0). Services © OpenStreetMap contributors, via OpenStreetMap US tiles. Check hours and availability before relying on any business.";
+const computed = new Map<string, Promise<unknown>>();
+/** Per-trail results are kept for the session; failures are retried next time. */
+function memo<T>(key: string, make: () => Promise<T>): Promise<T> {
+  let hit = computed.get(key) as Promise<T> | undefined;
+  if (!hit) {
+    hit = make();
+    hit.catch(() => computed.delete(key));
+    computed.set(key, hit);
+    if (computed.size > 200) computed.delete(computed.keys().next().value ?? "");
+  }
+  return hit;
+}
+async function allTowns(fetcher: typeof fetch) {
+  const m = await meta(fetcher);
+  towns ??= asset<{ towns: [number, string, string, string, number, number, number][] }>(`${m.directory}/towns.json.gz`, fetcher).then(parseTowns).catch((error) => { towns = undefined; throw error; });
+  return towns;
+}
 
 async function asset<T>(file: string, fetcher: typeof fetch): Promise<T> {
   let hit = cache.get(file);
@@ -68,6 +94,37 @@ async function cells(keys: string[], m: Metadata, fetcher: typeof fetch) {
   return rows.filter((t) => t.confidence !== "REJECTED").map((t) => ({ ...t, name: readableTrailName(t.name, t.id) }));
 }
 
+let curatedPromise: Promise<{ lines: Record<string, Lines>; links: Record<string, string> }> | undefined;
+/** Real lines and catalog links for the curated guides (built by scripts/ingestion/rebuild-catalog.ts). */
+function curated(m: Metadata, fetcher: typeof fetch) {
+  curatedPromise ??= asset<{ lines: Record<string, Lines>; links: Record<string, string> }>(`${m.directory}/curated.json.gz`, fetcher).catch(() => ({ lines: {}, links: {} }));
+  return curatedPromise;
+}
+
+type IndexRow = [id: string, name: string, alt: string, place: string, cell: string, score: number];
+interface IndexEntry { id: string; cell: string; score: number; entry: SearchEntry }
+let indexPromise: Promise<IndexEntry[]> | undefined;
+/** The search index, kept in the browser's Cache Storage per snapshot so later visits skip the download. */
+function searchIndex(m: Metadata, fetcher: typeof fetch) {
+  indexPromise ??= (async () => {
+    const file = `${m.directory}/search.json.gz`;
+    let rows: IndexRow[] | null = null;
+    const store = typeof caches !== "undefined" ? await caches.open("hyked-search").catch(() => null) : null;
+    const key = `/trail-data/${file}.json`;
+    const hit = await store?.match(key).catch(() => undefined);
+    if (hit) rows = await hit.json().catch(() => null);
+    if (!rows) {
+      rows = await asset<IndexRow[]>(file, fetcher);
+      await store?.put(key, new Response(JSON.stringify(rows), { headers: { "Content-Type": "application/json" } })).catch(() => undefined);
+    }
+    return rows.map(([id, name, alt, place, cell, score]) => ({
+      id, cell, score: Number(score) || 0,
+      entry: searchEntry({ name, altNames: alt ? alt.split(" | ") : [], manager: place }),
+    }));
+  })().catch((error) => { indexPromise = undefined; throw error; });
+  return indexPromise;
+}
+
 function getCuratedExtraTrails(): CatalogTrail[] {
   const peaks = getAllPeakTrails();
   const { thruHikes, sections: detailedSections } = getDetailedThruHikeTrails();
@@ -81,9 +138,15 @@ async function select(params: URLSearchParams, fetcher: typeof fetch) {
 
   if (f.q) {
     const terms = normalize(f.q).split(/\s+/).filter(Boolean);
-    const index = await asset<[string, string, string][]>(`${m.directory}/search.json.gz`, fetcher);
-    const keys = [...new Set(index.filter(([, text]) => terms.every((t) => normalize(text).includes(t))).map(([, , key]) => key))];
-    const cellRows = await cells(keys.slice(0, 30), m, fetcher);
+    // Fuzzy match over names, other names and places; keep the best-ranked hits and load only their cells.
+    const ranked = (await searchIndex(m, fetcher))
+      .map((e) => ({ e, rank: searchRank(matchScore(f.q!, e.entry), e.score, placeMatch(f.q!, e.entry)) }))
+      .filter((x) => x.rank >= 100)
+      .sort((a, b) => b.rank - a.rank)
+      .slice(0, 300);
+    const keys = [...new Set(ranked.map((x) => x.e.cell))];
+    const wanted = new Set(ranked.map((x) => x.e.id));
+    const cellRows = (await cells(keys.slice(0, 40), m, fetcher)).filter((r) => wanted.has(r.id));
     const matchedCurated = curated.filter((t) => {
       const text = normalize(`${t.name} ${t.region ?? ""} ${t.country} ${t.note ?? ""} ${(t.tags ?? []).join(" ")}`);
       return terms.every((term) => text.includes(term));
@@ -128,21 +191,22 @@ async function detail(
   fetcher: typeof fetch,
 ): Promise<{ trail: CatalogTrail; lines: Lines; manifest: Metadata } | null> {
   const m = await meta(fetcher);
+  // Curated guides draw the real line of the trail they were matched to at build time, or no line at all.
+  const guide = async (trail: CatalogTrail) => {
+    const c = await curated(m, fetcher);
+    const linked = c.links[trail.id];
+    return { trail: linked ? { ...trail, linkedTrailId: linked } : trail, lines: (c.lines[trail.id] ?? []) as Lines, manifest: m };
+  };
 
   // 1. Check Peaks (14ers, 8000m, Seven Summits)
   const peak = getAllPeakTrails().find((p) => p.id === id);
-  if (peak) {
-    const lines = getPeakGeometry(id) ?? [];
-    return { trail: peak, lines, manifest: m };
-  }
+  if (peak) return guide(peak);
 
   // 2. Check Detailed Through-Hike Routes ("ALL TOGETHER")
   const detailedHike = DETAILED_THRU_HIKES.find((h) => h.id === id);
   if (detailedHike) {
     const { thruHikes } = getDetailedThruHikeTrails();
-    const trail = thruHikes.find((t) => t.id === id)!;
-    const lines = getDetailedThruHikeLines(id) ?? [];
-    return { trail, lines, manifest: m };
+    return guide(thruHikes.find((t) => t.id === id)!);
   }
 
   // 3. Check Detailed Through-Hike Individual Sections ("IN SECTIONS")
@@ -150,17 +214,18 @@ async function detail(
     const sec = hike.sections.find((s) => s.id === id);
     if (sec) {
       const { sections } = getDetailedThruHikeTrails();
-      const trail = sections.find((t) => t.id === id)!;
-      const lines = getSectionLine(id) ?? [];
-      return { trail, lines, manifest: m };
+      return guide(sections.find((t) => t.id === id)!);
     }
   }
 
-  // 4. Check Sharded Source Trails
-  const index = await asset<[string, string, string][]>(`${m.directory}/search.json.gz`, fetcher);
-  const entry = index.find((r) => r[0] === id);
-  if (!entry) return null;
-  const trail = (await cells([entry[2]], m, fetcher)).find((t) => t.id === id);
+  // 4. Check Sharded Source Trails (merged records redirect to the whole trail)
+  const index = await searchIndex(m, fetcher);
+  const entry = index.find((r) => r.id === id);
+  if (!entry) {
+    const redirect = (await asset<Record<string, string>>(`${m.directory}/redirects.json.gz`, fetcher).catch(() => ({}) as Record<string, string>))[id];
+    return redirect && redirect !== id ? detail(redirect, fetcher) : null;
+  }
+  const trail = (await cells([entry.cell], m, fetcher)).find((t) => t.id === id);
   if (!trail) return null;
   let lines: Lines = [];
   if (trail.geometryShard !== "route" && trail.source !== "resort") {
@@ -199,7 +264,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
     if (suffix[0] === "thru-hikes") {
       const features: GeoJSON.Feature[] = [];
       for (const hike of DETAILED_THRU_HIKES) {
-        const lines = getDetailedThruHikeLines(hike.id);
+        const lines = (await curated(await meta(fetcher), fetcher)).lines[hike.id] as Lines | undefined;
         if (lines && lines.length) {
           features.push({
             type: "Feature",
@@ -257,7 +322,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
 
       // Also include detailed thru-hikes if nearby
       for (const hike of DETAILED_THRU_HIKES) {
-        const lines = getDetailedThruHikeLines(hike.id);
+        const lines = (await curated(await meta(fetcher), fetcher)).lines[hike.id] as Lines | undefined;
         if (lines) candidateLines.push(...lines);
       }
 
@@ -295,10 +360,11 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
           t.latitude,
           t.miles,
           { easy: "e", moderate: "m", hard: "h", expert: "x" }[
-            resolveDifficulty({ reported: t.difficulty, miles: t.miles, name: t.name }).difficulty
+            resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: t.osm?.sacScale }).difficulty
           ],
           t.park ?? t.forest ?? t.region,
           t.routeType ?? null,
+          t.qualityScore ?? 0,
         ]);
 
         // Coverage expansion: If local catalog yields sparse results in this viewport (< 5 trails) and bbox is active,
@@ -309,19 +375,23 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
             for (const feat of live.features) {
               if (feat.geometry.type === "Point") continue;
               const p = feat.properties;
-              const coords = feat.geometry.type === "LineString" ? feat.geometry.coordinates : feat.geometry.coordinates[0];
-              const mid = coords ? coords[Math.floor(coords.length / 2)] : null;
-              if (!mid) continue;
-              const lenMiles = Math.round((feat.geometry.type === "LineString" ? coords.length * 0.04 : 4.5) * 10) / 10;
+              // Real length of the mapped way(s); unnamed single ways are fragments, not trails.
+              const lines = (feat.geometry.type === "LineString" ? [feat.geometry.coordinates] : feat.geometry.type === "MultiLineString" ? feat.geometry.coordinates : []) as [number, number][][];
+              const coords = lines[0];
+              const mid = coords?.[Math.floor(coords.length / 2)];
+              if (!mid || !p.name) continue;
+              const lenMiles = Math.round((measureLines(lines).meters / 1609.344) * 100) / 100;
+              if (lenMiles < 0.1) continue;
               trails.push([
                 p.id,
                 p.name,
                 mid[0],
                 mid[1],
                 lenMiles,
-                p.sacScale?.includes("T1") ? "e" : p.sacScale?.includes("T2") ? "m" : p.sacScale?.includes("T3") ? "h" : "m",
+                { easy: "e", moderate: "m", hard: "h", expert: "x" }[resolveDifficulty({ miles: lenMiles, sacScale: p.sacScale ?? null }).difficulty],
                 p.kind === "piste" ? "Ski Piste" : p.surface ? `OSM · ${p.surface}` : "OpenStreetMap",
-                "point-to-point",
+                null,
+                0,
               ]);
             }
           } catch {
@@ -348,7 +418,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
                 id: t.id,
                 name: t.name,
                 d: { easy: "e", moderate: "m", hard: "h", expert: "x" }[
-                  resolveDifficulty({ reported: t.difficulty, miles: t.miles, name: t.name }).difficulty
+                  resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: t.osm?.sacScale }).difficulty
                 ],
               },
               geometry: { type: "MultiLineString", coordinates: simplified },
@@ -406,21 +476,10 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       });
     }
 
-    if (suffix[1] === "photos") {
-      const t = d.trail;
-      const q = async (queryParms: Record<string, string>) =>
-        (await fetcher(`https://commons.wikimedia.org/w/api.php?${new URLSearchParams({ action: "query", format: "json", origin: "*", ...queryParms })}`)).json();
-      const geo = await q({ list: "geosearch", gscoord: `${t.latitude}|${t.longitude}`, gsradius: "3000", gsnamespace: "6", gslimit: "12" });
-      const near = (geo.query?.geosearch ?? []) as { pageid: number; dist: number }[];
-      if (!near.length) return Response.json({ photos: [] });
-      const img = await q({ pageids: near.map((p) => p.pageid).join("|"), prop: "imageinfo", iiprop: "url|mime|extmetadata", iiurlwidth: "960" });
-      const pages = (img.query?.pages ?? {}) as Record<string, CommonsPage>;
-      return Response.json({
-        photos: near.map((p) => (pages[String(p.pageid)] ? parseCommonsPhoto(pages[String(p.pageid)], p.dist) : null)).filter(Boolean).slice(0, 8),
-      });
-    }
+    // Photos: only the licensed Commons image of the trail's matched Wikidata item. No nearby-image guessing.
+    if (suffix[1] === "photos") return Response.json({ photos: wikiPhotos(d.trail) });
 
-    // GPX Download (Always available on any trail, thru-hike or peak!)
+    // GPX of the trail's own mapped line.
     if (suffix[1] === "gpx") {
       return new Response(catalogGpx(d.trail, d.lines), {
         headers: {
@@ -430,110 +489,43 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       });
     }
 
-    // Elevation Profile (Always available!)
+    // Facts below are computed from the trail's real line; with no line there is nothing to compute.
+    const chained = chainLines(d.lines as LngLat[][]);
+    const noLine = (what: string) => Response.json({ error: `This trail has no mapped line, so ${what} can't be measured.` }, { status: 422 });
+
+    // Elevation: sampled from AWS Terrain Tiles (Mapzen Terrarium; USGS 3DEP, SRTM) along the line.
     if (suffix[1] === "elevation") {
-      const t = d.trail;
-      const miles = t.miles ?? 10;
-      const maxFt = t.summitElevationFt ?? (t.elevationFt?.max ?? Math.min(29032, Math.max(1200, Math.round(miles * 350 + 1000))));
-      const minFt = t.elevationFt?.min ?? Math.max(0, maxFt - (t.summitElevationFt ? Math.round(miles * 320) : Math.round(miles * 250)));
-      const gainFt = Math.max(100, maxFt - minFt);
-      const lossFt = t.routeType === "point-to-point" ? Math.round(gainFt * 0.4) : gainFt;
-
-      const sampleCount = Math.min(80, Math.max(20, Math.round(miles * 3)));
-      const profile: [number, number][] = [];
-      for (let i = 0; i <= sampleCount; i++) {
-        const mi = (i / sampleCount) * miles;
-        const progress = i / sampleCount;
-        const curve = Math.sin(progress * Math.PI);
-        const altitude = minFt + curve * (maxFt - minFt) + Math.sin(progress * Math.PI * 4) * (gainFt * 0.04);
-        profile.push([Math.round(mi * 100) / 100, Math.round(altitude)]);
-      }
-
-      return Response.json({
-        profile,
-        gainFt,
-        lossFt,
-        minFt,
-        maxFt,
-        trailMiles: Math.round(miles * 10) / 10,
-        partial: false,
-        attribution: "Elevation: Terrarium DEM & topographic models. Profile calculated along mapped route.",
-      });
+      if (!chained.length) return noLine("its elevation");
+      const profile = await memo(`elev:${d.trail.id}`, () => elevationProfile(chained));
+      if (!profile) return Response.json({ error: "Elevation data couldn't be read for this trail. Try again." }, { status: 503 });
+      return Response.json({ ...profile, source: "AWS Terrain Tiles (Terrarium DEM)" });
     }
 
-    // Water on Trail (Always available!)
+    // Water: OpenStreetMap springs, drinking water, lakes and stream crossings, each at its real trail mile.
     if (suffix[1] === "water") {
-      const t = d.trail;
-      const miles = t.miles ?? 10;
-      const count = Math.min(10, Math.max(1, Math.floor(miles / 3.5)));
-      const sources = [];
-      for (let i = 1; i <= count; i++) {
-        const mile = Math.round((i * (miles / (count + 1))) * 10) / 10;
-        const kind = i % 3 === 0 ? "lake" : i % 2 === 0 ? "spring" : "stream";
-        sources.push({
-          mile,
-          name: `${kind.charAt(0).toUpperCase() + kind.slice(1)} crossing #${i}`,
-          kind,
-          reliability: "potable" as const,
-          crossing: true,
-          offTrailMeters: 0,
-        });
-      }
-      return Response.json({
-        sources,
-        longestDryMiles: Math.round((miles / (count + 1)) * 10) / 10,
-        notes: ["Natural water source. Treat or filter all water along backcountry trails."],
-      });
+      if (!chained.length) return noLine("water along it");
+      return Response.json(await memo(`water:${d.trail.id}`, () => waterAlong(chained)));
     }
 
-    // Towns near Trail (Always available!)
-    if (suffix[1] === "towns") {
-      const t = d.trail;
-      const townName = t.region ? `${t.region.split("·")[0].trim()} Gateway` : "Trailhead Gateway";
-      return Response.json({
-        towns: [
-          {
-            name: townName,
-            mile: 0,
-            milesOff: 3.5,
-            population: 3200,
-            services: {
-              counts: { grocery: 2, restaurant: 4, lodging: 3, postOffice: 1, outdoorStore: 1, transit: 1, hospital: 1 },
-            },
-          },
-          {
-            name: "Summit Camp & Resupply Outpost",
-            mile: Math.round((t.miles ?? 12) * 0.5 * 10) / 10,
-            milesOff: 1.2,
-            population: 450,
-            services: {
-              counts: { grocery: 1, restaurant: 2, lodging: 1, postOffice: 0, outdoorStore: 1, transit: 0, hospital: 0 },
-            },
-          },
-        ],
-        attribution: "OpenStreetMap community contributors and regional directories.",
+    // Towns: real GeoNames places near the line, with services counted from OpenStreetMap.
+    if (suffix[1] === "towns" || suffix[1] === "town-days") {
+      const lines = chained.length ? chained : [[[d.trail.longitude, d.trail.latitude], [d.trail.longitude + 0.00001, d.trail.latitude]] as LngLat[]];
+      const long = d.trail.kind === "route" || (d.trail.miles ?? 0) > 60;
+      const maxMilesOff = Math.min(40, Math.max(1, Number(params.get("maxMilesOff")) || 15));
+      const limit = params.get("limit") ? Math.min(60, Math.max(1, Number(params.get("limit")) || 6)) : long ? Math.min(60, Math.ceil((d.trail.miles ?? 100) / 25)) : 3;
+      const towns = await memo(`towns:${d.trail.id}:${maxMilesOff}:${limit}`, async () => {
+        const near = townsNear(await allTowns(fetcher), lines, maxMilesOff, limit);
+        const out = [];
+        for (let i = 0; i < near.length; i += 6) out.push(...await Promise.all(near.slice(i, i + 6).map(async (town) => ({ ...town, services: await townServices(town).catch(() => null) }))));
+        return out;
       });
-    }
-
-    // Town Days Resupply Planning (Always available!)
-    if (suffix[1] === "town-days") {
-      const t = d.trail;
-      const miles = t.miles ?? 12;
-      const days = Number(params.get("days") ?? 2);
-      return Response.json({
-        trailMiles: miles,
-        dailyMiles: Math.round((miles / days) * 10) / 10,
-        stops: [
-          {
-            day: 1,
-            trailMile: Math.round((miles * 0.5) * 10) / 10,
-            townName: t.region ? `${t.region.split("·")[0].trim()} Gateway` : "Trail Gateway",
-            milesOff: 2.0,
-            action: "Resupply carry, restock provisions, top off water.",
-            buyDays: Math.max(1, Math.ceil(days / 2)),
-          },
-        ],
-      });
+      if (suffix[1] === "towns") return Response.json({ towns, maxMilesOff, attribution: TOWNS_ATTRIBUTION });
+      const options = townDayOptions(Object.fromEntries(params));
+      if (!options) return Response.json({ error: "Give the number of hiking days, e.g. ?days=5." }, { status: 400 });
+      const t = { trail: d.trail, lines: chained };
+      if (!chained.length) return noLine("town stops along it");
+      if (mappedShare(t) < MIN_MAPPED_SHARE) return Response.json({ error: unplannable(t) }, { status: 422 });
+      return Response.json({ trailId: d.trail.id, trailMiles: planningMiles(t), ...planTownDays(towns, { ...options, trailMiles: planningMiles(t) }), attribution: TOWNS_ATTRIBUTION });
     }
 
     return Response.json({ error: "Action not supported." }, { status: 404 });

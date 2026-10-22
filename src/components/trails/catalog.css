@@ -240,3 +240,7 @@
 .trail-stats dd { margin: 0.15rem 0 0; font-weight: 700; color: var(--cream); font-size: 1.05rem; }
 .trail-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 @media (max-width: 640px) { .trail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .trail-stats > div:nth-child(3) { border-left: 0; } .trail-stats > div:nth-child(n+3) { border-top: 1px solid var(--border); } }
+/* No trail photo: a quiet evergreen band instead of a stock image that isn't this trail. */
+.trail-hero-photo--none { min-height: clamp(150px, 20vw, 220px); background: linear-gradient(160deg, var(--accent-dim, #173f35), var(--accent, #245b47)); }
+.catalog-about { margin: 16px 0 0; max-width: 70ch; }
+.catalog-about p { margin: 0 0 8px; line-height: 1.6; }
