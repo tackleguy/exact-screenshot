@@ -28,13 +28,13 @@ import {
 } from "./explorer-map";
 import { snapPointToNearestLine } from "@/lib/geo/snap";
 import "./explorer.css";
+import { duration as displayDuration, feet, join as joinParts, miles as displayMiles } from "@/lib/display";
+import { naismithHours } from "@/lib/trail-difficulty";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { installExtras, applySectionFilter } from "./map-extras";
 import { useOpenSkiFeature } from "@/components/ski/SkiAreaMap";
-import { buildFromTiles, featureKey, lengthKm, geometryLines, normalizeName, osmSections, osmTrailHref, saveOsmTrail } from "@/lib/osm-trail";
 
-interface ExtraTrail { key: string; name: string; km: number; lengthKm: number; open: () => void; kind: "osm" | "ski" }
 
 type Bounds = [number, number, number, number];
 interface PointsResponse { total: number; trails: ExplorePointTrail[]; clusters: ExploreCluster[] }
@@ -76,18 +76,8 @@ function filterParams(f: Filters) {
   return p;
 }
 
-const fmtMiles = (miles: number | null) => (miles === null ? "—" : miles < 10 ? `${miles.toFixed(1)} mi` : `${Math.round(miles)} mi`);
-function fmtDuration(hours: number) {
-  if (!Number.isFinite(hours) || hours <= 0) return null;
-  const h = Math.floor(hours), m = Math.round((hours - h) * 60 / 5) * 5;
-  return h ? `${h} h${m ? ` ${m} min` : ""}` : `${Math.max(5, m)} min`;
-}
-/** Naismith-style moving time: 2 mph on foot plus an hour per 2,000 ft of climb; riders roll faster. */
-function movingHours(miles: number | null, gainFt: number | null, activity: CatalogActivity) {
-  if (miles === null) return NaN;
-  const speed = activity === "path-bike" ? 11 : activity === "bike" || activity === "mtb" ? 7 : activity === "horse" ? 4 : activity === "ski" ? 3 : 2;
-  return miles / speed + (gainFt ?? 0) / (activity === "bike" || activity === "mtb" || activity === "path-bike" ? 3000 : 2000);
-}
+const fmtMiles = displayMiles;
+const fmtDuration = displayDuration;
 const ROUTE_LABEL: Record<string, string> = { loop: "Loop", "point-to-point": "Point to point", network: "Network" };
 
 function distanceKm(a: [number, number], b: [number, number]) {
@@ -131,6 +121,13 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const [open, setOpen] = useState<null | "section" | "difficulty" | "length" | "route" | "layers">(null);
   const [points, setPoints] = useState<PointsResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  // The map never sits blank: a skeleton covers it until the style and the first trails have loaded.
+  const [firstLoad, setFirstLoad] = useState(true);
+  const [verifiedInView, setVerifiedInView] = useState<number | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [center, setCenter] = useState<[number, number]>(initial.center ?? [-98.6, 39.8]);
   const [zoom, setZoom] = useState(initial.zoom ?? 3.6);
@@ -153,48 +150,16 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
   const section = sectionOf(filters.activity);
   const router = useRouter();
-  const routerRef = useRef(router); routerRef.current = router;
+  const routerRef = useRef(router);
   const openSki = useOpenSkiFeature();
-  const openSkiRef = useRef(openSki); openSkiRef.current = openSki;
+  const openSkiRef = useRef(openSki);
   const extrasRef = useRef({ skiPins: EMPTY, skiLines: EMPTY });
   const skiAreas = useRef<{ slug: string; lng: number; lat: number }[]>([]);
   const skiCache = useRef(new Map<string, GeoJSON.Feature[]>());
-  const [extras, setExtras] = useState<ExtraTrail[]>([]);
-  const pointsRef = useRef<PointsResponse | null>(null); pointsRef.current = points;
   const sectionKey = section.key as TrailSectionKey;
-  const sectionRef = useRef(sectionKey); sectionRef.current = sectionKey;
-
-  const collectExtras = useCallback(() => {
-    const map = mapRef.current;
-    if (!map || map.getZoom() < LINE_ZOOM) { setExtras([]); return; }
-    const c = map.getCenter(); const here: [number, number] = [c.lng, c.lat];
-    const taken = new Set((pointsRef.current?.trails ?? []).map((t) => normalizeName(t[1])));
-    const groups = new Map<string, ExtraTrail>();
-    const sec = sectionRef.current;
-    const add = (name: string, kind: ExtraTrail["kind"], lines: [number, number][][], open: () => void) => {
-      const n = normalizeName(name); if (!n || taken.has(n)) return;
-      const len = lengthKm(lines); const mid = lines[0]?.[0]; if (!mid) return;
-      const km = distanceKm(here, mid);
-      const prev = groups.get(n);
-      if (prev) { prev.lengthKm += len; prev.km = Math.min(prev.km, km); return; }
-      groups.set(n, { key: `${kind}:${n}`, name, km, lengthKm: len, open, kind });
-    };
-    for (const f of extrasRef.current.skiLines.features) {
-      const p = f.properties ?? {}; if (!p.name || !p.id) continue;
-      const k = p.kind === "ski-run" ? "snow" : p.kind === "mountain-biking" ? "bike" : "foot";
-      if (k !== sec) continue;
-      add(String(p.name), "ski", geometryLines(f.geometry), () => openSkiRef.current(f as never));
-    }
-    if (map.getSource("trails")) {
-      for (const f of map.querySourceFeatures("trails", { sourceLayer: "trail" })) {
-        const name = f.properties?.name; if (!name) continue;
-        if (!osmSections(f.properties ?? {}).includes(sec)) continue;
-        add(String(name), "osm", geometryLines(f.geometry), () => { const t = buildFromTiles(map, f); saveOsmTrail(t); routerRef.current.push(osmTrailHref(t)); });
-      }
-    }
-    const list = [...groups.values()].sort((a, b) => a.km / Math.min(3, 0.4 + Math.sqrt(a.lengthKm)) - b.km / Math.min(3, 0.4 + Math.sqrt(b.lengthKm)));
-    setExtras(list.slice(0, 30));
-  }, []);
+  const sectionRef = useRef(sectionKey);
+  // Map event handlers read the latest values through refs, updated after each render.
+  useEffect(() => { routerRef.current = router; openSkiRef.current = openSki; sectionRef.current = sectionKey; });
 
   const refreshSki = useCallback(async () => {
     const map = mapRef.current; const client = createClient();
@@ -208,8 +173,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       for (const row of data ?? []) skiCache.current.set(row.slug, ((row.data as { geojson?: GeoJSON.FeatureCollection })?.geojson?.features ?? []));
     }
     setLines({ type: "FeatureCollection", features: inView.flatMap((a) => skiCache.current.get(a.slug) ?? []) });
-    collectExtras();
-  }, [collectExtras]);
+  }, []);
 
   const setSource = useCallback((key: keyof OverlayData, data: GeoJSON.FeatureCollection) => {
     sourcesRef.current[key] = data;
@@ -239,11 +203,6 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     setLayerGroupVisibility(map, "pois", layers.pois);
   }, [layers, ready]);
 
-  useEffect(() => {
-    if (filters.activity === "ski") {
-      setLayers((prev) => ({ ...prev, ski: true }));
-    }
-  }, [filters.activity]);
 
   const showConnectedRoute = useCallback((points: Point[]) => {
     setSource("route", { type: "FeatureCollection", features: points.length ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: points } }] : [] });
@@ -263,13 +222,28 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         .catch(() => undefined);
     }
 
+    const b = map.getBounds();
     if (!localTrailsVisible(map.getZoom())) {
-      setPoints({ trails: [], clusters: [], total: 0 });
-      setSource("pins", EMPTY); setSource("grid", EMPTY); setSource("lines", EMPTY); setSource("selected", EMPTY); setSource("drive", EMPTY); setSource("pois", EMPTY);
-      setLoading(false); setLoadError(null);
+      // Zoomed out: count bubbles from the build-time overview, sized by how many trails each area holds.
+      setSource("pins", EMPTY); setSource("lines", EMPTY); setSource("pois", EMPTY);
+      const cp = new URLSearchParams({ activity: filtersRef.current.activity, zoom: map.getZoom().toFixed(1), bbox: [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(3)).join(",") });
+      const controller = new AbortController();
+      fetchAbort.current = controller;
+      setLoading(true);
+      void fetch(`/api/trail-catalog/clusters?${cp}`, { signal: controller.signal })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error("clusters"))))
+        .then((data: { total: number; verified: number; clusters: [number, number, number, number, number, number, number, number][] }) => {
+          if (controller.signal.aborted) return;
+          setPoints({ trails: [], clusters: data.clusters.map(([lng, lat, count, , w2, s2, e2, n2]) => [lng, lat, count, w2, s2, e2, n2]), total: data.total });
+          setVerifiedInView(data.verified);
+          setLoadError(null);
+          setSource("grid", { type: "FeatureCollection", features: data.clusters.map(([lng, lat, count, verified, w2, s2, e2, n2]) => ({ type: "Feature", properties: { count, verified, bounds: [w2, s2, e2, n2].join(",") }, geometry: { type: "Point", coordinates: [lng, lat] } })) });
+        })
+        .catch(() => { if (!controller.signal.aborted) setLoadError("Trail counts couldn’t load. Move the map to try again."); })
+        .finally(() => { if (!controller.signal.aborted) { setLoading(false); setFirstLoad(false); } });
       return;
     }
-    const b = map.getBounds();
+    setSource("grid", EMPTY);
     const pad = 0.08;
     const w = b.getEast() - b.getWest(), h = b.getNorth() - b.getSouth();
     const bbox: Bounds = [Math.max(-180, b.getWest() - w * pad), Math.max(-85, b.getSouth() - h * pad), Math.min(180, b.getEast() + w * pad), Math.min(85, b.getNorth() + h * pad)];
@@ -286,17 +260,17 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("points"))))
       .then((data: PointsResponse) => {
         if (signal.aborted) return;
-        data.trails = data.trails.slice(0, MAP_TRAIL_LIMIT);
         setPoints(data);
+        setVerifiedInView(null);
         setLoadError(null);
         setSource("pins", { type: "FeatureCollection", features: data.trails.map(([id, name, lng, lat, miles, d]) => ({ type: "Feature", properties: { id, name, miles, d }, geometry: { type: "Point", coordinates: [lng, lat] } })) });
         setSource("grid", { type: "FeatureCollection", features: data.clusters.map(([lng, lat, count, w2, s2, e2, n2]) => ({ type: "Feature", properties: { count, bounds: [w2, s2, e2, n2].join(",") }, geometry: { type: "Point", coordinates: [lng, lat] } })) });
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (signal.aborted) return;
         setLoadError("Trails couldn’t load here. Move the map to try again.");
       })
-      .finally(() => { if (!signal.aborted) setLoading(false); });
+      .finally(() => { if (!signal.aborted) { setLoading(false); setFirstLoad(false); } });
     if (map.getZoom() >= LINE_ZOOM && w < 4 && h < 3) {
       const lp = filterParams(filtersRef.current);
       lp.set("bbox", [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].map((n) => n.toFixed(4)).join(","));
@@ -332,6 +306,11 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       mapRef.current = map;
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "imperial", maxWidth: 90 }), "bottom-left");
+      // Blue dot for the visitor's position; our "Show my location" button triggers it.
+      const geolocate = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true, timeout: 12_000 }, trackUserLocation: false, showUserLocation: true, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 12 } });
+      map.addControl(geolocate, "bottom-right");
+      geolocate.on("error", () => setLoadError("Location is off for this site. Allow it in your browser to see trails near you."));
+      geolocateRef.current = geolocate;
       map.on("style.load", () => { installOverlay(map, sourcesRef.current); installExtras(map, extrasRef.current); applySectionFilter(map, sectionRef.current); });
       map.on("load", () => {
         setReady(true);
@@ -365,11 +344,6 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       map.on("click", "hy-pois-circle", (e) => { const id = e.features?.[0]?.properties?.id; if (id) select(String(id)); });
       map.on("click", "hy-ski-pistes", (e) => { const f = e.features?.[0]; if (f) openSkiRef.current(f); });
       const tappedOwn = (e: maplibregl.MapMouseEvent) => map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-thru-hikes", "hy-ski-pistes", "hy-pois-circle", "hy-ski-hit", "hy-ski-pin"].filter((l) => map.getLayer(l)) }).length > 0;
-      map.on("click", "hy-osm-hit", (e) => {
-        if (tappedOwn(e)) return;
-        const f = e.features?.[0]; if (!f || !featureKey(f)) return;
-        const t = buildFromTiles(map, f); saveOsmTrail(t); routerRef.current.push(osmTrailHref(t));
-      });
       map.on("click", "hy-ski-hit", (e) => {
         if (map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-thru-hikes"] }).length) return;
         const f = e.features?.[0]; if (f) openSkiRef.current(f);
@@ -399,7 +373,6 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
           }
         }
       });
-      map.on("sourcedata", (e) => { if (e.sourceId === "trails" && e.isSourceLoaded) collectExtras(); });
       map.on("click", "hy-pins-cluster", async (e) => {
         const f = e.features?.[0];
         const source = map.getSource("hy-pins") as maplibregl.GeoJSONSource | undefined;
@@ -474,9 +447,8 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
   useEffect(() => {
     const map = mapRef.current;
-    if (map && ready) { applySectionFilter(map, sectionKey); collectExtras(); }
-  }, [sectionKey, ready, collectExtras]);
-  useEffect(() => { collectExtras(); }, [points, collectExtras]);
+    if (map && ready) applySectionFilter(map, sectionKey);
+  }, [sectionKey, ready]);
 
   const is3dRef = useRef(is3d);
   const selectedIdRef = useRef(selectedId);
@@ -636,9 +608,10 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   }
 
   function locate() {
+    if (geolocateRef.current?.trigger()) return;
     navigator.geolocation?.getCurrentPosition(
-      (pos) => mapRef.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 11, duration: 1200 }),
-      () => setLoadError("Location is off for this site. Allow it in your browser to center the map on you."),
+      (pos) => mapRef.current?.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 12, duration: 1200 }),
+      () => setLoadError("Location is off for this site. Allow it in your browser to see trails near you."),
       { timeout: 12_000, maximumAge: 300_000 },
     );
   }
@@ -651,35 +624,111 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     storeSection(key);
     const next = TRAIL_SECTIONS.find((s) => s.key === key);
     if (next) setFilters((f) => ({ ...f, activity: next.activity }));
+    if (key === "snow") setLayers((prev) => ({ ...prev, ski: true }));
   };
   const activeFilters = filters.difficulty.length + (filters.length ? 1 : 0) + (filters.routeType ? 1 : 0);
   const selectedCard = cards.find((t) => t[0] === selectedId);
   const gain = elevation && elevation !== "none" ? elevation.gainFt : null;
 
-  return (
-    <div className={`hx${workspace ? " hx-workspace" : " hx-workspace hx-workspace--map"}`} onKeyDown={(e) => { if (e.key === "Escape") { setOpen(null); setQuery(""); } }}>
-      <header className="hx-workspace-header"><div><h1>{workspace ? "Explore trails" : "Trail map"}</h1><p>Find a route. Make it your next adventure.</p></div><nav aria-label="Trail workspace"><Link className="hx-btn" href="/explore/trails/catalog">Browse list</Link><Link className="hx-btn hx-btn--primary" href="/plan">Plan a trip <span aria-hidden>↗</span></Link></nav></header>
-      <div ref={containerRef} className="hx-map" role="region" aria-label="Trail map" />
+  const zoomedOut = !localTrailsVisible(zoom);
+  const total = points?.total ?? null;
+  const countLabel = total === null ? "Loading trails…" : zoomedOut
+    ? `${total.toLocaleString("en-US")} ${total === 1 ? "trail" : "trails"} in this area`
+    : `${total.toLocaleString("en-US")} ${total === 1 ? "trail" : "trails"} in view`;
+  const countDetail = total === null ? null : zoomedOut
+    ? `${verifiedInView !== null ? `${verifiedInView.toLocaleString("en-US")} verified · ` : ""}zoom in or tap a circle to see them`
+    : total > cards.length ? `Showing the first ${cards.length} of ${total.toLocaleString("en-US")}, best-documented first` : total ? "Best-documented first" : `No ${section.label.toLowerCase()} trails here. Zoom out or clear filters.`;
 
-      <div className="hx-top">
-        <div className="hx-search">
+  function toggleFullscreen() {
+    const el = shellRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void el.requestFullscreen?.().catch(() => undefined);
+  }
+  function toggleTilt() {
+    const map = mapRef.current;
+    if (!map) return;
+    map.easeTo({ pitch: map.getPitch() > 5 ? 0 : 55, duration: 600 });
+  }
+
+  return (
+    <div ref={shellRef} className={`hx${workspace ? " hx-workspace" : " hx-workspace hx-workspace--map"}`} onKeyDown={(e) => { if (e.key === "Escape") { setOpen(null); setQuery(""); setSearchOpen(false); } }}>
+      <header className="hx-workspace-header"><div><h1>{workspace ? "Explore trails" : "Trail map"}</h1><p>Find a route. Make it your next adventure.</p></div><nav aria-label="Trail workspace"><Link className="hx-btn" href="/explore/trails/catalog">Browse list</Link><Link className="hx-btn hx-btn--primary" href="/plan">Plan a trip</Link></nav></header>
+      <div ref={containerRef} className="hx-map" role="region" aria-label="Trail map" />
+      {(firstLoad || !ready) && (
+        <div className="hx-loading" role="status">
+          <div className="hx-loading-sheen" aria-hidden="true" />
+          <p>Loading the map and trails…</p>
+        </div>
+      )}
+
+      <div className="hx-stack" role="toolbar" aria-label="Map controls">
+        <button type="button" className="hx-ctl" aria-label="Search trails" aria-expanded={searchOpen} onClick={() => setSearchOpen((v) => !v)}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z" /></svg>
+        </button>
+        <button type="button" className="hx-ctl" aria-label="Show my location" title="Show my location" onClick={locate}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>
+        </button>
+        <button type="button" className="hx-ctl" aria-label="Zoom out" onClick={() => mapRef.current?.zoomOut()}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14" /></svg>
+        </button>
+        <button type="button" className="hx-ctl" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+        </button>
+        <button type="button" className="hx-ctl" aria-label="Tilt the map" title="Tilt" onClick={toggleTilt}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" aria-hidden="true"><path d="M3 18h18L17 7H7L3 18Z" /><path d="M8 12h8" /></svg>
+        </button>
+        <button type="button" className="hx-ctl" aria-label="Full screen" title="Full screen" onClick={toggleFullscreen}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
+        </button>
+        <button type="button" className="hx-ctl hx-ctl--text" aria-pressed={is3d} aria-label={is3d ? "Show flat map" : "Show 3D terrain"} onClick={() => setIs3d((v) => !v)}>3D</button>
+        <div className="hx-pop-anchor">
+          <button type="button" className="hx-ctl hx-ctl--text" aria-expanded={open === "layers"} onClick={() => setOpen(open === "layers" ? null : "layers")}>Maps</button>
+          {open === "layers" && (
+            <div className="hx-pop hx-pop--right hx-layers">
+              {([["topo", "Topo", "Contours and terrain shading"], ["satellite", "Satellite", "Aerial imagery with roads"], ["standard", "Standard", "Streets and places"]] as const).map(([key, label, hint]) => (
+                <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} onClick={() => setBasemap(key)}>
+                  <span className="hx-layer-swatch" aria-hidden="true" />
+                  <span><strong>{label}</strong><small>{hint}</small></span>
+                </button>
+              ))}
+              <div className="hx-layer-toggles">
+                <label className="hx-check"><input type="checkbox" checked={layers.thruHikes} onChange={(e) => setLayers((l) => ({ ...l, thruHikes: e.target.checked }))} /> Long-distance trails</label>
+                <label className="hx-check"><input type="checkbox" checked={layers.dayTrails} onChange={(e) => setLayers((l) => ({ ...l, dayTrails: e.target.checked }))} /> Day trails</label>
+                <label className="hx-check"><input type="checkbox" checked={layers.ski} onChange={(e) => setLayers((l) => ({ ...l, ski: e.target.checked }))} /> Ski runs and lifts</label>
+                <label className="hx-check"><input type="checkbox" checked={layers.pois} onChange={(e) => setLayers((l) => ({ ...l, pois: e.target.checked }))} /> Trailheads, water, camps</label>
+              </div>
+            </div>
+          )}
+        </div>
+        {(Math.abs(bearing) > 1 || is3d) && (
+          <button type="button" className="hx-ctl" aria-label="Reset north" onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: is3d ? 60 : 0, duration: 500 })}>
+            <svg viewBox="0 0 24 24" width="22" height="22" style={{ transform: `rotate(${-bearing}deg)` }} aria-hidden="true"><path d="M12 3 8.5 12h7L12 3Z" fill="#d8452f" /><path d="M12 21l3.5-9h-7L12 21Z" fill="currentColor" opacity="0.7" /></svg>
+          </button>
+        )}
+      </div>
+
+      {searchOpen && (
+        <div className="hx-search hx-search--panel">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M21 21l-4.35-4.35M11 18a7 7 0 100-14 7 7 0 000 14z" /></svg>
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search trails by name" aria-label="Search trails by name" />
+          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search trails, parks or places" aria-label="Search trails" />
           {results && (
             <ul className="hx-results" role="listbox" aria-label="Matching trails">
               {results.length === 0 && <li className="hx-results-empty">No {section.label.toLowerCase()} trails match “{query.trim()}”.</li>}
               {results.map((t) => (
                 <li key={t.id}>
-                  <button type="button" onClick={() => { setQuery(""); setSelectedId(t.id); }}>
+                  <button type="button" onClick={() => { setQuery(""); setSearchOpen(false); setSelectedId(t.id); }}>
                     <strong>{t.name}</strong>
-                    <span>{[t.park ?? t.forest ?? t.region, fmtMiles(t.miles)].filter(Boolean).join(" · ")}</span>
+                    <span>{joinParts([t.park ?? t.forest ?? t.region, fmtMiles(t.miles)])}</span>
                   </button>
                 </li>
               ))}
             </ul>
           )}
         </div>
+      )}
 
+      <div className="hx-top">
         <div className="hx-chips" role="toolbar" aria-label="Trail filters">
           <div className="hx-pop-anchor">
             <button type="button" className="hx-chip hx-chip--section" aria-expanded={open === "section"} onClick={() => setOpen(open === "section" ? null : "section")}>
@@ -710,10 +759,6 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
               </div>
             )}
           </div>
-
-          <details className="hx-filter-menu">
-            <summary className="hx-chip">Filters{activeFilters ? ` (${activeFilters})` : ""} <Caret /></summary>
-            <div className="hx-filter-options">
           <div className="hx-pop-anchor">
             <button type="button" className="hx-chip" aria-pressed={filters.difficulty.length > 0} aria-expanded={open === "difficulty"} onClick={() => setOpen(open === "difficulty" ? null : "difficulty")}>
               {filters.difficulty.length ? filters.difficulty.map((d) => DIFFICULTY_LABELS[d === "expert" ? "x" : d[0]]).join(", ") : "Difficulty"}
@@ -725,14 +770,13 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                   <label key={d} className="hx-check">
                     <input type="checkbox" checked={filters.difficulty.includes(d)} onChange={(e) => setFilters((f) => ({ ...f, difficulty: e.target.checked ? [...f.difficulty, d] : f.difficulty.filter((x) => x !== d) }))} />
                     <span className="hx-dot" style={{ background: DIFFICULTY_COLORS[d === "expert" ? "x" : d[0]] }} />
-                    {d[0].toUpperCase() + d.slice(1)}
+                    {DIFFICULTY_LABELS[d === "expert" ? "x" : d[0]]}
                   </label>
                 ))}
-                <p className="hx-pop-note">Agency-reported where given, otherwise estimated from length, name and terrain.</p>
+                <p className="hx-pop-note">Computed from distance and terrain (sac_scale): effort = miles + 2 × thousands of feet climbed.</p>
               </div>
             )}
           </div>
-
           <div className="hx-pop-anchor">
             <button type="button" className="hx-chip" aria-pressed={Boolean(filters.length)} aria-expanded={open === "length"} onClick={() => setOpen(open === "length" ? null : "length")}>
               {filters.length ? LENGTHS.find((l) => l.key === filters.length)?.label ?? "Length" : "Length"}
@@ -749,7 +793,6 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
               </div>
             )}
           </div>
-
           <div className="hx-pop-anchor">
             <button type="button" className="hx-chip" aria-pressed={Boolean(filters.routeType)} aria-expanded={open === "route"} onClick={() => setOpen(open === "route" ? null : "route")}>
               {filters.routeType ? ROUTE_LABEL[filters.routeType] : "Route type"}
@@ -771,110 +814,34 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
               Clear {activeFilters}
             </button>
           )}
-            </div>
-          </details>
-          <button type="button" className="hx-chip" onClick={locate}>Near me</button>
         </div>
       </div>
 
-      <p className="hx-status" aria-live="polite">
-        {loadError ?? mapError ?? (!localTrailsVisible(zoom) ? "Zoom in to see local trails." : points
-          ? points.total === 0
-            ? `No ${section.label.toLowerCase()} trails here. Zoom out or clear filters.`
-            : `${Math.min(points.trails.length, MAP_TRAIL_LIMIT)} of ${points.total.toLocaleString("en-US")} trails nearby`
-          : "Loading trails…")}
-        {loading && <span className="hx-spinner" aria-hidden="true" />}
-      </p>
-
-      <div className="hx-right">
-      <div className="hx-controls" role="group" aria-label="Map controls">
-        <div className="hx-pop-anchor">
-          <button type="button" className="hx-ctl" aria-label="Map layers" aria-expanded={open === "layers"} onClick={() => setOpen(open === "layers" ? null : "layers")}>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" aria-hidden="true"><path d="m12 3 9 5-9 5-9-5 9-5Z" /><path d="m3 13 9 5 9-5" /></svg>
-          </button>
-          {open === "layers" && (
-            <div className="hx-pop hx-pop--left hx-layers" style={{ minWidth: "260px" }}>
-              <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--plan-muted, #94a3b8)", marginBottom: "6px", letterSpacing: "0.5px" }}>Basemap</div>
-              {([["topo", "Topo", "Contours, hillshade and every mapped path"], ["satellite", "Satellite", "Aerial imagery"], ["hybrid", "Hybrid", "Imagery with roads and place names"]] as const).map(([key, label, hint]) => (
-                <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} onClick={() => { setBasemap(key); }}>
-                  <span className="hx-layer-swatch" aria-hidden="true" />
-                  <span><strong>{label}</strong><small>{hint}</small></span>
-                </button>
-              ))}
-
-              <div style={{ borderTop: "1px solid var(--plan-line, rgba(255,255,255,0.1))", margin: "10px 0", paddingTop: "8px" }}>
-                <div style={{ fontSize: "11px", fontWeight: 700, textTransform: "uppercase", color: "var(--plan-muted, #94a3b8)", marginBottom: "6px", letterSpacing: "0.5px" }}>Active Layers</div>
-                
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", cursor: "pointer", fontSize: "13px" }}>
-                  <input type="checkbox" checked={layers.thruHikes} onChange={(e) => setLayers((l) => ({ ...l, thruHikes: e.target.checked }))} />
-                  <span>🥾 Long-Distance Thru-Hikes</span>
-                </label>
-
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", cursor: "pointer", fontSize: "13px" }}>
-                  <input type="checkbox" checked={layers.dayTrails} onChange={(e) => setLayers((l) => ({ ...l, dayTrails: e.target.checked }))} />
-                  <span>🌲 Day Trails & Singletracks</span>
-                </label>
-
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", cursor: "pointer", fontSize: "13px" }}>
-                  <input type="checkbox" checked={layers.ski} onChange={(e) => setLayers((l) => ({ ...l, ski: e.target.checked }))} />
-                  <span>⛷️ Ski Pistes & Aerial Lifts</span>
-                </label>
-
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 0", cursor: "pointer", fontSize: "13px" }}>
-                  <input type="checkbox" checked={layers.pois} onChange={(e) => setLayers((l) => ({ ...l, pois: e.target.checked }))} />
-                  <span>📍 POIs (Trailheads, Water, Camps)</span>
-                </label>
-              </div>
-            </div>
-          )}
-        </div>
-        <button type="button" className="hx-ctl hx-ctl--text" aria-pressed={is3d} aria-label={is3d ? "Show flat map" : "Show 3D terrain"} onClick={() => setIs3d((v) => !v)}>3D</button>
-        <button type="button" className="hx-ctl hx-locate" aria-label="Center on my location" title="Center on my location" onClick={locate}>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2.5" fill="currentColor" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>
-        </button>
-        <div className="hx-ctl-group">
-          <button type="button" className="hx-ctl" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-          </button>
-          <button type="button" className="hx-ctl" aria-label="Zoom out" onClick={() => mapRef.current?.zoomOut()}>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M5 12h14" /></svg>
-          </button>
-        </div>
-        {(Math.abs(bearing) > 1 || is3d) && (
-          <button type="button" className="hx-ctl" aria-label="Reset north" onClick={() => mapRef.current?.easeTo({ bearing: 0, pitch: is3d ? 60 : 0, duration: 500 })}>
-            <svg viewBox="0 0 24 24" width="22" height="22" style={{ transform: `rotate(${-bearing}deg)` }} aria-hidden="true"><path d="M12 3 8.5 12h7L12 3Z" fill="#d8452f" /><path d="M12 21l3.5-9h-7L12 21Z" fill="currentColor" opacity="0.7" /></svg>
-          </button>
-        )}
-      </div>
+      {(loadError ?? mapError) && <p className="hx-status hx-status--error" role="alert">{loadError ?? mapError}</p>}
 
       <div className="hx-legend" aria-label="Difficulty colours">
         {(["e", "m", "h", "x"] as const).map((d) => (
           <span key={d}><i style={{ background: DIFFICULTY_COLORS[d] }} />{DIFFICULTY_LABELS[d]}</span>
         ))}
       </div>
-      </div>
 
-      <div className="hx-rail-wrap">
-        <div className="hx-results-heading"><div><span className="hx-eyebrow">YOUR NEXT OUTING</span><h2>Trails nearby</h2></div><span className="hx-result-count">{cards.length}</span></div>
-        {extras.length > 0 && (
-          <div className="hx-extras" aria-label="More trails in view">
-            <p className="hx-eyebrow">ALSO IN VIEW · OPENSTREETMAP &amp; SKI AREAS</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {extras.map((x) => (
-                <button key={x.key} type="button" onClick={x.open} className="shrink-0 rounded-full border border-[var(--border)] bg-surface-elevated px-3 py-1.5 text-xs text-cream">
-                  {x.name}{x.lengthKm >= 0.05 ? ` · ${(x.lengthKm * 0.621371).toFixed(1)} mi` : ""}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+      <div className={`hx-rail-wrap${sheetOpen ? " is-open" : ""}`}>
+        <button type="button" className="hx-sheet-handle" aria-expanded={sheetOpen} onClick={(e) => { setSheetOpen((v) => !v); e.currentTarget.scrollIntoView({ behavior: "smooth", block: "start" }); }}>
+          <span className="hx-sheet-grip" aria-hidden="true" />
+          <span>{countLabel}</span>
+          <small>{sheetOpen ? "Hide list" : "Show list"}</small>
+        </button>
+        <div className="hx-results-heading" aria-live="polite">
+          <div><h2>{countLabel}</h2>{countDetail && <p>{countDetail}</p>}</div>
+          {loading && <span className="hx-spinner" aria-hidden="true" />}
+        </div>
         <ConnectedTrails selected={detail ? { id: detail.trail.id, name: detail.trail.name, lines: detail.lines } : null} onRoute={showConnectedRoute} />
         {cards.length > 0 ? (
-          <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, nearest first">
+          <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, best-documented first">
             {cards.map((t) => {
               const [id, name, , , miles, d, place, routeType] = t;
               const active = id === selectedId;
-              const hours = movingHours(miles, active ? gain : null, filters.activity);
+              const hours = active && gain !== null ? naismithHours(miles, gain) : null;
               return (
                 <article key={id} data-id={id} role="listitem" className={`hx-card${active ? " hx-card--active" : ""}`}>
                   <button type="button" className="hx-card-hit" onClick={() => setSelectedId(active ? null : id)} aria-pressed={active} aria-label={`${name}${active ? ", selected" : ""}`} />
@@ -882,19 +849,19 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                     <TrailShape id={id} lines={active ? detail?.lines : undefined} color={DIFFICULTY_COLORS[d]} />
                     <div className="hx-card-title">
                       <h3>{name}</h3>
-                      <p>{[place, routeType && ROUTE_LABEL[routeType]].filter(Boolean).join(" · ") || "Location not recorded"}</p>
+                      <p>{joinParts([place, routeType && ROUTE_LABEL[routeType]]) ?? "Location not recorded"}</p>
                     </div>
-                    {active && weather && (
+                    {active && weather && (weather.temperatureF ?? weather.lowF) !== undefined && (
                       <span className="hx-weather" title={weather.shortForecast}>
-                        {(weather.temperatureF ?? weather.lowF) !== undefined && <strong>{Math.round(weather.temperatureF ?? weather.lowF ?? 0)}°F</strong>}
+                        <strong>{Math.round(weather.temperatureF ?? weather.lowF ?? 0)}°F</strong>
                         <small>{weather.name}</small>
                       </span>
                     )}
                   </div>
                   <dl className="hx-stats">
                     <div><dt>Difficulty</dt><dd><span className="hx-dot" style={{ background: DIFFICULTY_COLORS[d] }} />{DIFFICULTY_LABELS[d]}</dd></div>
-                    <div><dt>Length</dt><dd>{fmtMiles(miles)}</dd></div>
-                    {active && gain !== null && <div><dt>Gain</dt><dd>{gain.toLocaleString("en-US")} ft</dd></div>}
+                    {fmtMiles(miles) && <div><dt>Length</dt><dd>{fmtMiles(miles)}</dd></div>}
+                    {active && feet(gain) && <div><dt>Gain</dt><dd>{feet(gain)}</dd></div>}
                     {fmtDuration(hours) && <div><dt>Est. time</dt><dd>{fmtDuration(hours)}</dd></div>}
                   </dl>
                   {active && (
@@ -908,12 +875,13 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                         <Link className="hx-btn hx-btn--primary" href={`/explore/trails/${encodeURIComponent(id)}`}>View trail</Link>
                         {start && (
                           <>
-                            <a className="hx-btn" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer" aria-label={`Driving directions to ${name}`}>Drive to trailhead ↗</a>
-                            <details className="hx-direction-menu"><summary>More</summary><div className="hx-actions"><a className="hx-btn" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer">Open Google Maps ↗</a><a className="hx-btn" href={appleMapsDirectionsUrl(start.latitude, start.longitude, start.name ?? name)} target="_blank" rel="noopener noreferrer">Apple Maps</a><Link className="hx-btn" href={`/explore/trails/${encodeURIComponent(id)}#nearby`}>Nearby essentials & trails</Link></div></details>
+                            <a className="hx-btn" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer" aria-label={`Google Maps directions to ${name}`}>Google Maps</a>
+                            <a className="hx-btn" href={appleMapsDirectionsUrl(start.latitude, start.longitude, start.name ?? name)} target="_blank" rel="noopener noreferrer">Apple Maps</a>
+                            <button type="button" className="hx-btn" onClick={driveHere}>Drive here</button>
                           </>
                         )}
                       </div>
-                      {start && <p className="hx-start">{start.kind === "trail-end" ? "Directions go to the trail’s mapped start; no trailhead is mapped nearby." : `Directions go to ${start.name ?? (start.kind === "parking" ? "trailhead parking" : "the trailhead")}${start.toTrailMeters > 50 ? `, ${Math.round(start.toTrailMeters)} m from the trail` : ""}.`}</p>}
+                      {start && <p className="hx-start">{start.kind === "trail-end" ? "No mapped trailhead — directions go to the trail’s mapped start. Check the land manager for access and parking." : `Directions go to ${start.name ?? (start.kind === "parking" ? "trailhead parking" : "the trailhead")}${start.toTrailMeters > 50 ? `, ${Math.round(start.toTrailMeters)} m from the trail` : ""}.`}</p>}
                       <NearbyTrails trailId={id} />
                     </div>
                   )}
@@ -921,7 +889,16 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
               );
             })}
           </div>
-        ) : <div className="hx-discover"><h3>{localTrailsVisible(zoom) ? "A little further afield?" : "Where are you headed?"}</h3><p>{localTrailsVisible(zoom) ? "Move the map or choose another area." : "Local trails appear as you zoom in."}</p><button className="hx-btn hx-btn--primary" type="button" onClick={locate}>◎ Trails near me</button><span className="hx-eyebrow">EXPLORE AN AREA</span><div className="hx-destinations"><button type="button" className="hx-btn" onClick={() => visit(37.74, -119.58)}>Yosemite <span>↗</span></button><button type="button" className="hx-btn" onClick={() => visit(40.31, -105.64)}>Rocky Mountain <span>↗</span></button><button type="button" className="hx-btn" onClick={() => visit(47.50, -121.75)}>Cascades <span>↗</span></button></div><Link className="hx-plan-link" href="/pack-trails">My saved routes <span>→</span></Link></div>}
+        ) : !zoomedOut ? null : (
+          <div className="hx-discover">
+            <button className="hx-btn hx-btn--primary" type="button" onClick={locate}>Trails near me</button>
+            <div className="hx-destinations">
+              <button type="button" className="hx-btn" onClick={() => visit(37.74, -119.58)}>Yosemite</button>
+              <button type="button" className="hx-btn" onClick={() => visit(40.31, -105.64)}>Rocky Mountain</button>
+              <button type="button" className="hx-btn" onClick={() => visit(47.50, -121.75)}>Cascades</button>
+            </div>
+          </div>
+        )}
         {selectedCard === undefined && selectedId && detail === null && <p className="sr-only" role="status">Loading trail</p>}
       </div>
     </div>

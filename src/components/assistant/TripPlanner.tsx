@@ -22,6 +22,7 @@ import { shoppingForTrip, shoppingText } from "@/lib/assistant/shopping";
 import { CatalogSuggestions } from "./CatalogSuggestions";
 import { LocalOutdoorAiChat } from "./LocalOutdoorAiChat";
 import "./planner.css";
+import { noteGuestProgress } from "@/components/nav/GuestSaveBanner";
 
 function NumberField({ label, value, onChange, min = 0, max = 10000, step = "any", hint }: { label: string; value: number | null; onChange: (n: number | null) => void; min?: number; max?: number; step?: string; hint?: string }) {
   return <label>{label}<input type="number" min={min} max={max} step={step} value={value ?? ""} onChange={e => onChange(optionalNumber(e.target.value, min, max))} placeholder="Not set" />{hint && <small>{hint}</small>}</label>;
@@ -119,7 +120,7 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
   function buildTrip() {
     searchController.current?.abort(); ++searchSequence.current; setSources([]); setSearchError(""); setSearching(false); setResearchingRoute("");
     setActivePlanId(null); setSavedSignature("");
-    const parsed = parseTripRequest(prompt); setRequest(parsed); setStarted(true); setStep(0); setRoute(null); setPacked([]); setShopping([]); setExcluded([]); setExplanation([]); setNotice("");
+    const parsed = parseTripRequest(prompt); setRequest(parsed); setStarted(true); noteGuestProgress(); setStep(0); setRoute(null); setPacked([]); setShopping([]); setExcluded([]); setExplanation([]); setNotice("");
     if (parsed.region) void findSources(parsed);
   }
   const insights = planInsights(request, route, selected, memory.profile, memory.plans, context.activities);
@@ -169,8 +170,9 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "" }:
       <div className="planner-workspace">
         {!started && <form className="planner-prompt" onSubmit={e => { e.preventDefault(); buildTrip(); }}>
           <label htmlFor="trip-prompt">What do you have in mind?</label>
-          <textarea id="trip-prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="30 miles, 3 days in Colorado…" maxLength={1500} required rows={2} />
-          <div className="planner-prompt-footer"><button type="button" className="planner-link" onClick={() => setPrompt("30 miles, 3 days in Colorado")}>Try a 3-day Colorado trip</button><button className="planner-button">Build my trip <span aria-hidden="true">→</span></button></div>
+          {!prompt && <button type="button" className="planner-example" onClick={() => setPrompt("30 miles, 3 days in Colorado")}>Start with an example: <strong>3 days, 30 miles in Colorado</strong></button>}
+          <textarea id="trip-prompt" value={prompt} onChange={e => setPrompt(e.target.value)} placeholder="Describe your trip: where, how far, how many days" maxLength={1500} required rows={2} />
+          <div className="planner-prompt-footer"><button className="planner-button">Build my trip <span aria-hidden="true">→</span></button></div>
         </form>}
         {!started && <div className="planner-intro"><h2>Your next trip, informed by your last.</h2><p>Start with a distance, number of days, and region. We’ll find route options, calculate the gear you’re carrying, and arrange it into a packing checklist.</p><p className="planner-help">Your account’s gear and hikes are used when you’re signed in. Add preferences and trip feedback here to make recommendations more personal.</p></div>}
         {!started && <LocalOutdoorAiChat onApplyPrompt={(p) => { setPrompt(p); window.scrollTo({ top: 0, behavior: "smooth" }); }} />}

@@ -25,7 +25,8 @@
     "source:resorts": "tsx scripts/ingestion/resort-trails.ts",
     "source:towns": "tsx scripts/ingestion/towns.ts",
     "bootstrap": "tsx scripts/bootstrap-and-ingest.ts",
-    "test": "tsx --test src/lib/ingestion/parsers/gpx.test.ts src/lib/assistant/*.test.ts src/lib/trail-catalog/*.test.ts src/lib/ingestion/*.test.ts src/lib/opentrailmap.test.ts src/lib/trip/*.test.ts src/lib/trail-difficulty.test.ts"
+    "test": "tsx --test src/lib/ingestion/parsers/gpx.test.ts src/lib/assistant/*.test.ts src/lib/trail-catalog/*.test.ts src/lib/ingestion/*.test.ts src/lib/opentrailmap.test.ts src/lib/trip/*.test.ts src/lib/trail-difficulty.test.ts",
+    "pipeline": "tsx pipeline/run.ts"
   },
   "dependencies": {
     "@mapbox/vector-tile": "^3.0.0",
@@ -36,6 +37,7 @@
     "geojson-path-finder": "^2.1.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.60.0",
+    "maplibre-contour": "^0.1.0",
     "maplibre-gl": "^6.10.0",
     "next": "^16.3.5",
     "pbf": "^4.0.2",

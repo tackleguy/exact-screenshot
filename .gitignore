@@ -42,3 +42,9 @@ supabase/.temp/
 # Generated OpenTrailMap styles (shipped copies live in public/opentrailmap)
 vendor/opentrailmap/dist/
 /exports/
+
+# Generated at build time from data/trail-catalog (scripts/prepare-trail-assets.ts)
+/public/trail-data/
+/public/sitemaps/
+/public/sitemap.xml
+/public/robots.txt

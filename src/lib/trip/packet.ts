@@ -1,9 +1,11 @@
 import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import type { WaterReport } from "./water";
-import type { TownNearTrail, TownServices } from "./towns";
+import type { TownNearTrail } from "./towns-core";
+import type { TownServices } from "./services";
 import type { ElevationProfile } from "./elevation";
 import type { TownDayPlan } from "./town-days";
-import { SERVICE_LABELS, TOWNS_ATTRIBUTION, type ServiceKey } from "./towns";
+import { TOWNS_ATTRIBUTION } from "./towns-core";
+import { SERVICE_LABELS, type ServiceKey } from "./services";
 
 export interface PackItem { name: string; quantity?: number; weightOz?: number | null; category?: string | null; consumable?: boolean }
 export interface TripBundle {

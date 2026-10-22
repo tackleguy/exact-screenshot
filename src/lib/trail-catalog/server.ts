@@ -14,6 +14,7 @@ import { simplifyLine } from "@/lib/geo/simplify";
 import { resolveDifficulty } from "@/lib/trail-difficulty";
 import { withinBounds } from "./map";
 import { buildCatalogMap } from "./map";
+import { trailSacScale } from "./types";
 
 const unzip = promisify(gunzip);
 const root = path.join(process.cwd(), "data/trail-catalog");
@@ -196,7 +197,7 @@ export async function catalogDownload() {
 /** Difficulty letter for map styling: e(asy), m(oderate), h(ard), x (expert). */
 const DIFFICULTY_CODE: Record<string, string> = { easy: "e", moderate: "m", hard: "h", expert: "x" };
 const difficultyCode = (t: CatalogTrail) =>
-  DIFFICULTY_CODE[resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: t.osm?.sacScale }).difficulty] ?? "m";
+  DIFFICULTY_CODE[resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty] ?? "m";
 
 /** Trails matching filters (ignoring the map area), cached per filter set for line lookups. */
 const idSets = new Map<string, Promise<Set<string>>>();

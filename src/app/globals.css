@@ -537,3 +537,10 @@ html { scroll-padding-block:20px 100px; }
   .home-tool > svg { margin-bottom: 12px; }
   .home-tool p { max-width: none; }
 }
+.discovery-hero--no-photo { background: linear-gradient(160deg, #173f35, #36745b 55%, #8aa38f); }
+.discovery-proof { margin: 14px 0 0; max-width: 46ch; font-size: 14px; line-height: 1.5; opacity: 0.92; }
+.home-near-me { margin-top: 14px; border: 0; background: none; cursor: pointer; font: inherit; }
+.guest-save-banner { position: fixed; z-index: 70; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: min(560px, calc(100vw - 24px)); padding: 12px 12px 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--foreground); box-shadow: 0 8px 24px #173f3526; }
+.guest-save-banner p { flex: 1; margin: 0; font-size: 14px; }
+.guest-save-close { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--sage); cursor: pointer; }
+@media (max-width: 767px) { .guest-save-banner { bottom: 92px; flex-wrap: wrap; } }

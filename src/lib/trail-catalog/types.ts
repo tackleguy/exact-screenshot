@@ -74,6 +74,13 @@ export interface CatalogTrail {
   partOfRoute?: { id: string; name: string; totalMiles: number };
   /** OpenStreetMap route relation this trail is (or was merged with). */
   osm?: OsmRouteInfo;
+  /** Named OpenStreetMap ways joined into this trail (same name, connected within 25 m). */
+  osmWay?: { ids: number[]; highway: string; sacScale?: string; mtbScale?: string };
+  /**
+   * verified: an official agency record or an OpenStreetMap route relation.
+   * mapped: named OpenStreetMap ways that passed every verification rule. Nothing below "mapped" is shown.
+   */
+  tier?: "verified" | "mapped";
   /** Other names: OSM alt/official/short names and Wikidata aliases. */
   altNames?: string[];
   /** Matched Wikidata item, with the Wikipedia lead paragraph and main Commons image when they exist. */
@@ -124,6 +131,8 @@ export interface CatalogManifest {
   confidence?: Record<string, number>;
   /** Trails shown publicly (excludes rejected records); set at load time. */
   publicTotal?: number;
+  /** Shown trails by confidence tier (catalog v3). The site's headline count is verified + mapped. */
+  tiers?: { verified: number; mapped: number };
 }
 export type CatalogBounds = [west: number, south: number, east: number, north: number];
 export interface CatalogMapPoint {
@@ -236,3 +245,9 @@ export function displayMiles(miles: number | null) {
   if (miles < 0.1) return `${Math.round((miles * 1609.344) / 5) * 5} m`;
   return miles >= 100 ? `${Math.round(miles).toLocaleString("en-US")} mi` : `${miles.toFixed(1)} mi`;
 }
+
+/** OSM sac_scale for a trail, from its route relation or its joined ways. */
+export const trailSacScale = (t: Pick<CatalogTrail, "osm" | "osmWay">) => t.osm?.sacScale ?? t.osmWay?.sacScale ?? null;
+
+/** The headline trail count: verified + mapped (exact, never rounded up); older snapshots fall back to publicTotal. */
+export const headlineCount = (m: Pick<CatalogManifest, "tiers" | "publicTotal" | "total">) => (m.tiers ? m.tiers.verified + m.tiers.mapped : m.publicTotal ?? m.total);

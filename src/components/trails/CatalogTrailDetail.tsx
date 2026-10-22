@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CatalogMapView } from "./CatalogMapView";
 import { TrailMapAndDirections } from "./TrailMapAndDirections";
 import { TripTools } from "./TripTools";
+import { CatalogPhotos } from "./CatalogPhotos";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { TrailWeatherForecast } from "./TrailWeatherForecast";
 import type { CatalogManifest, CatalogTrail } from "@/lib/trail-catalog/types";
@@ -11,6 +12,7 @@ import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, ROUTE_TYPE_LABELS, formatDistance
 import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, resolveDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
 import { CatalogTrailHero } from "./CatalogTrailHero";
 import "./catalog.css";
+import { trailSacScale } from "@/lib/trail-catalog/types";
 
 export function CatalogTrailDetail({
   trail: t,
@@ -36,7 +38,7 @@ export function CatalogTrailDetail({
     ...(isRoute ? { kind: "route" } : {}),
     ...(t.region && (t.country === "US" || t.country === "CA") ? { region: t.region } : {}),
   });
-  const difficulty = resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: t.osm?.sacScale });
+  const difficulty = resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) });
 
   return (
     <article className="catalog-shell catalog-detail">
@@ -215,7 +217,7 @@ export function CatalogTrailDetail({
         )}
       </div>
       {hasLines && !isRoute ? (
-        <TrailMapAndDirections name={t.name} miles={t.miles} lines={lines} trailhead={t.trailhead} />
+        <TrailMapAndDirections name={t.name} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }} />
       ) : hasLines ? (
         <CatalogMapView lines={lines} />
       ) : (
@@ -247,6 +249,7 @@ export function CatalogTrailDetail({
         />
       )}
       <TripTools trailId={t.id} hasLine={hasLines} miles={t.miles} />
+      {hasLocation && <CatalogPhotos trailId={t.id} />}
       {t.sections && t.sections.length > 0 && (
         <section className="catalog-sections-breakdown" style={{ marginTop: "2rem", marginBottom: "2rem" }}>
           <h2 style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>Trail Sections & Segments ({t.sections.length})</h2>

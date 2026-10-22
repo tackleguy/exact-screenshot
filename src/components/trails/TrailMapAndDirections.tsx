@@ -6,7 +6,6 @@ import type { MapPin } from "./CatalogMapViewLeaflet";
 import {
   appleMapsDirectionsUrl,
   googleMapsDirectionsUrl,
-  onTrailInstructions,
   trailEnds,
   type AccessPoint,
 } from "@/lib/trail-catalog/access";
@@ -30,7 +29,7 @@ function duration(seconds: number) {
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
-export function TrailMapAndDirections({ name, miles, lines, trailhead }: { name: string; miles: number | null; lines: Lines; trailhead?: AccessPoint }) {
+export function TrailMapAndDirections({ name, lines, trailhead, landManager }: { name: string; miles?: number | null; lines: Lines; trailhead?: AccessPoint; landManager?: { name: string | null; url: string | null } }) {
   const [startIndex, setStartIndex] = useState(0);
   const [origin, setOrigin] = useState<Origin | null>(null);
   const [route, setRoute] = useState<Route | null>(null);
@@ -42,14 +41,13 @@ export function TrailMapAndDirections({ name, miles, lines, trailhead }: { name:
   // Start options: the mapped OSM trailhead (found at catalog build time), then the trail's two ends.
   const options = useMemo<AccessPoint[]>(() => {
     const ends = trailEnds(lines);
-    const out: AccessPoint[] = trailhead ? [trailhead] : [];
+    const out: AccessPoint[] = trailhead && trailhead.kind !== "trail-end" ? [trailhead] : [];
     if (ends) {
       ends.forEach(([longitude, latitude], i) => out.push({ kind: "trail-end", name: i === 0 ? "One end" : "Other end", latitude, longitude, toTrailMeters: 0 }));
     }
     return out;
   }, [trailhead, lines]);
   const start = options[startIndex] ?? null;
-  const steps = useMemo(() => (start ? onTrailInstructions(name, miles, lines, start) : []), [start, name, miles, lines]);
 
   const pins = useMemo<MapPin[]>(() => {
     const out: MapPin[] = options
@@ -125,10 +123,14 @@ export function TrailMapAndDirections({ name, miles, lines, trailhead }: { name:
               </p>
               {start.water && <p className="catalog-muted">Water at the trailhead (Forest Service): {start.water}</p>}
               {start.closestTowns && <p className="catalog-muted">Closest towns (Forest Service): {start.closestTowns}</p>}
-              {!trailhead && (
-                <p className="catalog-muted">No trailhead is mapped in OpenStreetMap within 800 m, so the trail’s mapped ends are shown. Check road access and parking before you go.</p>
+              {trailhead ? (
+                <p>Start at <strong>{describe(trailhead)}</strong>.</p>
+              ) : (
+                <p>
+                  No mapped trailhead — check the land manager’s page for access and parking
+                  {landManager?.url ? <>: <a href={landManager.url} target="_blank" rel="noopener noreferrer">{landManager.name ?? "land manager"}</a></> : "."}
+                </p>
               )}
-              <ol>{steps.map((step) => <li key={step}>{step}</li>)}</ol>
               <div className="catalog-directions-actions">
                 <a className="catalog-button" href={googleMapsDirectionsUrl(start.latitude, start.longitude)} target="_blank" rel="noopener noreferrer">
                   Open in Google Maps

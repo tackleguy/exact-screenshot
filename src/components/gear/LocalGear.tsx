@@ -6,6 +6,7 @@ import { GearEditor } from "@/components/assistant/GearEditor";
 import { usePlannerMemory } from "@/components/assistant/usePlannerMemory";
 import type { PlannerGear } from "@/lib/assistant/types";
 import "@/components/assistant/planner.css";
+import { noteGuestProgress } from "@/components/nav/GuestSaveBanner";
 
 export function LocalGear({ userId = null, accountStorageUnavailable = false }: { userId?: string | null; accountStorageUnavailable?: boolean }) {
   const { memory, update, error } = usePlannerMemory(userId);
@@ -16,7 +17,7 @@ export function LocalGear({ userId = null, accountStorageUnavailable = false }: 
   const unknown = memory.gear.filter(item => item.weightOz === null).length;
   function save(gear: PlannerGear) {
     const saved = update(m => ({ ...m, gear: [...m.gear.filter(g => g.id !== gear.id), gear] }));
-    if (saved) setEditing(null);
+    if (saved) { setEditing(null); if (!userId) noteGuestProgress(); }
     return saved;
   }
   function focusEditor() { editor.current?.scrollIntoView({ behavior: "instant", block: "start" }); editor.current?.querySelector("input")?.focus(); }

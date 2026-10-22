@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { Markdown } from "./Markdown";
 
 interface ChatMessage {
   id: string;
@@ -362,7 +363,7 @@ export function LocalOutdoorAiChat({
               lineHeight: 1.6,
             }}
           >
-            <div style={{ whiteSpace: "pre-wrap" }}>{m.text}</div>
+            <Markdown text={m.text} />
             <div
               style={{
                 display: "flex",

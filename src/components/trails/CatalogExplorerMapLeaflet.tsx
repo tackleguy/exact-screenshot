@@ -351,7 +351,9 @@ export function CatalogExplorerMap({ initialData, query }: { initialData: Catalo
           {loading
             ? "Updating map…"
             : data
-              ? `${data.total.toLocaleString("en-US")} ${data.total === 1 ? "trail" : "trails"} ${area ? "in this map area" : "matching your search"}`
+              ? area
+                ? data.total ? `${data.total.toLocaleString("en-US")} ${data.total === 1 ? "trail" : "trails"} in this map area` : "Zoom in to list the trails in this area"
+                : "Your results on the map"
               : "Map search unavailable"}
         </p>
         <div>

@@ -1,16 +1,28 @@
-import type * as maplibregl from "maplibre-gl";
-import { loadOpenTrailMapStyle } from "@/lib/opentrailmap";
+import type * as maplibreTypes from "maplibre-gl";
+import * as maplibregl from "@/lib/maplibre";
+import mlcontour from "maplibre-contour";
 import { TRAIL_DETAIL_ZOOM } from "@/lib/trail-catalog/discovery";
 
-export type Basemap = "topo" | "satellite" | "hybrid";
+/**
+ * Basemaps (licences in DECISIONS.md):
+ * - topo: OpenFreeMap "liberty" vector map (OpenMapTiles schema, © OpenStreetMap contributors) with hillshading and
+ *   contour lines computed in a web worker from AWS Terrain Tiles (Terrarium DEM).
+ * - standard: the same OpenFreeMap map without terrain.
+ * - satellite: Esri World Imagery with Esri reference roads and place names.
+ */
+export type Basemap = "topo" | "satellite" | "standard";
 
-export const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
+const TERRARIUM = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
+const OPENFREEMAP = "https://tiles.openfreemap.org/styles/liberty";
+const GLYPHS = "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf";
+
+export const TERRAIN_SOURCE: maplibreTypes.RasterDEMSourceSpecification = {
   type: "raster-dem",
-  tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+  tiles: [TERRARIUM],
   encoding: "terrarium",
   tileSize: 256,
   maxzoom: 15,
-  attribution: "Terrain © Mapzen, AWS Terrain Tiles",
+  attribution: "Terrain: <a href=\"https://registry.opendata.aws/terrain-tiles/\">AWS Terrain Tiles</a> (USGS 3DEP, SRTM)",
 };
 
 /** Trail colours by difficulty letter (e/m/h/x), shared by pins, lines and card badges. */
@@ -18,7 +30,7 @@ export const DIFFICULTY_COLORS: Record<string, string> = { e: "#2f9e5b", m: "#2f
 export const DIFFICULTY_LABELS: Record<string, string> = { e: "Easy", m: "Moderate", h: "Hard", x: "Expert" };
 export const SELECTED_COLOR = "#ffc21a";
 export const THRU_HIKE_COLOR = "#d97706";
-const FONT = ["Americana-Bold"];
+const FONT = ["Noto Sans Bold"];
 
 /** Piste colours according to standard ski difficulty conventions */
 export const PISTE_COLORS: Record<string, string> = {
@@ -40,7 +52,7 @@ export const POI_COLORS: Record<string, string> = {
   parking: "#64748b",   // Slate
 };
 
-const difficultyColor: maplibregl.ExpressionSpecification = [
+const difficultyColor: maplibreTypes.ExpressionSpecification = [
   "match", ["get", "d"],
   "e", DIFFICULTY_COLORS.e,
   "h", DIFFICULTY_COLORS.h,
@@ -48,7 +60,7 @@ const difficultyColor: maplibregl.ExpressionSpecification = [
   DIFFICULTY_COLORS.m,
 ];
 
-const pisteDifficultyColor: maplibregl.ExpressionSpecification = [
+const pisteDifficultyColor: maplibreTypes.ExpressionSpecification = [
   "match", ["get", "pisteDifficulty"],
   "novice", PISTE_COLORS.novice,
   "easy", PISTE_COLORS.easy,
@@ -59,7 +71,7 @@ const pisteDifficultyColor: maplibregl.ExpressionSpecification = [
   PISTE_COLORS.easy,
 ];
 
-const poiColor: maplibregl.ExpressionSpecification = [
+const poiColor: maplibreTypes.ExpressionSpecification = [
   "match", ["get", "poiType"],
   "trailhead", POI_COLORS.trailhead,
   "water", POI_COLORS.water,
@@ -69,52 +81,83 @@ const poiColor: maplibregl.ExpressionSpecification = [
   POI_COLORS.trailhead,
 ];
 
-/**
- * OpenTrailMap colours paths by access rules (magenta for unknown, red for restricted). On a consumer
- * map every OpenStreetMap path reads as a fine dashed topo line; Hyked trails draw over them.
- */
-function topoPaths(style: maplibregl.StyleSpecification): maplibregl.StyleSpecification {
-  const layers = style.layers.flatMap((layer): maplibregl.LayerSpecification[] => {
-    if (layer.type !== "line" || !("source" in layer) || layer.source !== "trails") return [layer];
-    if (/waterway/.test(layer.id) || /^(hovered|selected)-/.test(layer.id)) return [];
-    if (!/paths/.test(layer.id)) return [layer];
-    const informal = /informal|disallowed/.test(layer.id);
-    return [{
-      ...layer,
-      minzoom: TRAIL_DETAIL_ZOOM,
-      paint: {
-        "line-color": "#8c4a32",
-        "line-width": ["interpolate", ["linear"], ["zoom"], 11, 0.7, 14, 1.4, 18, 3],
-        "line-dasharray": [2.4, 1.6],
-        "line-opacity": informal ? 0.45 : 0.85,
-      },
-    }];
+let dem: InstanceType<typeof mlcontour.DemSource> | null = null;
+/** One shared DEM source; contour tiles are generated in its worker, so panning stays smooth. */
+function contours() {
+  if (!dem) {
+    dem = new mlcontour.DemSource({ url: TERRARIUM, encoding: "terrarium", maxzoom: 13, worker: true, cacheSize: 100 });
+    dem.setupMaplibre(maplibregl as never);
+  }
+  return dem;
+}
+
+let libertyStyle: Promise<maplibreTypes.StyleSpecification> | null = null;
+function liberty() {
+  libertyStyle ??= fetch(OPENFREEMAP).then((r) => {
+    if (!r.ok) throw new Error(`Basemap style ${r.status}`);
+    return r.json() as Promise<maplibreTypes.StyleSpecification>;
+  }).catch((error) => { libertyStyle = null; throw error; });
+  return libertyStyle;
+}
+
+/** Hillshading under the roads and water, contours (feet) with labels on index lines. */
+function withTerrain(style: maplibreTypes.StyleSpecification): maplibreTypes.StyleSpecification {
+  const layers = [...style.layers];
+  const at = (re: RegExp) => { const i = layers.findIndex((l) => re.test(l.id)); return i < 0 ? layers.length : i; };
+  layers.splice(at(/^water/), 0, {
+    id: "hillshade", type: "hillshade", source: "terrain",
+    paint: { "hillshade-exaggeration": 0.35, "hillshade-shadow-color": "#4b5a49", "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#6b7b67" },
   });
-  return { ...style, layers, sources: { ...style.sources, terrain: TERRAIN_SOURCE } };
+  const contourLayers: maplibreTypes.LayerSpecification[] = [
+    { id: "contours", type: "line", source: "contours", "source-layer": "contours", minzoom: 10,
+      paint: { "line-color": "#8a6b4a", "line-opacity": ["case", [">", ["get", "level"], 0], 0.55, 0.28], "line-width": ["case", [">", ["get", "level"], 0], 1, 0.5] } },
+    { id: "contour-labels", type: "symbol", source: "contours", "source-layer": "contours", minzoom: 12, filter: [">", ["get", "level"], 0],
+      layout: { "symbol-placement": "line", "text-field": ["concat", ["number-format", ["get", "ele"], {}], " ft"], "text-font": ["Noto Sans Regular"], "text-size": 10 },
+      paint: { "text-color": "#7a5c3c", "text-halo-color": "#fbf8f1", "text-halo-width": 1.2 } },
+  ];
+  layers.splice(at(/^(tunnel|road|bridge|building)/), 0, ...contourLayers);
+  return {
+    ...style,
+    sources: {
+      ...style.sources,
+      terrain: TERRAIN_SOURCE,
+      contours: {
+        type: "vector",
+        tiles: [contours().contourProtocolUrl({ multiplier: 3.28084, thresholds: { 10: [200, 1000], 12: [100, 500], 13: [50, 250], 15: [20, 100] }, elevationKey: "ele", levelKey: "level", contourLayer: "contours" })],
+        maxzoom: 15,
+      },
+    },
+    layers,
+  };
 }
 
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
-
-function rasterStyle(basemap: "satellite" | "hybrid", glyphs?: string): maplibregl.StyleSpecification {
-  const sources: maplibregl.StyleSpecification["sources"] = {
-    terrain: TERRAIN_SOURCE,
-    satellite: { type: "raster", tiles: [`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" },
+function satellite(): maplibreTypes.StyleSpecification {
+  return {
+    version: 8,
+    glyphs: GLYPHS,
+    sources: {
+      terrain: TERRAIN_SOURCE,
+      satellite: { type: "raster", tiles: [`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" },
+      roads: { type: "raster", tiles: [`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 },
+      labels: { type: "raster", tiles: [`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 },
+    },
+    layers: [
+      { id: "satellite", type: "raster", source: "satellite" },
+      { id: "roads", type: "raster", source: "roads" },
+      { id: "labels", type: "raster", source: "labels" },
+    ],
   };
-  const layers: maplibregl.LayerSpecification[] = [{ id: "satellite", type: "raster", source: "satellite" }];
-  if (basemap === "hybrid") {
-    sources.roads = { type: "raster", tiles: [`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 };
-    sources.labels = { type: "raster", tiles: [`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 };
-    layers.push({ id: "roads", type: "raster", source: "roads" }, { id: "labels", type: "raster", source: "labels" });
-  }
-  return { version: 8, glyphs: glyphs ?? "https://font.americanamap.org/{fontstack}/{range}.pbf", sources, layers };
 }
 
-export async function explorerStyle(basemap: Basemap): Promise<maplibregl.StyleSpecification | string> {
-  if (basemap !== "topo") return rasterStyle(basemap);
+export async function explorerStyle(basemap: Basemap): Promise<maplibreTypes.StyleSpecification> {
+  if (basemap === "satellite") return satellite();
   try {
-    return topoPaths(await loadOpenTrailMapStyle("trail"));
+    const style = await liberty();
+    return basemap === "topo" ? withTerrain(style) : { ...style, sources: { ...style.sources, terrain: TERRAIN_SOURCE } };
   } catch {
-    return rasterStyle("hybrid");
+    // The vector basemap is unreachable: imagery still gives a usable map with Hyked trails on top.
+    return satellite();
   }
 }
 
@@ -134,7 +177,7 @@ export interface OverlayData {
 }
 
 /** Hyked's own sources and layers; re-installed after every basemap switch. */
-export function installOverlay(map: maplibregl.Map, data: OverlayData) {
+export function installOverlay(map: maplibreTypes.Map, data: OverlayData) {
   if (map.getSource("hy-pins")) return;
 
   // 1. Long-Distance Through-Hike Corridors Layer
@@ -217,8 +260,8 @@ export function installOverlay(map: maplibregl.Map, data: OverlayData) {
 
   // 4. Clusters & Pins
   for (const source of ["hy-grid", "hy-pins"] as const) {
-    const filter: maplibregl.FilterSpecification = source === "hy-pins" ? ["has", "point_count"] : ["has", "count"];
-    const count: maplibregl.ExpressionSpecification = source === "hy-pins" ? ["get", "point_count"] : ["get", "count"];
+    const filter: maplibreTypes.FilterSpecification = source === "hy-pins" ? ["has", "point_count"] : ["has", "count"];
+    const count: maplibreTypes.ExpressionSpecification = source === "hy-pins" ? ["get", "point_count"] : ["get", "count"];
     map.addLayer({
       id: `${source}-cluster`, type: "circle", source, filter,
       paint: {
@@ -286,7 +329,7 @@ export function installOverlay(map: maplibregl.Map, data: OverlayData) {
 
 /** Toggles visibility for specific layer categories */
 export function setLayerGroupVisibility(
-  map: maplibregl.Map,
+  map: maplibreTypes.Map,
   group: "thru-hikes" | "day-trails" | "ski" | "pois",
   visible: boolean,
 ) {
@@ -306,7 +349,7 @@ export function setLayerGroupVisibility(
   }
 }
 
-export function setSky(map: maplibregl.Map, on: boolean) {
+export function setSky(map: maplibreTypes.Map, on: boolean) {
   try {
     map.setSky(on ? { "sky-color": "#a9cbe8", "horizon-color": "#eef1ea", "fog-color": "#eef1ea", "sky-horizon-blend": 0.6, "horizon-fog-blend": 0.7, "fog-ground-blend": 0.25, "atmosphere-blend": 0.6 } : {});
   } catch {

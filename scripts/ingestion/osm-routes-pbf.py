@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 OpenStreetMap route relations (hiking, foot, bicycle, mtb, horse, ski) from Geofabrik extracts of every U.S. state
-and Canadian province/territory. Each extract is downloaded, read with pyosmium, reduced to the route relations
-and the geometry of their member ways, and deleted, so the disk only ever holds a few extracts at once.
+and Canadian province/territory. Each extract is downloaded into memory, read with pyosmium, reduced to the route relations, their member ways and
+named trail ways, and discarded: the raw extracts are never written to disk. Only the small result is kept.
 
 Output: .cache/osm-pbf/<region>.json.gz  {"relations": {id: {"tags", "members"}}, "ways": {id: [[lon, lat], ...]}}
 Then `npx tsx scripts/ingestion/osm-routes.ts --pbf` joins the regions into data/sources/osm-routes.json.gz.
@@ -35,7 +35,7 @@ CANADA = ["alberta", "british-columbia", "manitoba", "new-brunswick", "newfoundl
 REGIONS = [("us", r) for r in US] + [("canada", r) for r in CANADA]
 
 
-def extract(pbf: str) -> dict:
+def extract(pbf) -> dict:
     """Route relations and their member ways' coordinates from one extract (two passes)."""
     relations, way_ids = {}, set()
     route_filter = osmium.filter.TagFilter(*[("route", v) for v in ROUTES])
@@ -72,34 +72,37 @@ def run(region: tuple) -> str:
     target = os.path.join(OUT, f"{name}.json.gz")
     if os.path.exists(target):
         return f"{name}: cached"
-    pbf = os.path.join(OUT, f"{name}.osm.pbf")
-    url = f"https://download.geofabrik.de/north-america/{country}/{name}-latest.osm.pbf"
+    # The child process downloads into memory, extracts, and exits, so its node index and the extract are freed.
     started = time.time()
     for attempt in range(3):
-        result = subprocess.run(["curl", "-sSfL", "--retry", "3", "-o", pbf, url], capture_output=True, text=True)
-        if result.returncode == 0:
-            break
-        time.sleep(10 * (attempt + 1))
-    else:
-        return f"{name}: download failed ({result.stderr.strip()[:120]})"
-    size = os.path.getsize(pbf) / 1e6
-    # Parse in a child process so each extract's node index is freed when it finishes.
-    parsed = subprocess.run([sys.executable, __file__, "--parse", pbf, target], capture_output=True, text=True)
-    os.remove(pbf)
-    if parsed.returncode != 0:
-        return f"{name}: parse failed ({parsed.stderr.strip()[-200:]})"
-    return f"{name}: {size:.0f} MB in {time.time() - started:.0f}s — {parsed.stdout.strip()}"
+        parsed = subprocess.run([sys.executable, __file__, "--parse", country, name, target], capture_output=True, text=True)
+        if parsed.returncode == 0:
+            return f"{name}: {time.time() - started:.0f}s — {parsed.stdout.strip()}"
+        time.sleep(15 * (attempt + 1))
+    return f"{name}: failed ({parsed.stderr.strip()[-200:]})"
+
+
+def download(country: str, name: str) -> bytes:
+    """The extract, straight into memory through a pipe (curl is far faster than urllib); nothing is written to disk."""
+    url = f"https://download.geofabrik.de/north-america/{country}/{name}-latest.osm.pbf"
+    result = subprocess.run(["curl", "-sSfL", "--retry", "3", "-A", "Hyked/1.0 trail catalog (https://github.com/tackleguy/health)", url], capture_output=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"download failed: {result.stderr.decode()[:200]}")
+    return result.stdout
 
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--parse":
-        data = extract(sys.argv[2])
-        with gzip.open(sys.argv[3] + ".tmp", "wt") as f:
+        _, _, country, name, target = sys.argv
+        raw = download(country, name)
+        data = extract(osmium.io.FileBuffer(raw, "pbf"))
+        del raw
+        with gzip.open(target + ".tmp", "wt") as f:
             json.dump(data, f, separators=(",", ":"))
-        os.replace(sys.argv[3] + ".tmp", sys.argv[3])
+        os.replace(target + ".tmp", target)
         print(f"{len(data['relations'])} relations, {len(data['trails'])} named trail ways, {len(data['ways'])} ways")
         return
-    workers = int(sys.argv[sys.argv.index("--workers") + 1]) if "--workers" in sys.argv else 4
+    workers = int(sys.argv[sys.argv.index("--workers") + 1]) if "--workers" in sys.argv else 3
     os.makedirs(OUT, exist_ok=True)
     # Largest first, so the long downloads overlap with everything else.
     order = sorted(REGIONS, key=lambda r: r[1] not in ("california", "ontario", "quebec", "british-columbia", "texas", "new-york", "florida", "pennsylvania"))

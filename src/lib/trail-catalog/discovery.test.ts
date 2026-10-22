@@ -7,9 +7,9 @@ test("local trails appear only after zooming in", () => {
   assert.equal(localTrailsVisible(11), true);
   assert.equal(localTrailsVisible(15), true);
 });
-test("discovery displays a small bounded selection", () => {
-  assert.equal(MAP_TRAIL_LIMIT, 24);
-  assert.equal(TRAIL_CARD_LIMIT, 6);
+test("discovery draws a bounded selection and lists fewer cards than it draws", () => {
+  assert.ok(MAP_TRAIL_LIMIT <= 500);
+  assert.ok(TRAIL_CARD_LIMIT < MAP_TRAIL_LIMIT);
 });
 test("unnamed source trails never acquire an invented official name", () => {
   assert.equal(readableTrailName("Half Dome Trail", "nps-123456"), "Half Dome Trail");

@@ -12,6 +12,7 @@ import { withinBounds } from "./map";
 import { isWinterActivityTrail } from "./winter";
 import { matchesCatalogActivity, parseCatalogActivity } from "./activity";
 import { dedupeSectionsByName } from "./through-hikes";
+import { trailSacScale } from "./types";
 
 export const normalize = (value: string) =>
   value
@@ -92,7 +93,7 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     if (filters.minMiles !== undefined && (r.miles === null || r.miles < filters.minMiles)) return false;
     if (filters.maxMiles !== undefined && (r.miles === null || r.miles > filters.maxMiles)) return false;
     // Reported difficulty when the source gives one, otherwise the same estimate the trail page shows.
-    if (difficulties && !difficulties.has(resolveDifficulty({ reported: r.difficulty, miles: r.miles, sacScale: r.osm?.sacScale }).difficulty)) return false;
+    if (difficulties && !difficulties.has(resolveDifficulty({ reported: r.difficulty, miles: r.miles, sacScale: trailSacScale(r) }).difficulty)) return false;
     if (filters.routeType && r.routeType !== filters.routeType) return false;
     if (filters.dogFriendly && r.dogs !== true) return false;
     if (

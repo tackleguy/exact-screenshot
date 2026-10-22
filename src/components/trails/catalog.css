@@ -244,3 +244,7 @@
 .trail-hero-photo--none { min-height: clamp(150px, 20vw, 220px); background: linear-gradient(160deg, var(--accent-dim, #173f35), var(--accent, #245b47)); }
 .catalog-about { margin: 16px 0 0; max-width: 70ch; }
 .catalog-about p { margin: 0 0 8px; line-height: 1.6; }
+.trail-confidence { display: inline-flex; align-self: flex-start; margin: 6px 0 4px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgb(255 255 255 / 0.92); color: #173f35; }
+.trail-confidence--mapped { color: #5a4310; }
+.trail-confidence--guide { color: #3a3f8f; }
+.trail-stat-note { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--sage); }
