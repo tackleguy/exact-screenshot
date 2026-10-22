@@ -127,7 +127,19 @@ vertex-count lengths, packet defaults) were deleted.
 
 - `public/trail-data`, the sitemaps and `robots.txt` are generated at build time from `data/trail-catalog`
   (`npm run build` runs `scripts/prepare-trail-assets.ts`), so only the source snapshot is committed. Output is
-  sharded by 2° cell (trail records) and 1° cell (lines). Final sizes: see the summary below.
+  sharded by 2° cell (trail records) and 1° cell (lines and hike features). Final sizes: see the summary below.
+- `npm run build` = `prebuild` (map assets + `prepare-trail-assets.ts`) then the Vite build; `build:dev` is the same
+  in development mode. `npm run build:server` builds the Next.js app (API routes and the server-rendered pages),
+  which reads `data/trail-catalog` directly and serves its own sitemap and robots.txt.
+
+## Attribution
+
+Each page credits the sources it shows: OpenStreetMap (ODbL) and the official agencies in the map's attribution
+control, on trail pages, in the "Along the trail" list and in the route builder; the basemap providers
+(OpenFreeMap/OpenMapTiles, Esri imagery, AWS Terrain Tiles for hillshade and contours) on the map; Wikimedia author
+and licence on every photo; Wikipedia (CC BY-SA) under descriptions; GeoNames under towns; the National Weather
+Service or Open-Meteo under forecasts; OSRM/FOSSGIS when road connectors are used. `/about/data` lists every source
+with its licence and is linked from the "More" menu and the map attribution.
 
 ## Route builder
 
@@ -180,7 +192,7 @@ The browser is only a thin cache: nothing a person makes is written to the devic
 | Gear | `gear_items` | account (signed in) / localStorage (guests, planner additions) |
 | Trip-planner preferences | `user_preferences.planner_profile` | localStorage |
 | Saved trips (request, route, pack, shopping list, packed items, feedback) | `trips` | localStorage |
-| Routes joined on the map | `saved_routes` | localStorage (`hyked-connected-route`) |
+| Routes joined on the map (earlier versions; the route builder now saves personal trails) | `saved_routes` | localStorage (`hyked-connected-route`, migrated on sign-in) |
 | Personal trails (route builder: geometry, stats, features, days, photo) | `personal_trails` + private `trail-photos` bucket | — (new) |
 | Recorded activities | `activities` | account |
 | Eco AI chat history | `ai_chat_messages` | not kept |

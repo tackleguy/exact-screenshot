@@ -33,7 +33,8 @@ the Ontario Trail Network. Kept per record: name, official ID/number, allowed us
 and the source link. Endpoints are listed in `scripts/ingestion/source-catalog.ts`.
 
 ### 2. OpenStreetMap
-Each Geofabrik extract is streamed into memory and read with pyosmium; the raw extract is never written to disk.
+Each Geofabrik extract is downloaded into a RAM disk (a macOS RAM volume the script creates, or `/dev/shm` on
+Linux), read with pyosmium and deleted, so the raw extract is never written to the computer's disk.
 Kept: every route relation with `route=hiking|foot|bicycle|mtb|horse|ski` and its member ways, and every
 `highway=path|footway|track|bridleway|cycleway` way with a name, with the tags the verification rules need.
 
@@ -57,7 +58,25 @@ image with its licence and author.
 - Trails inside a National Park Service unit get the park name; Wikidata items are matched by relation, by
   `wikidata` tag, or by name within 20 km; curated guides get their real lines; every trail gets a quality score.
 
+### 5. Hike features
+`features.ts` reads every region's feature file, removes duplicates where extracts overlap at borders, and walks
+each shown trail's line in the same order trail pages use (`chainLines`) to record every feature within 300 m
+(lakes and rivers 200 m, fords 60 m, crossings and bridges 40 m) with its mile marker and distance off the trail. Features
+near no shown trail are dropped. Output is sharded by 1° cell; `features-report.json` has the counts by type.
+
+### 6. Validation report
+`validate.ts` prints totals by tier and source, rejections by rule (from `build-report.json`), hike features by
+type, coverage percentages (named, relation, official match, line, Wikipedia, photo, trailhead), a DEM check of
+summit elevations, and 10 random trails with their key fields.
+
+### Running steps by hand
+`python3 pipeline/steps/extract-osm.py --workers 6` (more workers download and parse more regions at once; a second
+run with `--reverse` can share the list), then `npx tsx pipeline/steps/wiki.ts`,
+`node --max-old-space-size=12288 node_modules/.bin/tsx pipeline/steps/build.ts` (`--dry-run` prints counts without
+writing), `npx tsx pipeline/steps/features.ts`, `npx tsx pipeline/steps/validate.ts`, then `npm run build`.
+
 ## Licences
 OpenStreetMap data © OpenStreetMap contributors (ODbL 1.0). U.S. federal data is public domain; Parks Canada and
 Ontario data are under the Open Government Licence. Wikidata is CC0, Wikipedia text CC BY-SA 4.0, and each
-Commons image carries its own licence and author, which the app shows.
+Commons image carries its own licence and author, which the app shows. The app lists every source and licence at
+`/about/data`.
