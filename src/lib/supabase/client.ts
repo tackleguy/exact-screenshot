@@ -11,7 +11,10 @@ let shared: SupabaseClient | null = null;
  */
 export function createClient(): SupabaseClient | null {
   if (shared) return shared;
-  const env = getSupabaseEnv();
+  // Lovable provides Vite's public values directly; the separately hosted app uses Next's values.
+  const viteUrl = import.meta.env?.VITE_SUPABASE_URL;
+  const viteKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const env = viteUrl && viteKey ? { url: viteUrl, anonKey: viteKey } : getSupabaseEnv();
   if (!env) return null;
   const key = env.anonKey;
   const opaqueKey = key.startsWith("sb_publishable_") || key.startsWith("sb_secret_");
