@@ -247,7 +247,16 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
           <NavIcon name="mountain" />
           Hyked
         </Link>
-        <MoreTools />
+        <div className="fieldbook-mobile-actions">
+          {userEmail ? (
+            <button type="button" onClick={handleSignOut}>
+              Sign out
+            </button>
+          ) : (
+            <Link href={`/login?next=${encodeURIComponent(pathname)}`}>Sign in</Link>
+          )}
+          <MoreTools />
+        </div>
       </header>
       <aside className="fieldbook-nav" aria-label="Main navigation" data-collapsed={collapsed || undefined} onKeyDown={handleNavigationKeys}>
         <button
