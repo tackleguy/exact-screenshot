@@ -45,8 +45,6 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <GoogleButton next={() => nextFromLocation()} />
-      <p className="auth-divider"><span>or with email</span></p>
       <div>
         <label htmlFor="email" className="mb-1 block text-sm font-medium text-sage">
           Email
