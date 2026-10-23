@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useId, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { useLocalModel } from "./useLocalModel";
+import { createClient } from "@/lib/supabase/client";
+
+async function authHeaders(): Promise<Record<string, string>> {
+  const { data } = (await createClient()?.auth.getSession()) ?? { data: { session: null } };
+  const token = data.session?.access_token;
+  return token ? { "Content-Type": "application/json", Authorization: `Bearer ${token}` } : { "Content-Type": "application/json" };
+}
 import { normalizeProductInput } from "@/lib/assistant/product-input";
 import { defaultSelections, makeProductDraft, PRODUCT_FIELDS } from "@/lib/assistant/product-draft";
 import { productFromPastedSpecs } from "@/lib/assistant/product-excerpt";
@@ -86,7 +93,7 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
     try {
       const response = await fetch(page ? "/api/assistant/product" : `/api/assistant/research?kind=product&q=${encodeURIComponent(value.trim())}`, {
         cache: "no-store",
-        ...(page ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ url: value.trim(), name: (sourceName || productName).slice(0, 240) }) } : {}), signal: controller.signal,
+        ...(page ? { method: "POST", headers: await authHeaders(), body: JSON.stringify({ url: value.trim(), name: (sourceName || productName).slice(0, 240) }) } : {}), signal: controller.signal,
       });
       let data = await response.json();
       if (!response.ok) throw new Error(data.error || "This source is unavailable.");
@@ -124,7 +131,7 @@ export function ProductLookup({ onUse, ref, onBusyChange, productName = "" }: { 
             const opened = await Promise.allSettled(picks.map(async source => {
               const pageResponse = await fetch("/api/assistant/product", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: await authHeaders(),
                 body: JSON.stringify({ url: source.url, name: value.trim().slice(0, 240) }),
                 cache: "no-store",
                 signal: AbortSignal.any([controller.signal, AbortSignal.timeout(55_000)]),
