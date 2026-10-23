@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/client";
 import { apiTarget } from "./api-target";
 import { isTrailServicePath, trailService, tripPacket } from "./trail-service";
 import { fetchTrailWeather } from "@/lib/weather/forecast";
+import { staticApi } from "./static-api";
 
 export const apiOrigin = (import.meta.env.VITE_HYKED_API_URL ?? "").replace(/\/+$/, "");
 
@@ -93,11 +94,16 @@ export function installApiBridge() {
     }
 
     // 4. Trail Service (Catalog, Peaks, Thru-Hikes, Sections, Elevation, Water, Towns, GPX)
-    if (!target && isTrailServicePath(reqUrl.pathname)) return trailService(request, original);
-    if (!target) return Response.json({ error: "This feature is unavailable right now. Please try again later." }, { status: 503 });
+    // 5. Directions, ski areas and quick search, straight from their public services.
+    const local = () => (isTrailServicePath(reqUrl.pathname) ? trailService(request, original) : staticApi(reqUrl, original));
+    if (!target) return local() ?? Response.json({ error: "This feature is unavailable right now. Please try again later." }, { status: 503 });
 
+    // A configured API server answers first; when it is down, the browser versions above still work.
     const headers = new Headers(request.headers);
-    return original(new Request(target, request), { headers });
+    const fallback = request.method === "GET" ? request.clone() : null;
+    const answer = await original(new Request(target, request), { headers }).catch(() => null);
+    if (answer && answer.status < 500 && answer.status !== 404) return answer;
+    return (fallback && (isTrailServicePath(reqUrl.pathname) ? trailService(fallback, original) : staticApi(reqUrl, original))) ?? answer ?? Response.json({ error: "This feature is unavailable right now. Please try again later." }, { status: 503 });
   };
 
   // Intercept anchor clicks for GPX downloads

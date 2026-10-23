@@ -5,7 +5,7 @@ import { resolveDifficulty } from "@/lib/trail-difficulty";
 import { chainLines } from "@/lib/geo/line";
 import { measureLines } from "@/lib/trail-catalog/quality";
 import { nearbyCatalogPhotos, wikiPhotos } from "@/lib/trail-catalog/photos";
-import { matchScore, placeMatch, searchEntry, searchRank, type SearchEntry } from "@/lib/trail-catalog/fuzzy";
+import { matchScore, normalizeText, placeMatch, searchEntry, searchRank, type SearchEntry } from "@/lib/trail-catalog/fuzzy";
 import type { LngLat } from "@/lib/geo/tiles";
 import { elevationProfile } from "@/lib/trip/elevation";
 import { waterAlong, waterFromFeatures } from "@/lib/trip/water";
@@ -26,7 +26,7 @@ import {
 } from "@/lib/trail-catalog/through-hikes-data";
 import { snapPointToNearestLine, simplifyForZoom } from "@/lib/geo/snap";
 import { countryName, trailSacScale } from "@/lib/trail-catalog/types";
-import { cellBounds, cellFile, cellKeyOf, cellRef, lookupShard } from "@/lib/trail-catalog/static-data";
+import { cellBounds, cellFile, cellKeyOf, cellRef, regionSlug, rowShard, searchKey, SEARCH_STOPWORDS } from "@/lib/trail-catalog/static-data";
 
 type Metadata = CatalogManifest & {
   directory: string;
@@ -34,12 +34,10 @@ type Metadata = CatalogManifest & {
   cells: string[];
   /** 2° cell → countries with worldwide trails in it (one file each). */
   worldCells?: Record<string, string[]>;
-  /** Countries with their own search index. */
-  searchShards?: string[];
-  /** Normalized region name → countries it is in (to pick country indexes for a query like "trails in Bavaria"). */
-  regionCountries?: Record<string, string[]>;
-  /** Trail ids are found through lookup/l-<hh>.json.gz. */
-  lookupShards?: boolean;
+  /** Regions (slugs) with a best-trails search file, q/r-<slug>.json.gz. */
+  searchRegions?: string[];
+  /** Countries with a best-trails search file, q/c-<CC>.json.gz. */
+  searchCountries?: string[];
   featureCells?: string[];
 };
 type Lines = [number, number][][];
@@ -135,51 +133,69 @@ function curated(m: Metadata, fetcher: typeof fetch) {
   return curatedPromise;
 }
 
-type IndexRow = [id: string, name: string, alt: string, place: string, cell: string, score: number];
-interface IndexEntry { id: string; cell: string; score: number; entry: SearchEntry }
-let indexPromise: Promise<IndexEntry[]> | undefined;
-/** The search index, kept in the browser's Cache Storage per snapshot so later visits skip the download. */
-function searchIndex(m: Metadata, fetcher: typeof fetch) {
-  indexPromise ??= (async () => {
-    const file = `${m.directory}/search.json.gz`;
-    let rows: IndexRow[] | null = null;
-    const store = typeof caches !== "undefined" ? await caches.open("hyked-search").catch(() => null) : null;
-    const key = `/trail-data/${file}.json`;
-    const hit = await store?.match(key).catch(() => undefined);
-    if (hit) rows = await hit.json().catch(() => null);
-    if (!rows) {
-      rows = await asset<IndexRow[]>(file, fetcher);
-      await store?.put(key, new Response(JSON.stringify(rows), { headers: { "Content-Type": "application/json" } })).catch(() => undefined);
-    }
-    return toEntries(rows);
-  })().catch((error) => { indexPromise = undefined; throw error; });
-  return indexPromise;
-}
-
-const toEntries = (rows: IndexRow[]): IndexEntry[] => rows.map(([id, name, alt, place, cell, score]) => ({
-  id, cell, score: Number(score) || 0,
+type IndexRow = [id: string, name: string, alt: string, place: string, score: number];
+interface IndexEntry { id: string; score: number; entry: SearchEntry }
+const toEntries = (rows: IndexRow[]): IndexEntry[] => rows.map(([id, name, alt, place, score]) => ({
+  id, score: Number(score) || 0,
   entry: searchEntry({ name, altNames: alt ? alt.split(" | ") : [], manager: place }),
 }));
-const shardEntries = new Map<string, Promise<IndexEntry[]>>();
-/** Every trail of one country (the main index holds only the best worldwide trails). */
-function countryIndex(m: Metadata, code: string, fetcher: typeof fetch) {
-  let hit = shardEntries.get(code);
+const searchFiles = new Map<string, Promise<IndexEntry[]>>();
+/** One search file (q/<key>, q/r-<region>, q/c-<country>); a missing file has no trails. */
+function searchFile(m: Metadata, key: string, fetcher: typeof fetch) {
+  let hit = searchFiles.get(key);
   if (!hit) {
-    hit = asset<IndexRow[]>(`${m.directory}/search/s-${code}.json.gz`, fetcher).then(toEntries).catch((error) => { shardEntries.delete(code); throw error; });
-    shardEntries.set(code, hit);
+    hit = asset<IndexRow[]>(`${m.directory}/q/${key}.json.gz`, fetcher).then(toEntries).catch(() => { searchFiles.delete(key); return []; });
+    searchFiles.set(key, hit);
   }
   return hit;
 }
-/** Countries a query names (by country or region name) or the country filter picks, that have their own index. */
-function queryCountries(m: Metadata, q: string, country?: string) {
-  const shards = new Set(m.searchShards ?? []);
-  if (!shards.size) return [];
-  const text = ` ${normalize(q).replace(/[^\p{L}\p{N}]+/gu, " ")} `;
-  const out = new Set<string>();
-  if (country && shards.has(country)) out.add(country);
-  for (const code of shards) if (text.includes(` ${normalize(countryName(code))} `)) out.add(code);
-  for (const [region, codes] of Object.entries(m.regionCountries ?? {})) if (region.length > 3 && text.includes(` ${region} `)) for (const c of codes) if (shards.has(c)) out.add(c);
-  return [...out].slice(0, 4);
+/**
+ * Search files a query needs: one per distinct word (3+ letters) — common words like "trail" only when the query
+ * has nothing else — plus the best-trails file of any region or country the query names.
+ */
+function queryFiles(m: Metadata, q: string, country?: string) {
+  const words = normalizeText(q).split(" ").filter((w) => w.length >= 3);
+  const specific = words.filter((w) => !SEARCH_STOPWORDS.has(w));
+  const keys = new Set((specific.length ? specific : words).map(searchKey));
+  const text = ` ${normalizeText(q)} `;
+  const regions = new Set(m.searchRegions ?? []);
+  const countries = new Set(m.searchCountries ?? []);
+  for (const code of countries) if (text.includes(` ${normalizeText(countryName(code))} `)) keys.add(`c-${code}`);
+  if (country && countries.has(country)) keys.add(`c-${country}`);
+  // Region names up to four words long ("new south wales", "baden wurttemberg").
+  const tokens = text.trim().split(" ");
+  for (let i = 0; i < tokens.length; i++) for (let n = 1; n <= 4 && i + n <= tokens.length; n++) {
+    const slug = regionSlug(tokens.slice(i, i + n).join(" "));
+    if (slug.length > 3 && regions.has(slug)) keys.add(`r-${slug}`);
+  }
+  return [...keys].slice(0, 8);
+}
+
+const rowFiles = (m: Metadata, ids: string[], fetcher: typeof fetch) =>
+  Promise.all([...new Set(ids.map(rowShard))].map((k) => asset<Record<string, CatalogTrail | string>>(`${m.directory}/rows/r-${k}.json.gz`, fetcher).catch(() => ({}) as Record<string, CatalogTrail | string>)));
+/**
+ * Records of ranked trail ids, loaded a batch at a time until the requested page is full after the page's filters
+ * (or 400 are loaded, or the list runs out).
+ */
+async function pageOfRows(m: Metadata, ids: string[], f: ReturnType<typeof parseCatalogFilters>, fetcher: typeof fetch) {
+  const need = (f.page ?? 1) * (f.limit ?? TRAIL_CARD_LIMIT);
+  const out: CatalogTrail[] = [];
+  let shown = 0;
+  for (let i = 0; i < ids.length && i < 400 && shown < need; ) {
+    const batch = ids.slice(i, i + Math.max(36, need - shown + 12));
+    i += batch.length;
+    out.push(...(await rowsById(m, batch, fetcher)));
+    // Lists show one card per name, so count the way the list will.
+    shown = filterCatalog(out, { ...f, page: undefined, limit: undefined, uniqueNames: true }).total;
+  }
+  return out;
+}
+
+/** Full records of trails by id (merged ids are skipped). */
+async function rowsById(m: Metadata, ids: string[], fetcher: typeof fetch) {
+  const files = await rowFiles(m, ids, fetcher);
+  const all = Object.assign({}, ...files) as Record<string, CatalogTrail | string>;
+  return ids.flatMap((id) => { const r = all[id]; return r && typeof r === "object" ? [{ ...r, name: readableTrailName(r.name, r.id) }] : []; });
 }
 
 function getCuratedExtraTrails(): CatalogTrail[] {
@@ -195,27 +211,24 @@ async function select(params: URLSearchParams, fetcher: typeof fetch): Promise<{
 
   if (f.q) {
     const terms = normalize(f.q).split(/\s+/).filter(Boolean);
-    // Fuzzy match over names, other names and places; keep the best-ranked hits and load only their cells.
-    // A query naming a country or region also searches every trail of that country.
-    const [main, ...extra] = await Promise.all([searchIndex(m, fetcher), ...queryCountries(m, f.q, f.country).map((c) => countryIndex(m, c, fetcher).catch(() => []))]);
+    // Fuzzy match over names, other names and places in the few small search files the query's words point to;
+    // only the best-ranked trails' records are loaded. A query naming a region or country adds its best trails.
+    const files = await Promise.all(queryFiles(m, f.q, f.country).map((k) => searchFile(m, k, fetcher)));
     const seenIds = new Set<string>();
-    const all = [...main, ...extra.flat()]
+    const all = files.flat()
       .filter((e) => !seenIds.has(e.id) && Boolean(seenIds.add(e.id)))
       .map((e) => ({ e, rank: searchRank(matchScore(f.q!, e.entry), e.score, placeMatch(f.q!, e.entry)) }))
       .filter((x) => x.rank >= 100)
       .sort((a, b) => b.rank - a.rank);
-    // Only the best 300 are loaded; `queryMatches` keeps the true count of matching trails.
-    const ranked = all.slice(0, 300);
-    const keys = [...new Set(ranked.map((x) => x.e.cell))];
-    const wanted = new Set(ranked.map((x) => x.e.id));
-    const cellRows = (await cells(keys.slice(0, 40), m, fetcher)).filter((r) => wanted.has(r.id));
+    // Enough records for the requested page after filters; `queryMatches` keeps the true count of matching trails.
+    const found = await pageOfRows(m, all.map((x) => x.e.id), f, fetcher);
     const matchedCurated = curated.filter((t) => {
       const text = normalize(`${t.name} ${t.region ?? ""} ${t.country} ${t.note ?? ""} ${(t.tags ?? []).join(" ")}`);
       return terms.every((term) => text.includes(term));
     });
     // Curated guides first; catalog rows that duplicate a guide's id are dropped (not the other way round).
     const seen = new Set(matchedCurated.map((r) => r.id));
-    return { rows: [...matchedCurated, ...cellRows.filter((r) => !seen.has(r.id))], manifest: m, queryMatches: all.length + matchedCurated.length };
+    return { rows: [...matchedCurated, ...found.filter((r) => !seen.has(r.id))], manifest: m, queryMatches: all.length + matchedCurated.length };
   }
 
   if (f.collection) {
@@ -239,6 +252,13 @@ async function select(params: URLSearchParams, fetcher: typeof fetch): Promise<{
     return { rows: [...curated, ...cellRows.filter((r) => !seen.has(r.id))], manifest: m };
   }
 
+  // A country or region picked without a search or a place: its best-documented trails.
+  const area = f.region ? `r-${regionSlug(normalizeText(f.region))}` : f.country && f.country !== "intl" ? `c-${f.country}` : null;
+  if (area) {
+    const found = await pageOfRows(m, (await searchFile(m, area, fetcher)).map((e) => e.id), f, fetcher);
+    const seen = new Set(curated.map((r) => r.id));
+    return { rows: [...curated, ...found.filter((r) => !seen.has(r.id))], manifest: m };
+  }
   const overview = await asset<CatalogTrail[]>(`${m.directory}/overview.json.gz`, fetcher);
   const seen = new Set(curated.map((r) => r.id));
   return { rows: [...curated, ...overview.filter((r) => !seen.has(r.id))], manifest: m };
@@ -276,23 +296,11 @@ async function detail(
     }
   }
 
-  // 4. Check Sharded Source Trails (merged records redirect to the whole trail)
-  if (m.lookupShards) {
-    const where = (await asset<Record<string, string>>(`${m.directory}/lookup/l-${lookupShard(id)}.json.gz`, fetcher))[id];
-    if (!where) return null;
-    if (where.startsWith("r:")) return where.slice(2) !== id ? detail(where.slice(2), fetcher) : null;
-    const found = (await cells([where.slice(2)], m, fetcher)).find((t) => t.id === id);
-    return found ? withLines(found, m, fetcher) : null;
-  }
-  const index = await searchIndex(m, fetcher);
-  const entry = index.find((r) => r.id === id);
-  if (!entry) {
-    const redirect = (await asset<Record<string, string>>(`${m.directory}/redirects.json.gz`, fetcher).catch(() => ({}) as Record<string, string>))[id];
-    return redirect && redirect !== id ? detail(redirect, fetcher) : null;
-  }
-  const trail = (await cells([entry.cell], m, fetcher)).find((t) => t.id === id);
-  if (!trail) return null;
-  return withLines(trail, m, fetcher);
+  // 4. Full records by id (merged records redirect to the whole trail)
+  const where = (await rowFiles(m, [id], fetcher))[0][id];
+  if (!where) return null;
+  if (typeof where === "string") return where.startsWith("r:") && where.slice(2) !== id ? detail(where.slice(2), fetcher) : null;
+  return withLines({ ...where, name: readableTrailName(where.name, where.id) }, m, fetcher);
 }
 
 /** A catalog trail with its mapped line and nearest trailhead. */
@@ -693,4 +701,11 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Trail data could not load." }, { status: 503 });
   }
+}
+/** [id, name, lng, lat, country, region, locality, activity codes, runs, lifts, top m, base m, website] */
+export type SkiAreaRow = [string, string, number, number, string, string, string, string, number, number, number | null, number | null, string];
+/** Every operating ski area (OpenSkiMap), from the build's ski-areas.json.gz; empty when the build has none. */
+export async function skiAreaRows(fetcher: typeof fetch): Promise<SkiAreaRow[]> {
+  const m = await meta(fetcher);
+  return (await asset<{ areas: SkiAreaRow[] }>(`${m.directory}/ski-areas.json.gz`, fetcher).catch(() => ({ areas: [] }))).areas;
 }

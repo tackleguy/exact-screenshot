@@ -4,10 +4,11 @@
  *   public/trail-data/<snapshot>/cell-<x>_<y>.json.gz       U.S./Canada trails whose pin is in each 2° cell
  *   public/trail-data/<snapshot>/cell-<x>_<y>-<CC>.json.gz  worldwide trails, per 2° cell and country
  *   public/trail-data/<snapshot>/geometry-<cell>.json.gz    their lines, in 1° cells
- *   public/trail-data/<snapshot>/search.json.gz             search index (names, other names, places, cell, score):
- *                                                           every U.S./Canada trail and the best worldwide ones
- *   public/trail-data/<snapshot>/search/s-<CC>.json.gz      search index of every trail in one country
- *   public/trail-data/<snapshot>/lookup/l-<hh>.json.gz      trail id → its cell file, or the trail it merged into
+ *   public/trail-data/<snapshot>/q/<key>.json.gz            search entries [id, name, other names, places, score] of
+ *                                                           every trail with a word starting with the key
+ *   public/trail-data/<snapshot>/q/r-<region>.json.gz       the best trails of a region (q/c-<CC>: of a country)
+ *   public/trail-data/<snapshot>/rows/r-<hhhh>.json.gz       full trail records by id, and merged id → trail it joined
+ *   public/trail-data/<snapshot>/ski-areas.json.gz          every operating ski area (OpenSkiMap), for the ski map
  *   public/trail-data/<snapshot>/clusters.json.gz           zoomed-out count bubbles per section and grid size
  *   public/trail-data/<snapshot>/redirects.json.gz          merged/duplicate ids → the trail they now belong to
  *   public/sitemap.xml + public/sitemaps/trails-N.xml + public/robots.txt
@@ -26,14 +27,14 @@ import { buildResortOverlay } from "../src/lib/trail-catalog/resorts";
 import { normalizeSeason, titleCaseName } from "../src/lib/trail-catalog/agencies";
 import { sectionOf, trailActivities } from "../src/lib/trail-catalog/activity";
 import { countryName, type CatalogTrail } from "../src/lib/trail-catalog/types";
-import { cellRef, lookupShard, pinCell } from "../src/lib/trail-catalog/static-data";
-import { normalize } from "../src/lib/trail-catalog/search";
+import { pinCell, regionSlug, rowShard, searchKey, SEARCH_STOPWORDS } from "../src/lib/trail-catalog/static-data";
+import { normalizeText } from "../src/lib/trail-catalog/fuzzy";
 
 const SITE = (process.env.SITE_URL ?? process.env.VITE_SITE_URL ?? process.env.NEXT_PUBLIC_SITE_URL ?? "https://hyked.lovable.app").replace(/\/+$/, "");
 const GRIDS = [8, 4, 2, 1, 0.5, 0.25];
 const SITEMAP_URLS = 45_000;
-/** Worldwide trails in the main search index (the rest are found through their country's index). */
-const WORLD_IN_MAIN_SEARCH = 250_000;
+/** Trails in each region or country search file. */
+const REGION_TOP = 1500;
 
 const shown = (t: CatalogTrail) => !t.mergedInto && t.confidence !== "REJECTED" && t.quality !== "fragment";
 const zipped = (value: unknown) => gzipSync(JSON.stringify(value));
@@ -58,8 +59,24 @@ function cellKeysOf(t: CatalogTrail): string[] {
   return [...keys];
 }
 
-type SearchRow = [id: string, name: string, alt: string, place: string, cell: string, score: number];
-const searchRow = (t: CatalogTrail, ref: string): SearchRow => [t.id, t.name, [...(t.altNames ?? []), t.wiki?.title].filter(Boolean).join(" | "), [t.park, t.forest, t.blmArea, t.manager, t.region, t.country !== "US" && t.country !== "CA" ? countryName(t.country) : t.country].filter(Boolean).join(" "), ref, t.qualityScore ?? 0];
+type SearchRow = [id: string, name: string, alt: string, place: string, score: number];
+const searchRow = (t: CatalogTrail): SearchRow => [t.id, t.name, [...(t.altNames ?? []), t.wiki?.title].filter(Boolean).join(" | "), [t.park, t.forest, t.blmArea, t.manager, t.region, t.country !== "US" && t.country !== "CA" ? countryName(t.country) : t.country].filter(Boolean).join(" "), t.qualityScore ?? 0];
+/** Search files a trail is filed under: its name, other-name and park/forest words (common words only when nothing else). */
+function searchKeysOf(t: CatalogTrail) {
+  const words = normalizeText([t.name, ...(t.altNames ?? []), t.wiki?.title, t.park, t.forest, t.blmArea].filter(Boolean).join(" ")).split(" ").filter((w) => w.length >= 3);
+  const keys = new Set(words.filter((w) => !SEARCH_STOPWORDS.has(w)).map(searchKey));
+  if (!keys.size) for (const w of words) keys.add(searchKey(w));
+  return keys;
+}
+/** Detail-only fields left out of the map/list cells (the trail page reads the full record from rows/). */
+const DETAIL_ONLY = ["factSources", "sourceUrl", "sourceDate", "distanceBasis", "confidence", "sourceId", "officialUrl", "sources"] as const;
+function slim(t: CatalogTrail): CatalogTrail {
+  const out = { ...t } as Record<string, unknown>;
+  for (const k of DETAIL_ONLY) delete out[k];
+  if (t.osmWay) out.osmWay = { highway: t.osmWay.highway };
+  if (t.wiki) out.wiki = { ...t.wiki, extract: undefined };
+  return out as unknown as CatalogTrail;
+}
 
 async function main() {
   const root = path.resolve("data/trail-catalog");
@@ -78,12 +95,28 @@ async function main() {
 
   await rm(path.resolve("public/trail-data"), { recursive: true, force: true });
   const output = path.resolve("public/trail-data", pointer.directory);
-  await mkdir(path.join(output, "search"), { recursive: true });
-  await mkdir(path.join(output, "lookup"), { recursive: true });
+  await mkdir(path.join(output, "q"), { recursive: true });
+  await mkdir(path.join(output, "rows"), { recursive: true });
 
   // Everything below accumulates across the U.S./Canada rows and then each country's rows in turn.
-  const lookup = new Map<string, Record<string, string>>();
-  const setLookup = (id: string, value: string) => { const k = lookupShard(id); (lookup.get(k) ?? lookup.set(k, {}).get(k)!)[id] = value; };
+  // Full records and search entries are kept as JSON text (one string per trail, shared by every file it is in).
+  const records = new Map<string, string[]>();
+  const setRecord = (id: string, json: string) => { const k = rowShard(id); (records.get(k) ?? records.set(k, []).get(k)!).push(`${JSON.stringify(id)}:${json}`); };
+  const searchFiles = new Map<string, string[]>();
+  const tops = new Map<string, [number, string][]>();
+  const addTop = (file: string, score: number, json: string) => {
+    const list = tops.get(file) ?? tops.set(file, []).get(file)!;
+    list.push([score, json]);
+    if (list.length > REGION_TOP * 3) tops.set(file, list.sort((a, b) => b[0] - a[0]).slice(0, REGION_TOP));
+  };
+  const index = (t: CatalogTrail) => {
+    setRecord(t.id, JSON.stringify(t));
+    const entry = searchRow(t);
+    const json = JSON.stringify(entry);
+    for (const key of searchKeysOf(t)) (searchFiles.get(key) ?? searchFiles.set(key, []).get(key)!).push(json);
+    if (t.region) addTop(`r-${regionSlug(normalizeText(t.region))}`, entry[4], json);
+    addTop(`c-${t.country}`, entry[4], json);
+  };
   type Acc = [number, number, number, number, number, number, number, number];
   const acc: Record<string, Record<string, Map<string, Acc>>> = {};
   const count = (t: CatalogTrail) => {
@@ -128,54 +161,47 @@ async function main() {
     if (b) row.bounds = b;
     for (const key of cellKeysOf(row)) (cells.get(key) ?? cells.set(key, []).get(key)!).push(row);
   }
-  await Promise.all([...cells].map(([key, trails]) => writeFile(path.join(output, `cell-${key}.json.gz`), zipped(trails))));
-  const search: SearchRow[] = rows.map((t) => searchRow(t, pinCell(t.longitude, t.latitude)));
-  for (const t of rows) { setLookup(t.id, `c:${pinCell(t.longitude, t.latitude)}`); count(t); pageOf(t); }
-  for (const [from, to] of Object.entries(redirects)) setLookup(from, `r:${to}`);
+  await Promise.all([...cells].map(([key, trails]) => writeFile(path.join(output, `cell-${key}.json.gz`), zipped(trails.map(slim)))));
+  for (const t of rows) { index(t); count(t); pageOf(t); }
+  for (const [from, to] of Object.entries(redirects)) setRecord(from, JSON.stringify(`r:${to}`));
 
   // ---- worldwide, one country file at a time ----
   const world = manifest.world as { files: Record<string, { rows: number; sha256: string }> } | undefined;
   const worldCells: Record<string, string[]> = {};
-  const searchShards: string[] = [];
-  const regionCountries: Record<string, string[]> = {};
-  let worldTop: SearchRow[] = [];
+  const countriesWithTrails: string[] = [];
   let worldRows = 0;
   for (const [code, info] of Object.entries(world?.files ?? {})) {
     const buf = await readFile(path.join(source, "world", `index-${code}.json.gz`));
     if (sha(buf) !== info.sha256) throw new Error(`Trail checksum mismatch (${code})`);
     const data = JSON.parse(gunzipSync(buf).toString()) as { rows: CatalogTrail[]; redirects: Record<string, string> };
     const byCell = new Map<string, CatalogTrail[]>();
-    const countrySearch: SearchRow[] = [];
     for (const t of data.rows) {
       t.name = titleCaseName(t.name);
       const b = boundsById.get(t.id);
       if (b) t.bounds = b;
-      const key = pinCell(t.longitude, t.latitude);
-      const ref = cellRef(key, code);
       for (const k of cellKeysOf(t)) (byCell.get(k) ?? byCell.set(k, []).get(k)!).push(t);
-      const entry = searchRow(t, ref);
-      countrySearch.push(entry);
-      if (t.tier === "verified" || (t.qualityScore ?? 0) >= 40) worldTop.push(entry);
-      setLookup(t.id, `c:${ref}`);
+      index(t);
       count(t);
       pageOf(t);
-      if (t.region) { const r = normalize(t.region); const list = (regionCountries[r] ??= []); if (!list.includes(t.country)) list.push(t.country); }
     }
-    for (const [from, to] of Object.entries(data.redirects)) setLookup(from, `r:${to}`);
+    for (const [from, to] of Object.entries(data.redirects)) setRecord(from, JSON.stringify(`r:${to}`));
     for (const [key, trails] of byCell) {
-      await writeFile(path.join(output, `cell-${key}-${code}.json.gz`), zipped(trails));
+      await writeFile(path.join(output, `cell-${key}-${code}.json.gz`), zipped(trails.map(slim)));
       (worldCells[key] ??= []).push(code);
     }
-    await writeFile(path.join(output, "search", `s-${code}.json.gz`), zipped(countrySearch));
-    searchShards.push(code);
+    countriesWithTrails.push(code);
     worldRows += data.rows.length;
-    if (worldTop.length > WORLD_IN_MAIN_SEARCH * 2) worldTop = worldTop.sort((a, b) => b[5] - a[5]).slice(0, WORLD_IN_MAIN_SEARCH);
   }
-  worldTop = worldTop.sort((a, b) => b[5] - a[5]).slice(0, WORLD_IN_MAIN_SEARCH);
 
   // ---- indexes ----
-  await writeFile(path.join(output, "search.json.gz"), zipped([...search, ...worldTop]));
-  await Promise.all([...lookup].map(([k, part]) => writeFile(path.join(output, "lookup", `l-${k}.json.gz`), zipped(part))));
+  const writeText = (file: string, text: string) => writeFile(path.join(output, file), gzipSync(text));
+  for (const [key, entries] of searchFiles) await writeText(`q/${key}.json.gz`, `[${entries.join(",")}]`);
+  const searchRegions: string[] = [];
+  for (const [file, list] of tops) {
+    await writeText(`q/${file}.json.gz`, `[${list.sort((a, b) => b[0] - a[0]).slice(0, REGION_TOP).map((x) => x[1]).join(",")}]`);
+    if (file.startsWith("r-")) searchRegions.push(file.slice(2));
+  }
+  for (const [k, part] of records) await writeText(`rows/r-${k}.json.gz`, `{${part.join(",")}}`);
   await writeFile(path.join(output, "redirects.json.gz"), zipped(redirects));
   await writeFile(path.join(output, "overview.json.gz"), zipped(routes));
 
@@ -185,14 +211,15 @@ async function main() {
   await writeFile(path.join(output, "clusters.json.gz"), zipped(clusters));
 
   await writeFile(path.join(output, "manifest.json"), JSON.stringify({
-    ...manifest, world: undefined, total: rows.length + worldRows, cells: [...cells.keys()], worldCells, searchShards, regionCountries,
-    lookupShards: true,
+    ...manifest, world: undefined, total: rows.length + worldRows, cells: [...cells.keys()], worldCells, searchRegions, searchCountries: [...new Set(["US", "CA", ...countriesWithTrails])],
+    rowShards: true, searchFiles: true,
     featureCells: (await readdir(path.join(source, "features")).catch(() => [] as string[])).map((f) => f.slice(2, -8)), directory: pointer.directory,
   }));
   await writeFile(path.resolve("public/trail-data/current.json"), JSON.stringify(pointer));
   await Promise.all([
     copyFile("data/sources/trailheads-na.json.gz", path.join(output, "trailheads.json.gz")),
     copyFile("data/towns/towns.json.gz", path.join(output, "towns.json.gz")),
+    copyFile("data/sources/ski-areas.json.gz", path.join(output, "ski-areas.json.gz")).catch((error) => { if (error.code !== "ENOENT") throw error; }),
     copyFile(path.join(source, "curated.json.gz"), path.join(output, "curated.json.gz")).catch((error) => { if (error.code !== "ENOENT") throw error; }),
   ]);
   // Hike-feature layer (pipeline/steps/features.ts), already sharded by 1° cell.
@@ -217,6 +244,6 @@ async function main() {
   }
   await writeFile(path.resolve("public/sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${names.map((n) => `<sitemap><loc>${SITE}/sitemaps/${n}</loc><lastmod>${today}</lastmod></sitemap>`).join("\n")}\n</sitemapindex>\n`);
   await writeFile(path.resolve("public/robots.txt"), `User-agent: *\nAllow: /\nDisallow: /admin\n\nSitemap: ${SITE}/sitemap.xml\n`);
-  console.log(`Prepared ${(rows.length + worldRows).toLocaleString("en-US")} trails (${worldRows.toLocaleString("en-US")} worldwide in ${searchShards.length} countries) in ${cells.size} + ${Object.values(worldCells).flat().length} cell files; ${names.length} sitemap files.`);
+  console.log(`Prepared ${(rows.length + worldRows).toLocaleString("en-US")} trails (${worldRows.toLocaleString("en-US")} worldwide in ${countriesWithTrails.length} countries) in ${cells.size} + ${Object.values(worldCells).flat().length} cell files; ${names.length} sitemap files.`);
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

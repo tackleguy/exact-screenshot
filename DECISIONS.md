@@ -282,6 +282,25 @@ The browser is only a thin cache: nothing a person makes is written to the devic
    `NEXT_PUBLIC_SUPABASE_ANON_KEY`, which both apps read). `SUPABASE_SERVICE_ROLE_KEY` is only for server-side
    ingestion scripts and must stay out of the static build.
 
+## Pieces together, fast search and lighter map data (October 2026)
+
+- **Pieces together** (`pipeline/steps/join.ts`): a named trail that the map data splits into pieces — a beach walk
+  broken where it crosses sand, a coastal path cut by a road — is one trail. Pieces join when they share name,
+  country and activity and an end of one comes within 400 m of the other. The longest piece keeps its page and gets
+  every piece's line; the rest redirect to it. Nothing is drawn across a gap and the distance is the sum of the
+  mapped pieces. Route relations and unnamed paths are never joined. First run: 19,588 trails from 23,496 pieces.
+- **Search files** (`q/<key>.json.gz`): the 11 MB search index (plus up to 40 cell files per search, ~10 MB more)
+  is replaced by small files keyed by a word's first three letters; a search loads one file per query word and then
+  only the records of the trails it shows (`rows/r-<hhhh>.json.gz`, 16,384 files by id, which the trail page reads
+  too). Very common words (trail, path, route, national, forest, park…) are not keys. A query naming a region or country adds that place's
+  1,500 best-documented trails (`q/r-<region>`, `q/c-<CC>`), which also back the country and region filters.
+- **Lighter map data**: map/list cells leave out detail-only fields (sources, links, dates); trail pages read the
+  full record. (Separately simplified map lines were tried and dropped: the stored lines are already simplified, so
+  they came out nearly as large as the originals.)
+- **No server needed**: directions (OSRM), walking connectors (FOSSGIS OSRM foot), ski areas (OpenSkiMap) and the
+  header's quick search run in the browser on the static site. A configured API server still answers first; when
+  it is down, the browser versions answer instead.
+
 ## Summary (October 2026 build, `snapshot-1792668360205`)
 
 | | trails |

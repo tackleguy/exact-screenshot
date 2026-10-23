@@ -97,6 +97,7 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     if (difficulties && !difficulties.has(resolveDifficulty({ reported: r.difficulty, miles: r.miles, sacScale: trailSacScale(r) }).difficulty)) return false;
     if (filters.routeType && r.routeType !== filters.routeType) return false;
     if (filters.dogFriendly && r.dogs !== true) return false;
+    if (filters.verified && r.tier !== "verified") return false;
     if (
       Number.isFinite(filters.lat) &&
       Number.isFinite(filters.lng) &&
@@ -137,6 +138,10 @@ export function filterCatalog(rows: CatalogTrail[], filters: CatalogFilters, tex
   } else if (filters.targetMiles === undefined) {
     matches.sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0));
   }
+  if (filters.sort === "short" || filters.sort === "long") {
+    const dir = filters.sort === "short" ? 1 : -1;
+    matches.sort((a, b) => (a.miles === null ? 1 : b.miles === null ? -1 : dir * (a.miles - b.miles)));
+  }
   const limit = Number.isFinite(filters.limit) ? Math.min(48, Math.max(1, Math.floor(filters.limit!))) : 24;
   const pages = Math.max(1, Math.ceil(matches.length / limit));
   const page = Number.isFinite(filters.page) ? Math.min(pages, Math.max(1, Math.floor(filters.page!))) : 1;
@@ -164,6 +169,12 @@ export function parseCatalogBounds(value: string | null): CatalogBounds | undefi
   return bounds;
 }
 
+/** "3-8" → [3, 8]; "15-" → [15, undefined]; anything else → no limits. */
+function lengthPreset(value: string | null): [number | undefined, number | undefined] {
+  const m = /^(\d+(?:\.\d+)?)?-(\d+(?:\.\d+)?)?$/.exec(value ?? "");
+  return m ? [m[1] ? Number(m[1]) : undefined, m[2] ? Number(m[2]) : undefined] : [undefined, undefined];
+}
+
 export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
   const number = (key: string, min: number, max: number) => {
     const raw = params.get(key);
@@ -172,33 +183,7 @@ export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
     return Number.isFinite(n) && n >= min && n <= max ? n : undefined;
   };
   const countryRaw = params.get("country")?.trim().toUpperCase();
-  const knownCountries = new Set([
-    "US",
-    "CA",
-    "FR",
-    "IT",
-    "CH",
-    "SE",
-    "CL",
-    "IS",
-    "NP",
-    "PE",
-    "NZ",
-    "AU",
-    "TZ",
-    "ES",
-    "GR",
-    "TR",
-    "BT",
-    "ZA",
-    "AR",
-  ]);
-  const country =
-    countryRaw === "INTL"
-      ? "intl"
-      : countryRaw && knownCountries.has(countryRaw)
-        ? countryRaw
-        : undefined;
+  const country = countryRaw === "INTL" ? "intl" : countryRaw && /^[A-Z]{2}$/.test(countryRaw) && countryRaw !== "ZZ" && countryName(countryRaw) !== countryRaw ? countryRaw : undefined;
   const kindRaw = params.get("kind");
   const kind = kindRaw === "route" || kindRaw === "segment" ? kindRaw : undefined;
   const activity = parseCatalogActivity(params.get("activity")) ?? "hike";
@@ -210,8 +195,9 @@ export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
     region: params.get("region")?.slice(0, 100),
     page: number("page", 1, 100000),
     limit: number("limit", 1, 48),
-    minMiles: number("minMiles", 0, 10000),
-    maxMiles: number("maxMiles", 0, 10000),
+    // `length` is the list page's preset ("3-8", "15-"); explicit minMiles/maxMiles win.
+    minMiles: number("minMiles", 0, 10000) ?? lengthPreset(params.get("length"))[0],
+    maxMiles: number("maxMiles", 0, 10000) ?? lengthPreset(params.get("length"))[1],
     difficulty: params.get("difficulty")?.slice(0, 40) || undefined,
     routeType: (["loop", "point-to-point", "network"] as const).find((t) => t === params.get("routeType")),
     dogFriendly: params.get("dogFriendly") === "true",
@@ -228,5 +214,7 @@ export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
     collection: params.get("collection")?.trim().toLowerCase() || undefined,
     peakCategory: (["14er", "8000m", "seven-summits"] as const).find((c) => c === params.get("peakCategory")),
     thruHikeSections: params.get("thruHikeSections") === "true",
+    verified: params.get("verified") === "true",
+    sort: (["best", "short", "long"] as const).find((v) => v === params.get("sort")),
   };
 }

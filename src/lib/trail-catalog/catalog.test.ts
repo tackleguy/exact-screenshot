@@ -105,6 +105,17 @@ test("server catalog paginates, isolates countries, and rejects invalid detail I
   assert.equal(await getCatalogTrail("usgs-not-present"),null);
 });
 
+test("more filters: any country, length presets, verified only, shortest or longest first",()=>{
+  assert.equal(parseCatalogFilters(new URLSearchParams("country=de")).country,"DE");
+  const f = parseCatalogFilters(new URLSearchParams("length=3-8&verified=true&sort=long"));
+  assert.equal(f.minMiles,3);assert.equal(f.maxMiles,8);assert.equal(f.verified,true);assert.equal(f.sort,"long");
+  assert.equal(parseCatalogFilters(new URLSearchParams("length=15-")).maxMiles,undefined);
+  assert.equal(parseCatalogFilters(new URLSearchParams("length=15-&minMiles=2")).minMiles,2);
+  const base = { name:"Ridge",country:"US",region:"Utah",latitude:40,longitude:-111,difficulty:null,dogs:null,manager:null } as CatalogTrail;
+  const rows = [{...base,id:"a",miles:2,tier:"mapped" as const},{...base,id:"b",miles:9,tier:"verified" as const},{...base,id:"c",miles:5,tier:"verified" as const}];
+  assert.deepEqual(filterCatalog(rows,{verified:true,sort:"short"}).trails.map(t=>t.id),["c","b"]);
+  assert.deepEqual(filterCatalog(rows,{sort:"long"}).trails.map(t=>t.id),["b","c","a"]);
+});
 test("trip research orders mapped sections by target length without discarding unknowns or changing default order", () => {
   const base = { name: "Trail", country: "US", region: "Colorado", latitude: 40, longitude: -105 } as CatalogTrail;
   const rows = [{ ...base, id: "one", miles: null }, { ...base, id: "two", miles: 4 }, { ...base, id: "three", miles: 10 }];

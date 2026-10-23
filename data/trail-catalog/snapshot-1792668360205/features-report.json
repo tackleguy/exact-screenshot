@@ -1,12 +1,12 @@
 {
-  "total": 2706017,
-  "trailLinks": 7961288,
+  "total": 2706010,
+  "trailLinks": 7947999,
   "byType": {
     "parking": 443708,
     "bridge": 343323,
     "crossing": 306134,
     "shelter": 285239,
-    "ford": 219772,
+    "ford": 219768,
     "drinking_water": 207963,
     "peak": 192623,
     "toilets": 159457,
@@ -14,7 +14,7 @@
     "spring": 85396,
     "picnic_site": 81621,
     "campsite": 59146,
-    "pass": 38893,
+    "pass": 38890,
     "river": 31545,
     "waterfall": 25087,
     "lake": 23319,
@@ -24,6 +24,6 @@
     "ranger_station": 1318
   },
   "cells": 1354,
-  "bytes": 99586766,
+  "bytes": 99452150,
   "source": "OpenStreetMap contributors (ODbL 1.0)"
 }

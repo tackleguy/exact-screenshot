@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cellBounds, cellFile, cellKeyOf, cellRef, lookupShard, pinCell } from "./static-data";
+import { cellBounds, cellFile, cellKeyOf, cellRef, pinCell, rowShard, searchKey, SEARCH_STOPWORDS } from "./static-data";
 import { countryName } from "./types";
 
 test("cell refs name the U.S./Canada file and the per-country worldwide files", () => {
@@ -12,11 +12,18 @@ test("cell refs name the U.S./Canada file and the per-country worldwide files", 
   assert.equal(cellKeyOf(cellRef(key, "AT")), key);
 });
 
-test("lookup shards are stable two-digit hex names", () => {
-  assert.match(lookupShard("osm-r123"), /^[0-9a-f]{2}$/);
-  assert.equal(lookupShard("osm-r123"), lookupShard("osm-r123"));
-  const shards = new Set(Array.from({ length: 2000 }, (_, i) => lookupShard(`osm-w${i}`)));
-  assert.ok(shards.size > 200, "ids spread over the shards");
+test("row shards are stable four-digit hex names", () => {
+  assert.match(rowShard("osm-r123"), /^[0-9a-f]{4}$/);
+  assert.equal(rowShard("osm-r123"), rowShard("osm-r123"));
+  const shards = new Set(Array.from({ length: 60000 }, (_, i) => rowShard(`osm-w${i}`)));
+  assert.ok(shards.size > 12000, "ids spread over the shards");
+});
+
+test("search files are keyed by a word's first three letters; common words are not keys", () => {
+  assert.equal(searchKey("yosemite"), "yos");
+  assert.equal(searchKey("mist"), "mis");
+  assert.ok(SEARCH_STOPWORDS.has("trail"));
+  assert.ok(!SEARCH_STOPWORDS.has("beach"));
 });
 
 test("every ISO country code gets an English name", () => {
