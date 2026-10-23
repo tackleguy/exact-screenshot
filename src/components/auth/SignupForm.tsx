@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { GoogleButton } from "./GoogleButton";
 import { callbackUrl, nextFromLocation, SIGN_IN_UNAVAILABLE } from "@/lib/account/auth";
 import { TRAIL_SECTIONS, type TrailSectionKey } from "@/lib/trail-catalog/activity";
 import { storeSection } from "@/lib/preferred-section";
@@ -74,8 +73,6 @@ export function SignupForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <GoogleButton next={() => nextFromLocation("/explore/trails")} label="Sign up with Google" />
-      <p className="auth-divider"><span>or with email</span></p>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label htmlFor="firstName" className="mb-1 block text-sm font-medium text-sage">

@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { GoogleButton } from "./GoogleButton";
 import { nextFromLocation, SIGN_IN_UNAVAILABLE } from "@/lib/account/auth";
 
 const inputClass =
@@ -45,8 +44,6 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <GoogleButton next={() => nextFromLocation()} />
-      <p className="auth-divider"><span>or with email</span></p>
       <div>
         <label htmlFor="email" className="mb-1 block text-sm font-medium text-sage">
           Email
