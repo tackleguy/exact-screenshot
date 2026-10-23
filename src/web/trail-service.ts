@@ -123,7 +123,9 @@ async function cells(refs: string[], m: Metadata, fetcher: typeof fetch) {
       [...new Set(refs)].filter(known).map((ref) => asset<CatalogTrail[]>(`${m.directory}/${cellFile(ref)}`, fetcher)),
     )
   ).flat();
-  return rows.filter((t) => t.confidence !== "REJECTED").map((t) => ({ ...t, name: readableTrailName(t.name, t.id) }));
+  // A long trail is listed in every cell its line crosses; keep one copy.
+  const seen = new Set<string>();
+  return rows.filter((t) => t.confidence !== "REJECTED" && !seen.has(t.id) && Boolean(seen.add(t.id))).map((t) => ({ ...t, name: readableTrailName(t.name, t.id) }));
 }
 
 let curatedPromise: Promise<{ lines: Record<string, Lines>; links: Record<string, string> }> | undefined;
@@ -551,7 +553,8 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       const f = parseCatalogFilters(params);
       const bbox = f.bbox;
       const local = bbox ? { ...f, lat: (bbox[1] + bbox[3]) / 2, lng: (bbox[0] + bbox[2]) / 2, radiusKm: 1000 } : f;
-      const result = filterCatalog(rows, { ...local, limit: suffix.length ? MAP_TRAIL_LIMIT : f.limit ?? TRAIL_CARD_LIMIT, uniqueNames: true });
+      // The map draws every trail in view (same-name trails are separate trails); lists show one per name.
+      const result = filterCatalog(rows, { ...local, limit: suffix.length ? MAP_TRAIL_LIMIT : f.limit ?? TRAIL_CARD_LIMIT, uniqueNames: !suffix.length });
 
       if (suffix[0] === "points") {
         const trails: (string | number | null)[][] = result.trails.map((t) => [
@@ -573,10 +576,17 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       }
 
       if (suffix[0] === "lines") {
+        // Lines straight from the geometry cells (one file per 1° cell), not one trail page at a time.
+        const shards = new Map<string, Promise<Record<string, Lines>>>();
+        for (const t of result.trails) {
+          if (t.geometryShard && t.geometryShard !== "route" && t.source !== "resort" && !shards.has(t.geometryShard)) {
+            shards.set(t.geometryShard, asset<Record<string, Lines>>(`${manifest.directory}/geometry-${t.geometryShard}.json.gz`, fetcher).catch(() => ({})));
+          }
+        }
         const features = await Promise.all(
           result.trails.map(async (t) => {
-            const d = await detail(t.id, fetcher);
-            const simplified = (d?.lines ?? []).map((line) => simplifyForZoom(line as [number, number][], zoom));
+            const lines = shards.has(t.geometryShard) ? (await shards.get(t.geometryShard)!)[t.id] ?? [] : (await detail(t.id, fetcher))?.lines ?? [];
+            const simplified = lines.map((line) => simplifyForZoom(line as [number, number][], zoom));
             return {
               type: "Feature",
               id: t.id,

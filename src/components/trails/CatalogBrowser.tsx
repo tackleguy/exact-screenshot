@@ -323,7 +323,7 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
               <h2>Try a broader search.</h2>
               <p>
                 {activity === "ski"
-                  ? "Few catalog sections use ski in the name. Open Ski maps for nordic OSM trails, or clear filters."
+                  ? "Few catalog sections use ski in the name. Open Ski maps for nordic ski trails, or clear filters."
                   : "Search a trail name, browse through-hikes, or clear country and distance filters."}
               </p>
               {activity === "ski" ? (

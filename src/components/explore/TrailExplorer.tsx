@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "@/lib/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf, type CatalogActivity, type TrailSectionKey } from "@/lib/trail-catalog/activity";
+import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf, type CatalogActivity, type CatalogActivityFilter, type TrailSectionKey } from "@/lib/trail-catalog/activity";
 import { appleMapsDirectionsUrl, googleMapsDirectionsUrl, type AccessPoint } from "@/lib/trail-catalog/access";
 import { storeSection } from "@/lib/preferred-section";
 import type { ExploreCluster, ExplorePointTrail } from "@/lib/trail-catalog/server";
@@ -18,6 +18,7 @@ import { usePersonalTrails } from "@/lib/personal-trails";
 import type { Point } from "@/lib/trail-catalog/quality";
 import { NearbyTrails } from "./NearbyTrails";
 import {
+  BASEMAPS,
   DIFFICULTY_COLORS,
   DIFFICULTY_LABELS,
   EMPTY,
@@ -68,7 +69,7 @@ const SUB_ACTIVITIES: Record<TrailSectionKey, CatalogActivity[]> = {
 const ALL_LABEL: Partial<Record<CatalogActivity, string>> = { hike: "All on foot", bike: "All biking" };
 const LINE_ZOOM = TRAIL_DETAIL_ZOOM;
 
-interface Filters { activity: CatalogActivity; difficulty: string[]; length: string; routeType: string }
+interface Filters { activity: CatalogActivityFilter; difficulty: string[]; length: string; routeType: string }
 
 function filterParams(f: Filters) {
   const p = new URLSearchParams({ activity: f.activity });
@@ -120,7 +121,12 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
   const [filters, setFilters] = useState<Filters>({ activity: initial.activity, difficulty: [], length: "", routeType: "" });
   const filtersRef = useRef(filters);
-  const [basemap, setBasemap] = useState<Basemap>("topo");
+  // The chosen map style is remembered on this device.
+  const [basemap, setBasemapState] = useState<Basemap>(() => {
+    try { const saved = localStorage.getItem("hyked:basemap"); return BASEMAPS.some((b) => b.key === saved) ? (saved as Basemap) : "topo"; } catch { return "topo"; }
+  });
+  const basemapRef = useRef(basemap);
+  const setBasemap = (next: Basemap) => { setBasemapState(next); try { localStorage.setItem("hyked:basemap", next); } catch { /* storage unavailable */ } };
   const [layers, setLayers] = useState({
     thruHikes: true,
     dayTrails: true,
@@ -313,7 +319,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       void fetchFeatures([b.getWest(), b.getSouth(), b.getEast(), b.getNorth()], undefined, signal).then((list) => {
         if (signal.aborted) return;
         setViewFeatures(list);
-        setSource("pois", { type: "FeatureCollection", features: list.map((f) => ({ type: "Feature", properties: { id: f.id, type: f.type, group: featureGroup(f.type), name: f.name ?? "", label: featureName(f), source: f.source || "OpenStreetMap" }, geometry: { type: "Point", coordinates: [f.lon, f.lat] } })) });
+        setSource("pois", { type: "FeatureCollection", features: list.map((f) => ({ type: "Feature", properties: { id: f.id, type: f.type, group: featureGroup(f.type), name: f.name ?? "", label: featureName(f), source: f.source || "Mapped feature" }, geometry: { type: "Point", coordinates: [f.lon, f.lat] } })) });
       });
     } else {
       setSource("lines", EMPTY);
@@ -328,10 +334,10 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     let disposed = false;
     const startCenter = initial.center ?? [-98.6, 39.8];
     const startZoom = initial.zoom ?? 3.6;
-    void explorerStyle("topo").then((style) => {
+    void explorerStyle(basemapRef.current).then((style) => {
       if (disposed || !containerRef.current) return;
       const map = new maplibregl.Map({ container: containerRef.current, style, center: startCenter, zoom: startZoom, maxPitch: 80, attributionControl: false, hash: false });
-      mapRef.current = map;
+      mapRef.current = map; (window as unknown as { __map: unknown }).__map = map; // DEBUG-TEMP
       map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "Trails © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors (ODbL), NPS, USFS, BLM, USGS, Parks Canada · <a href=\"/about/data\">Data sources</a>" }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "imperial", maxWidth: 90 }), "bottom-left");
       // Blue dot for the visitor's position; our "Show my location" button triggers it.
@@ -734,12 +740,15 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
           <button type="button" className="hx-ctl hx-ctl--text" aria-expanded={open === "layers"} onClick={() => setOpen(open === "layers" ? null : "layers")}>Maps</button>
           {open === "layers" && (
             <div className="hx-pop hx-pop--right hx-layers">
-              {([["topo", "Topo", "Contours and terrain shading"], ["satellite", "Satellite", "Aerial imagery with roads"], ["standard", "Standard", "Streets and places"]] as const).map(([key, label, hint]) => (
-                <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} onClick={() => setBasemap(key)}>
-                  <span className="hx-layer-swatch" aria-hidden="true" />
-                  <span><strong>{label}</strong><small>{hint}</small></span>
-                </button>
-              ))}
+              <div className="hx-layer-grid" role="group" aria-label="Map style">
+                {BASEMAPS.map(({ key, label, hint }) => (
+                  <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} title={hint} onClick={() => setBasemap(key)}>
+                    <span className="hx-layer-swatch" aria-hidden="true" />
+                    <span className="hx-layer-name">{label}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="hx-pop-note">{BASEMAPS.find((b) => b.key === basemap)?.hint}</p>
               <div className="hx-layer-toggles">
                 <label className="hx-check"><input type="checkbox" checked={layers.thruHikes} onChange={(e) => setLayers((l) => ({ ...l, thruHikes: e.target.checked }))} /> Long-distance trails</label>
                 <label className="hx-check"><input type="checkbox" checked={layers.dayTrails} onChange={(e) => setLayers((l) => ({ ...l, dayTrails: e.target.checked }))} /> Day trails</label>
@@ -750,7 +759,6 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                 <label className="hx-check"><input type="checkbox" checked={layers.myTrails} onChange={(e) => setLayers((l) => ({ ...l, myTrails: e.target.checked }))} /><span className="hx-dot" style={{ background: "#8b5cf6" }} /> My trails</label>
               </div>
               {zoomedOut && (layers.water || layers.camping || layers.other) && <p className="hx-pop-note">Zoom in to see water and campsites.</p>}
-              <p className="hx-pop-note">Features © OpenStreetMap contributors (ODbL).</p>
             </div>
           )}
         </div>
@@ -798,20 +806,23 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
           <div className="hx-pop-anchor">
             <button type="button" className="hx-chip hx-chip--section" aria-expanded={open === "section"} onClick={() => setOpen(open === "section" ? null : "section")}>
               <SectionIcon section={section.key} size={18} />
-              {filters.activity === section.activity ? section.label : CATALOG_ACTIVITY_LABELS[filters.activity]}
+              {filters.activity === "all" ? "All trails" : filters.activity === section.activity ? section.label : CATALOG_ACTIVITY_LABELS[filters.activity]}
               <Caret />
             </button>
             {open === "section" && (
               <div className="hx-pop hx-pop--wide">
+                <button type="button" className="hx-sub hx-sub--all" aria-pressed={filters.activity === "all"} onClick={() => setFilters((f) => ({ ...f, activity: "all" }))}>
+                  All trails · every activity
+                </button>
                 <div className="hx-sections">
                   {TRAIL_SECTIONS.map((s) => (
-                    <button key={s.key} type="button" className="hx-section" aria-pressed={section.key === s.key} onClick={() => chooseSection(s.key)}>
+                    <button key={s.key} type="button" className="hx-section" aria-pressed={filters.activity !== "all" && section.key === s.key} onClick={() => chooseSection(s.key)}>
                       <SectionIcon section={s.key} />
                       <span>{s.label}</span>
                     </button>
                   ))}
                 </div>
-                {SUB_ACTIVITIES[section.key].length > 1 && (
+                {filters.activity !== "all" && SUB_ACTIVITIES[section.key].length > 1 && (
                   <div className="hx-subs">
                     {SUB_ACTIVITIES[section.key].map((a) => (
                       <button key={a} type="button" className="hx-sub" aria-pressed={filters.activity === a} onClick={() => setFilters((f) => ({ ...f, activity: a }))}>
@@ -820,7 +831,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                     ))}
                   </div>
                 )}
-                <p className="hx-pop-note">{section.blurb}. Bike and horse access comes from official agency use records where they exist.</p>
+                <p className="hx-pop-note">{filters.activity === "all" ? "Hiking, biking, horse, snow and paddle trails together" : section.blurb}. Bike and horse access comes from official agency use records where they exist.</p>
               </div>
             )}
           </div>

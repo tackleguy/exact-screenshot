@@ -36,6 +36,17 @@ export function GpsRecorder({
   const location = useLocationPermission();
   const [saveError, setSaveError] = useState<string | null>(null);
   const [locationConfirmed, setLocationReady] = useState(false);
+  // The trail being followed ("Start trail" on a trail page): its line on the live map.
+  const [trail, setTrail] = useState<{ name: string; lines: [number, number][][] } | null>(null);
+  useEffect(() => {
+    if (!trailId) return;
+    const controller = new AbortController();
+    fetch(`/api/trail-catalog/${encodeURIComponent(trailId)}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: { trail?: { name: string }; lines?: [number, number][][] } | null) => { if (d?.trail) setTrail({ name: d.trail.name, lines: d.lines ?? [] }); })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [trailId]);
   const locationReady = locationConfirmed || location.granted;
 
   useEffect(() => {
@@ -134,7 +145,7 @@ export function GpsRecorder({
         <h1 className="mt-1 truncate font-display text-2xl font-semibold text-cream">{title}</h1>
         {(trailId || skiAreaName) && (
           <p className="mt-1 truncate text-xs text-accent">
-            {skiAreaName ? `⛷ ${skiAreaName}` : "Linked to trail"}
+            {skiAreaName ? `⛷ ${skiAreaName}` : trail ? `Following ${trail.name}` : "Linked to trail"}
           </p>
         )}
         <div className="mt-3 flex justify-center">
@@ -151,6 +162,7 @@ export function GpsRecorder({
       {/* Live map */}
       <LiveTrackMap
         points={gps.points}
+        trail={trail?.lines}
         heading={gps.currentHeading}
         className={clsx(
           "w-full overflow-hidden rounded-[var(--radius-2xl)] border border-[var(--border)]",

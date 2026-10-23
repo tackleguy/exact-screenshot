@@ -8,7 +8,7 @@ const lastMatch = new WeakMap<CatalogTrail, number>();
 const lastPlace = new WeakMap<CatalogTrail, boolean>();
 import type { CatalogBounds, CatalogFilters, CatalogTrail } from "./types";
 import { countryName } from "./types";
-import { withinBounds } from "./map";
+import { boundsOverlap, withinBounds } from "./map";
 import { isWinterActivityTrail } from "./winter";
 import { matchesCatalogActivity, parseCatalogActivity } from "./activity";
 import { dedupeSectionsByName } from "./through-hikes";
@@ -44,7 +44,7 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     .split(/\s+/)
     .filter(Boolean);
   const activity = filters.activity ?? "hike";
-  const includeWinter = filters.includeWinter === true || activity === "ski" || activity === "sled";
+  const includeWinter = filters.includeWinter === true || activity === "ski" || activity === "sled" || activity === "all";
   const difficulties = filters.difficulty ? new Set(filters.difficulty.split(",").map((d) => normalize(d))) : null;
   const query = (filters.q ?? "").slice(0, 180);
   return rows.filter((r, i) => {
@@ -75,7 +75,8 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     if (filters.resort && normalize(r.skiResort ?? "") !== normalize(filters.resort)) return false;
     if (filters.sourceType && r.sourceType !== filters.sourceType) return false;
     if (filters.kind && r.kind !== filters.kind) return false;
-    if (filters.bbox && !withinBounds(r.longitude, r.latitude, filters.bbox)) return false;
+    // A trail is in view when any part of its line is (its pin may be outside the box).
+    if (filters.bbox && !(r.bounds ? boundsOverlap(r.bounds, filters.bbox) : withinBounds(r.longitude, r.latitude, filters.bbox))) return false;
     if (filters.country === "intl") {
       if (r.country === "US" || r.country === "CA") return false;
     } else if (filters.country && r.country !== filters.country) {
@@ -110,6 +111,12 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
 export function filterCatalog(rows: CatalogTrail[], filters: CatalogFilters, texts?: string[], reviews?: Map<string, "approve" | "reject">) {
   let matches = matchingCatalogRows(rows, filters, texts, reviews);
   if (filters.uniqueNames) matches = dedupeSectionsByName(matches);
+  // Sections together: when a route and its stages both match, show the route (its page lists the stages).
+  // A search keeps the stages, so a stage can be found by its own name.
+  if (!filters.q?.trim() && !filters.includeFragments && filters.collection !== "thru-sections" && !filters.thruHikeSections) {
+    const ids = new Set(matches.map((r) => r.id));
+    matches = matches.filter((r) => !r.partOfRoute || !ids.has(r.partOfRoute.id));
+  }
   if (filters.targetMiles !== undefined && Number.isFinite(filters.targetMiles) && filters.targetMiles > 0) {
     matches.sort(
       (a, b) =>

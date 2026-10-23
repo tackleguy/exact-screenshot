@@ -20,6 +20,9 @@ export interface CatalogTrail {
   surface: string | null;
   season: string | null;
   geometryShard: string;
+  /** Extent of the mapped line [west, south, east, north], added when the app's files are built, so a map view
+   * finds every trail that passes through it, not only those whose pin is in view. */
+  bounds?: [number, number, number, number];
   /** Source sections merged into this trail (or aggregated into a through-hike route). */
   sectionCount?: number;
   /** Through-hike route metadata (optional). */
@@ -238,7 +241,7 @@ const SOURCE_NAMES: Record<CatalogTrail["source"], string> = {
   guide: "Curated guide",
   "route-aggregate": "Mapped corridor",
   peak: "Mountain Summit Guide",
-  osm: "OpenStreetMap route",
+  osm: "Mapped route",
 };
 
 export const sourceName = (source: CatalogTrail["source"]) => SOURCE_NAMES[source] ?? source;

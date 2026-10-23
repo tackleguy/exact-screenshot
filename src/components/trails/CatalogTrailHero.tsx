@@ -54,26 +54,44 @@ export function CatalogTrailHero({ trail: t, difficulty, distance, hasLines }: {
         {(t.sectionCount ?? 0) > 1 && <div><dt>Sections</dt><dd>{t.sectionCount!.toLocaleString("en-US")} joined</dd></div>}
       </dl>
       <div className="trail-actions">
-        <a className="catalog-button" href={googleMapsDirectionsUrl(head.latitude, head.longitude)} target="_blank" rel="noopener noreferrer">Directions to trailhead</a>
-        {hasLines && <a className="catalog-button secondary" href={`/api/trail-catalog/${encodeURIComponent(t.id)}/gpx`} download>Download GPX</a>}
+        <Link className="catalog-button trail-start" href={`/record/live?${new URLSearchParams({ trail_id: t.id, name: t.name, type: recordType(t) })}`}>
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
+          Start trail
+        </Link>
+        <a className="catalog-button secondary" href={googleMapsDirectionsUrl(head.latitude, head.longitude)} target="_blank" rel="noopener noreferrer">Directions</a>
         <Link className="catalog-button secondary" href={`/explore/trails?trail=${encodeURIComponent(t.id)}&lat=${t.latitude}&lng=${t.longitude}&z=13`}>View on map</Link>
-        <Link className="catalog-button secondary" href={`/plan?${new URLSearchParams({ prompt: planPrompt ?? t.name, ...(t.region ? { region: t.region } : {}) })}`}>Plan a trip</Link>
-        {hasLines && <Link className="catalog-button secondary" href={`/explore/trails?${new URLSearchParams({ routeFrom: `${head.latitude.toFixed(5)},${head.longitude.toFixed(5)}`, routeFromName: t.trailhead?.name ?? t.name, lat: String(head.latitude), lng: String(head.longitude), z: "13" })}`}>Build a route from here</Link>}
+        <details className="trail-actions-more">
+          <summary className="catalog-button secondary">More</summary>
+          <div>
+            {hasLines && <a href={`/api/trail-catalog/${encodeURIComponent(t.id)}/gpx`} download>Download GPX</a>}
+            <Link href={`/plan?${new URLSearchParams({ prompt: planPrompt ?? t.name, ...(t.region ? { region: t.region } : {}) })}`}>Plan a trip</Link>
+            {hasLines && <Link href={`/explore/trails?${new URLSearchParams({ routeFrom: `${head.latitude.toFixed(5)},${head.longitude.toFixed(5)}`, routeFromName: t.trailhead?.name ?? t.name, lat: String(head.latitude), lng: String(head.longitude), z: "13" })}`}>Build a route from here</Link>}
+          </div>
+        </details>
       </div>
     </header>
   );
 }
 
+/** What the GPS recorder logs for this trail: bike and ski trails record as rides and ski days. */
+function recordType(t: CatalogTrail) {
+  const uses = (t.uses ?? []).join(" ");
+  if (t.winterUse || t.osm?.route === "ski" || t.osm?.route === "piste") return "ski";
+  if (t.osm?.route === "bicycle" || t.osm?.route === "mtb" || (/bike/i.test(uses) && !/hiking/i.test(uses))) return "bike";
+  if (t.osm?.route === "running") return "run";
+  return "hike";
+}
+
 const AGENCY: Partial<Record<string, string>> = { NPS_OFFICIAL: "National Park Service", USFS_OFFICIAL: "U.S. Forest Service", BLM_OFFICIAL: "Bureau of Land Management", PARKS_CANADA_OFFICIAL: "Parks Canada", STATE_AGENCY: "State agency", LOCAL_AGENCY: "Local agency", USGS_NTD: "USGS National Digital Trails" };
 
-/** Where the trail comes from: "Verified · National Park Service", "Mapped · OpenStreetMap", or a curated guide. */
+/** Where the trail comes from: "Verified · National Park Service", "Verified route", "Mapped trail", or a curated guide. */
 function confidenceBadge(t: CatalogTrail): { tier: "verified" | "mapped" | "guide"; label: string; detail: string } | null {
-  if (t.peakCategory || t.partOfRoute || t.source === "guide" || t.source === "route-aggregate" || t.source === "peak") return { tier: "guide", label: "Guide · Hyked curated", detail: "A curated guide; facts come from its linked trail and official sources." };
-  if (t.tier === "mapped") return { tier: "mapped", label: "Mapped · OpenStreetMap", detail: "Named OpenStreetMap ways that passed every verification rule." };
+  if (t.peakCategory || t.source === "guide" || t.source === "route-aggregate" || t.source === "peak") return { tier: "guide", label: "Guide · Hyked curated", detail: "A curated guide; facts come from its linked trail and official sources." };
+  if (t.tier === "mapped") return { tier: "mapped", label: "Mapped trail", detail: "A named, community-mapped trail that passed every verification check." };
   if (t.tier === "verified" || t.sourceType) {
     const official = [t.sourceType, ...(t.sources ?? []).map((s) => s.type)].find((k) => k && AGENCY[k]);
-    const label = official ? AGENCY[official]! : t.osm ? "OpenStreetMap route" : t.sourceType ? SOURCE_TYPE_LABELS[t.sourceType] : "Official source";
-    return { tier: "verified", label: `Verified · ${label}`, detail: "Listed by an official agency dataset or an OpenStreetMap route relation." };
+    const label = official ? `Verified · ${AGENCY[official]!}` : t.osm ? "Verified route" : `Verified · ${t.sourceType ? SOURCE_TYPE_LABELS[t.sourceType] : "Official source"}`;
+    return { tier: "verified", label, detail: "Listed by an official agency or a signposted, mapped route." };
   }
   return null;
 }

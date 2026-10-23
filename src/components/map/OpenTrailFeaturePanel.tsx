@@ -23,16 +23,13 @@ export function OpenTrailFeaturePanel({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="section-label">
-            {mode === "ski" ? "Nordic ski trail" : "OSM trail"}
+            {mode === "ski" ? "Nordic ski trail" : "Mapped trail"}
           </p>
           <p className="font-display font-semibold text-cream">{feature.name}</p>
           <p className="mt-0.5 text-sm text-mist">
             {feature.highway && `${feature.highway}`}
             {feature.operator && ` · ${feature.operator}`}
             {feature.network && ` · ${feature.network}`}
-          </p>
-          <p className="mt-1 text-xs text-mist">
-            OpenStreetMap {feature.osmType} #{feature.osmId}
           </p>
         </div>
         <button
@@ -58,7 +55,7 @@ export function OpenTrailFeaturePanel({
           rel="noopener noreferrer"
           className="btn-ghost !py-2 !text-sm"
         >
-          View on OSM
+          Map record
         </a>
         <Link
           href={recordUrl(activity)}

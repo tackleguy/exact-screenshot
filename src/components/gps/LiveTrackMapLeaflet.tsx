@@ -9,11 +9,14 @@ interface LiveTrackMapProps {
   points: GpsPoint[];
   heading?: number | null;
   className?: string;
+  /** The trail being followed, [lng, lat] lines, drawn under the live track. */
+  trail?: [number, number][][];
 }
 
 export function LiveTrackMap({
   points,
   className = "",
+  trail,
 }: LiveTrackMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -28,9 +31,9 @@ export function LiveTrackMap({
       center: [39.8283, -98.5795],
       zoom: 14,
     });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    // Outdoor topo basemap (Esri World Topo Map) with trails, contours and relief.
+    L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "Basemap © Esri and its data providers",
       maxZoom: 19,
     }).addTo(map);
     mapRef.current = map;
@@ -44,7 +47,22 @@ export function LiveTrackMap({
     };
   }, []);
 
+  const pointsRef = useRef(points);
+  // The trail being followed: drawn once, and the map starts on it before GPS has a fix.
   useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !trail?.length) return;
+    const layer = L.layerGroup(trail.filter((l) => l.length > 1).flatMap((line) => {
+      const latlngs = line.map(([lng, lat]) => [lat, lng] as L.LatLngExpression);
+      return [L.polyline(latlngs, { color: "#ffffff", weight: 8, opacity: 0.85 }), L.polyline(latlngs, { color: "#d97706", weight: 4, opacity: 0.95, dashArray: "1 0" })];
+    })).addTo(map);
+    const bounds = L.latLngBounds(trail.flat().map(([lng, lat]) => [lat, lng] as L.LatLngTuple));
+    if (bounds.isValid() && !pointsRef.current.length) map.fitBounds(bounds.pad(0.1));
+    return () => { layer.remove(); };
+  }, [trail]);
+
+  useEffect(() => {
+    pointsRef.current = points;
     const map = mapRef.current;
     if (!map || points.length === 0) return;
 
@@ -95,7 +113,7 @@ export function LiveTrackMap({
       className={`relative overflow-hidden rounded-xl bg-stone-800 ${className}`}
     >
       <div ref={containerRef} className="h-full w-full" />
-      {points.length === 0 && (
+      {points.length === 0 && !trail?.length && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-stone-900/40 text-sm text-white">
           Map loads when GPS starts
         </div>

@@ -237,3 +237,21 @@
 .hx-popup .maplibregl-popup-tip { border-top-color: #10201a; border-bottom-color: #10201a; }
 .hx-feature-pop { display: grid; gap: 2px; font: 13px/1.35 system-ui, sans-serif; }
 .hx-feature-pop small { color: #b6c3ba; }
+/* Map style picker: a grid of thumbnails (tiles of Yosemite Valley, or a drawn pattern for vector styles). */
+.hx-layers { width: 336px; max-height: min(78vh, 640px); overflow-y: auto; }
+.hx-layer-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.hx-layer-grid .hx-layer { flex-direction: column; align-items: stretch; gap: 4px; padding: 5px; text-align: center; }
+.hx-layer-grid .hx-layer-swatch { width: 100%; height: 52px; }
+.hx-layer-name { display: block; font-size: 12px; line-height: 1.2; font-weight: 600; }
+.hx-layer--outdoors .hx-layer-swatch { background-image: url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/11/791/343"); }
+.hx-layer--terrain .hx-layer-swatch { background-image: url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/9/197/85"); }
+.hx-layer--relief .hx-layer-swatch { background-image: url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/9/197/85"); }
+.hx-layer--natgeo .hx-layer-swatch { background-image: url("https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/9/197/85"); }
+.hx-layer--usgs .hx-layer-swatch { background-image: url("https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/11/791/343"); }
+.hx-layer--usgs-imagery .hx-layer-swatch { background-image: url("https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/11/791/343"); }
+.hx-layer--satellite .hx-layer-swatch { background-image: url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/11/791/343"); }
+.hx-layer--hybrid .hx-layer-swatch { background-color: #3d4a35; background-image: repeating-radial-gradient(circle at 60% 55%, transparent 0 6px, rgb(247 231 198 / 0.55) 6px 7px), url("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/11/791/343"); }
+.hx-layer--bright .hx-layer-swatch { background-color: #f8f4ec; background-image: linear-gradient(115deg, transparent 40%, #9fd38c 40% 58%, transparent 58%), linear-gradient(20deg, transparent 60%, #f3b35b 60% 66%, transparent 66%); }
+.hx-layer--light .hx-layer-swatch { background-color: #f4f4f2; background-image: linear-gradient(115deg, transparent 44%, #ffffff 44% 52%, transparent 52%), linear-gradient(20deg, transparent 60%, #dcdcd8 60% 64%, transparent 64%); }
+.hx-layer--dark .hx-layer-swatch { background-color: #22262b; background-image: linear-gradient(115deg, transparent 44%, #3b4148 44% 52%, transparent 52%), linear-gradient(20deg, transparent 60%, #4a5058 60% 64%, transparent 64%); }
+.hx-sub--all { width: 100%; justify-content: center; font-weight: 600; }

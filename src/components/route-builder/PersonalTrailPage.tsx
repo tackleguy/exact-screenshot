@@ -165,7 +165,7 @@ export function PersonalTrailPage({ id, token }: { id?: string; token?: string }
         <h2>Along the way</h2>
         {trail.features.length ? (
           <>
-            <p className="catalog-muted">{join([water ? `${water} water ${water === 1 ? "source" : "sources"}` : null, camps ? `${camps} ${camps === 1 ? "campsite or shelter" : "campsites and shelters"}` : null, `${trail.features.length} features in all`])}. From OpenStreetMap; check that water is flowing and camping is allowed.</p>
+            <p className="catalog-muted">{join([water ? `${water} water ${water === 1 ? "source" : "sources"}` : null, camps ? `${camps} ${camps === 1 ? "campsite or shelter" : "campsites and shelters"}` : null, `${trail.features.length} features in all`])}. From community map data; check that water is flowing and camping is allowed.</p>
             <ol className="pt-list">
               {trail.features.map((f) => (
                 <li key={f.id} className={`pt-feature pt-feature--${featureGroup(f.type)}`}>

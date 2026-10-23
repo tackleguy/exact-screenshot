@@ -25,7 +25,7 @@ export const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
   SKI_RESORT_OFFICIAL: "Ski resort",
   USGS_NTD: "USGS National Digital Trails",
   CURATED_GUIDE: "Curated guide",
-  OPENSTREETMAP: "OpenStreetMap route relation",
+  OPENSTREETMAP: "Mapped route",
 };
 
 /**

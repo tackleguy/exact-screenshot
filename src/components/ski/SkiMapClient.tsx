@@ -107,7 +107,7 @@ export function SkiMapClient() {
           Nordic ski trails
         </h1>
         <p className="mt-1 text-xs text-mist">
-          Zoom in for OpenStreetMap nordic ski trails. Search a resort to fly
+          Zoom in for nordic ski trails. Search a resort to fly
           there, or{" "}
           <Link
             href="/explore/trails?activity=ski&includeWinter=true"
