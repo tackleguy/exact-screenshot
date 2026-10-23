@@ -21,8 +21,8 @@ export function cellBounds(key: string): [number, number, number, number] {
   return [x * 2 - 180, y * 2 - 90, x * 2 - 178, y * 2 - 88];
 }
 
-/** Every trail's full record, in 16,384 files by id: `rows/r-<hhhh>.json.gz` ({ id: trail | "r:<id it merged into>" }). */
-export const ROW_SHARDS = 16384;
+/** Every trail's full record, in 2,048 files by id: `rows/r-<hhhh>.json.gz` ({ id: trail | "r:<id it merged into>" }). */
+export const ROW_SHARDS = 2048;
 export function rowShard(id: string) {
   let h = 0x811c9dc5;
   for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
@@ -37,6 +37,7 @@ export function rowShard(id: string) {
 export const SEARCH_STOPWORDS = new Set(
   "national forest park state county recreation area regional provincial reserve trail trails route chemin bike footpath road des camino loop track del weg via street unnamed avenue path sentier sentiero wanderweg rundweg rundwanderweg les the and walk spur lane way circuit von der die das und sur aux con per los las".split(" "),
 );
-export const searchKey = (word: string) => word.slice(0, 3);
+/** First three letters, with anything outside a-z/0-9 folded to "_" so non-Latin scripts cannot explode the file count. */
+export const searchKey = (word: string) => word.slice(0, 3).replace(/[^a-z0-9]/g, "_");
 /** Region and country files: the best-documented trails of a region (`q/r-<region>.json.gz`) or country (`q/c-<CC>.json.gz`). */
 export const regionSlug = (normalizedRegion: string) => normalizedRegion.replace(/ /g, "-");
