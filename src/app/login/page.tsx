@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { GoogleButton } from "@/components/auth/GoogleButton";
+import { nextFromLocation } from "@/lib/account/auth";
 
 export const metadata: Metadata = { title: "Sign in — Hyked" };
 
@@ -14,6 +16,8 @@ export default function LoginPage() {
         <p className="mb-6 mt-1 text-sm text-mist">
           Sign in to record GPS tracks and track your adventures.
         </p>
+        <GoogleButton next={() => nextFromLocation()} label="Continue with Google" />
+        <p className="my-4 flex items-center gap-3 text-xs uppercase tracking-wide text-mist" aria-hidden="true"><span className="h-px flex-1 bg-[var(--border)]" />or with email<span className="h-px flex-1 bg-[var(--border)]" /></p>
         <LoginForm />
       </div>
     </div>
