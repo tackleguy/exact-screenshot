@@ -30,6 +30,7 @@
     "pipeline": "tsx pipeline/run.ts"
   },
   "dependencies": {
+    "@lovable.dev/cloud-auth-js": "^1.2.1",
     "@mapbox/vector-tile": "^3.0.0",
     "@mlc-ai/web-llm": "^0.2.85",
     "@supabase/ssr": "^0.12.0",
