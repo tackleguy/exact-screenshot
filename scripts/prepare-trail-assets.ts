@@ -39,6 +39,25 @@ const shown = (t: CatalogTrail) => !t.mergedInto && t.confidence !== "REJECTED" 
 const zipped = (value: unknown) => gzipSync(JSON.stringify(value));
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+/** Extent [west, south, east, north] of a trail's lines, rounded to ~10 m. */
+function extent(lines: [number, number][][]): [number, number, number, number] {
+  let w = 180, s = 90, e = -180, n = -90;
+  for (const line of lines) for (const [x, y] of line) { if (x < w) w = x; if (x > e) e = x; if (y < s) s = y; if (y > n) n = y; }
+  const r = (v: number) => Math.round(v * 1e4) / 1e4;
+  return [r(w), r(s), r(e), r(n)];
+}
+
+/** 2° cells a trail is listed in: its pin's, plus every cell its line extent overlaps (up to 64). */
+function cellKeysOf(t: CatalogTrail): string[] {
+  const home = pinCell(t.longitude, t.latitude);
+  const b = t.bounds;
+  if (!b || b[2] - b[0] > 180) return [home];
+  const keys = new Set([home]);
+  const x0 = Math.floor((b[0] + 180) / 2), x1 = Math.floor((b[2] + 180) / 2), y0 = Math.floor((b[1] + 90) / 2), y1 = Math.floor((b[3] + 90) / 2);
+  for (let x = x0; x <= x1 && keys.size < 64; x++) for (let y = y0; y <= y1 && keys.size < 64; y++) keys.add(`${x}_${y}`);
+  return [...keys];
+}
+
 type SearchRow = [id: string, name: string, alt: string, place: string, cell: string, score: number];
 const searchRow = (t: CatalogTrail, ref: string): SearchRow => [t.id, t.name, [...(t.altNames ?? []), t.wiki?.title].filter(Boolean).join(" | "), [t.park, t.forest, t.blmArea, t.manager, t.region, t.country !== "US" && t.country !== "CA" ? countryName(t.country) : t.country].filter(Boolean).join(" "), ref, t.qualityScore ?? 0];
 
@@ -83,17 +102,36 @@ async function main() {
   const trailUrls: string[] = [];
   const pageOf = (t: CatalogTrail) => { if (t.kind === "segment" || t.source === "route-aggregate") trailUrls.push(`/explore/trails/${encodeURIComponent(t.id)}`); };
 
-  // ---- U.S. and Canada: trails by 2° cell of their pin ----
+  // Lines of shown U.S./Canada trails only.
+  const wanted = new Map<string, Set<string>>();
+  for (const t of rows) if (t.geometryShard !== "route" && t.source !== "resort") (wanted.get(t.geometryShard) ?? wanted.set(t.geometryShard, new Set()).get(t.geometryShard)!).add(t.id);
+
+  // ---- geometry: U.S./Canada lines of shown trails, merged with the worldwide lines of the same 1° cell ----
+  const boundsById = new Map<string, [number, number, number, number]>();
+  const worldGeometry = new Set((await readdir(path.join(source, "world")).catch(() => [] as string[])).filter((f) => /^geometry-.+\.json\.gz$/.test(f)));
+  const geometryCells = new Set([...wanted.keys(), ...[...worldGeometry].map((f) => f.slice(9, -8))]);
+  for (const shard of geometryCells) {
+    let data: Record<string, unknown> = {};
+    const ids = wanted.get(shard);
+    if (ids) {
+      try { data = Object.fromEntries(Object.entries(JSON.parse(gunzipSync(await readFile(path.join(source, `geometry-${shard}.json.gz`))).toString()) as Record<string, unknown>).filter(([id]) => ids.has(id))); } catch { /* no lines in this cell */ }
+    }
+    if (worldGeometry.has(`geometry-${shard}.json.gz`)) Object.assign(data, JSON.parse(gunzipSync(await readFile(path.join(source, "world", `geometry-${shard}.json.gz`))).toString()));
+    for (const [id, lines] of Object.entries(data)) boundsById.set(id, extent(lines as [number, number][][]));
+    if (Object.keys(data).length) await writeFile(path.join(output, `geometry-${shard}.json.gz`), zipped(data));
+  }
+
+  // ---- U.S. and Canada: trails by 2° cell; a trail is listed in every cell its line passes through ----
   const cells = new Map<string, CatalogTrail[]>();
-  for (const row of rows) { const key = pinCell(row.longitude, row.latitude); (cells.get(key) ?? cells.set(key, []).get(key)!).push(row); }
+  for (const row of rows) {
+    const b = boundsById.get(row.id);
+    if (b) row.bounds = b;
+    for (const key of cellKeysOf(row)) (cells.get(key) ?? cells.set(key, []).get(key)!).push(row);
+  }
   await Promise.all([...cells].map(([key, trails]) => writeFile(path.join(output, `cell-${key}.json.gz`), zipped(trails))));
   const search: SearchRow[] = rows.map((t) => searchRow(t, pinCell(t.longitude, t.latitude)));
   for (const t of rows) { setLookup(t.id, `c:${pinCell(t.longitude, t.latitude)}`); count(t); pageOf(t); }
   for (const [from, to] of Object.entries(redirects)) setLookup(from, `r:${to}`);
-
-  // Lines of shown U.S./Canada trails only.
-  const wanted = new Map<string, Set<string>>();
-  for (const t of rows) if (t.geometryShard !== "route" && t.source !== "resort") (wanted.get(t.geometryShard) ?? wanted.set(t.geometryShard, new Set()).get(t.geometryShard)!).add(t.id);
 
   // ---- worldwide, one country file at a time ----
   const world = manifest.world as { files: Record<string, { rows: number; sha256: string }> } | undefined;
@@ -110,9 +148,11 @@ async function main() {
     const countrySearch: SearchRow[] = [];
     for (const t of data.rows) {
       t.name = titleCaseName(t.name);
+      const b = boundsById.get(t.id);
+      if (b) t.bounds = b;
       const key = pinCell(t.longitude, t.latitude);
       const ref = cellRef(key, code);
-      (byCell.get(key) ?? byCell.set(key, []).get(key)!).push(t);
+      for (const k of cellKeysOf(t)) (byCell.get(k) ?? byCell.set(k, []).get(k)!).push(t);
       const entry = searchRow(t, ref);
       countrySearch.push(entry);
       if (t.tier === "verified" || (t.qualityScore ?? 0) >= 40) worldTop.push(entry);
@@ -132,19 +172,6 @@ async function main() {
     if (worldTop.length > WORLD_IN_MAIN_SEARCH * 2) worldTop = worldTop.sort((a, b) => b[5] - a[5]).slice(0, WORLD_IN_MAIN_SEARCH);
   }
   worldTop = worldTop.sort((a, b) => b[5] - a[5]).slice(0, WORLD_IN_MAIN_SEARCH);
-
-  // ---- geometry: U.S./Canada lines of shown trails, merged with the worldwide lines of the same 1° cell ----
-  const worldGeometry = new Set((await readdir(path.join(source, "world")).catch(() => [] as string[])).filter((f) => /^geometry-.+\.json\.gz$/.test(f)));
-  const geometryCells = new Set([...wanted.keys(), ...[...worldGeometry].map((f) => f.slice(9, -8))]);
-  for (const shard of geometryCells) {
-    let data: Record<string, unknown> = {};
-    const ids = wanted.get(shard);
-    if (ids) {
-      try { data = Object.fromEntries(Object.entries(JSON.parse(gunzipSync(await readFile(path.join(source, `geometry-${shard}.json.gz`))).toString()) as Record<string, unknown>).filter(([id]) => ids.has(id))); } catch { /* no lines in this cell */ }
-    }
-    if (worldGeometry.has(`geometry-${shard}.json.gz`)) Object.assign(data, JSON.parse(gunzipSync(await readFile(path.join(source, "world", `geometry-${shard}.json.gz`))).toString()));
-    if (Object.keys(data).length) await writeFile(path.join(output, `geometry-${shard}.json.gz`), zipped(data));
-  }
 
   // ---- indexes ----
   await writeFile(path.join(output, "search.json.gz"), zipped([...search, ...worldTop]));

@@ -61,6 +61,7 @@ async function main() {
     step("Wikidata / Wikipedia worldwide", "npx", ["tsx", "pipeline/steps/wiki.ts", "--world"]);
     step("Build worldwide trails", "npx", ["tsx", "pipeline/steps/world.ts"], { NODE_OPTIONS: "--max-old-space-size=12288" });
   }
+  step("Sections: routes and their stages", "npx", ["tsx", "pipeline/steps/sections.ts"], { NODE_OPTIONS: "--max-old-space-size=12288" });
   step("Hike features along trails", "npx", ["tsx", "pipeline/steps/features.ts"], { NODE_OPTIONS: "--max-old-space-size=8192" });
   step("Validation report", "npx", ["tsx", "pipeline/steps/validate.ts"], { NODE_OPTIONS: "--max-old-space-size=8192" });
   console.log("\nDone. `npm run build` turns the new snapshot into the app's sharded files, sitemap and robots.txt.");

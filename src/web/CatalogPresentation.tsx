@@ -45,9 +45,6 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
     next.set("page", String(n));
     return `/explore/trails/catalog?${next}`;
   }
-  const intlCount = Object.entries(manifest.countries)
-    .filter(([code]) => code !== "US" && code !== "CA")
-    .reduce((sum, [, count]) => sum + count, 0);
 
   // One count for the whole page: "Showing the first 24 of 1,284 trails near you" when the list is capped.
   const first = (page - 1) * limit + 1, last = Math.min(page * limit, total);
@@ -62,34 +59,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
     <div className="catalog-shell">
       <header className="catalog-heading">
         <h1>Find your next trail.</h1>
-        <p>
-          {headlineCount(manifest).toLocaleString("en-US")} trails across the United States and Canada
-          {manifest.tiers ? ` (${manifest.tiers.verified.toLocaleString("en-US")} verified by an agency or route relation, ${manifest.tiers.mapped.toLocaleString("en-US")} mapped in OpenStreetMap)` : ""}, plus curated
-          through-hikes, 14ers and world summits.
-        </p>
-        <div className="catalog-quick-links">
-          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=thru-hikes">
-            Through-hikes
-          </Link>
-          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=thru-sections">
-            Through-hike sections
-          </Link>
-          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=14ers">
-            14ers
-          </Link>
-          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=8000m">
-            8,000 m peaks
-          </Link>
-          <Link className="catalog-button secondary" href="/explore/trails/catalog?collection=7summits">
-            Seven Summits
-          </Link>
-          <Link className="catalog-button secondary" href="/explore/trails/catalog?country=intl&kind=route">
-            International
-          </Link>
-          <Link className="catalog-button secondary" href="/explore/ski">
-            Ski maps
-          </Link>
-        </div>
+        <p>{headlineCount(manifest).toLocaleString("en-US")} trails in {Object.keys(manifest.countries ?? {}).length || 2} countries.</p>
         <Link className="catalog-mobile-plan" href="/plan">
           Have a trip in mind? Plan it
         </Link>
@@ -148,13 +118,11 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                   <option value="">All countries</option>
                   <option value="US">United States</option>
                   <option value="CA">Canada</option>
-                  <option value="intl">International</option>
-                  {manifest.countries.FR != null && <option value="FR">France</option>}
-                  {manifest.countries.NZ != null && <option value="NZ">New Zealand</option>}
-                  {manifest.countries.NP != null && <option value="NP">Nepal</option>}
-                  {manifest.countries.ES != null && <option value="ES">Spain</option>}
-                  {manifest.countries.IS != null && <option value="IS">Iceland</option>}
-                  {manifest.countries.CL != null && <option value="CL">Chile</option>}
+                  <option value="intl">Outside the U.S. and Canada</option>
+                  {Object.entries(manifest.countries ?? {})
+                    .filter(([code]) => code !== "US" && code !== "CA" && /^[A-Z]{2}$/.test(code))
+                    .sort((a, b) => countryName(a[0]).localeCompare(countryName(b[0])))
+                    .map(([code]) => <option key={code} value={code}>{countryName(code)}</option>)}
                 </select>
               </label>
               <label>
@@ -219,12 +187,16 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                 Include partial, unnamed, connector and sidewalk segments
               </label>
             </div>
+            <div className="catalog-collections">
+              <span className="catalog-muted">Collections</span>
+              <Link href="/explore/trails/catalog?collection=thru-hikes">Through-hikes</Link>
+              <Link href="/explore/trails/catalog?collection=thru-sections">Through-hike sections</Link>
+              <Link href="/explore/trails/catalog?collection=14ers">14ers</Link>
+              <Link href="/explore/trails/catalog?collection=8000m">8,000 m peaks</Link>
+              <Link href="/explore/trails/catalog?collection=7summits">Seven Summits</Link>
+              <Link href="/explore/ski">Ski maps</Link>
+            </div>
             <div className="catalog-filter-footer">
-              <p className="catalog-muted">
-                Through-hikes are end-to-end routes. Separate trails can share a common name (for example
-                “Loop Trail”) — use unique names to collapse repeats. Pieces of longer trails, unnamed
-                stubs, connectors, sidewalks and closed trails are hidden unless you include partial segments.
-              </p>
               <button className="catalog-button" type="submit">
                 Apply filters
               </button>
@@ -267,9 +239,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                           )}
                           {t.kind === "route" && !t.peakCategory && <span className="catalog-badge">Through-hike</span>}
                           {t.partOfRoute && (
-                            <span className="catalog-badge" style={{ background: "#2563eb", color: "#fff" }}>
-                              Section of {t.partOfRoute.name}
-                            </span>
+                            <span className="catalog-badge">Part of {t.partOfRoute.name}</span>
                           )}
                           {t.quality && t.quality !== "ok" && (
                             <span className={`catalog-badge quality-${t.quality}`}>{QUALITY_STATUS_LABELS[t.quality]}</span>
@@ -278,23 +248,12 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                         <p>
                           {t.region ?? countryName(t.country)} · {trailPlace(t)}
                           {t.difficulty ? ` · ${t.difficulty}` : ""}
-                          {t.sections && t.sections.length > 0
-                            ? ` · ${t.sections.length} defined sections`
-                            : t.sectionCount && t.sectionCount > 1
-                              ? ` · ${t.sectionCount.toLocaleString("en-US")} sections joined`
-                              : ""}
+                          {t.sections && t.sections.length > 0 ? ` · ${t.sections.length} sections` : ""}
                           {t.summitElevationFt ? ` · Summit ${t.summitElevationFt.toLocaleString()} ft` : ""}
                         </p>
                       </div>
                       <span className="catalog-distance">
                         {displayMiles(t.miles)}
-                        <small>
-                          {t.kind === "route"
-                            ? "route"
-                            : t.distanceBasis === "geometry"
-                              ? "measured"
-                              : "trail"}
-                        </small>
                       </span>
                       <NavIcon name="chevron" />
                     </Link>
@@ -341,7 +300,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
               <h2>Try a broader search.</h2>
               <p>
                 {activity === "ski"
-                  ? "Few catalog sections use ski in the name. Open Ski maps for nordic OSM trails, or clear filters."
+                  ? "Few catalog sections use ski in the name. Open Ski maps for nordic ski trails, or clear filters."
                   : "Search a trail name, browse through-hikes, or clear country and distance filters."}
               </p>
               {activity === "ski" ? (
@@ -361,95 +320,10 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
             </div>
           )}
         </section>
-        <aside className="catalog-planning" aria-labelledby="catalog-planning-title">
-          <h2 id="catalog-planning-title">A trip, in your words.</h2>
-          <p>Start with a place, distance and time. Build a route and pack around your own gear.</p>
-          <div className="catalog-example">
-            <strong>30 miles, 3 days in Colorado</strong>
-            <span>Example request</span>
-          </div>
-          <Link className="catalog-button" href="/plan?prompt=30%20miles%2C%203%20days%20in%20Colorado">
-            Plan this trip
-          </Link>
-          <hr />
-          <h3>Made for your next outing</h3>
-          <p>Your gear and past trips help shape the plan. Review the sources before you go.</p>
-          <Link className="catalog-link" href="/plan">
-            Start with your own idea
-          </Link>
-        </aside>
       </CatalogMap>
-      <section className="catalog-source-summary">
-        <h2>Whole trails, with their sources.</h2>
-        <p>
-          Connected source sections that share a name are joined into one trail, and its length counts
-          overlapping sections once. Distances and access still need a check with the land manager.
-        </p>
-        <details className="catalog-sources">
-          <summary>USGS · National Park Service · U.S. Forest Service · BLM · Parks Canada · Ontario · ski resorts · curated guides — View sources & coverage</summary>
-          <p>
-            {(manifest.countries.CA ?? 0).toLocaleString("en-US")} Canadian and{" "}
-            {(manifest.countries.US ?? 0).toLocaleString("en-US")} U.S. records
-            {intlCount > 0
-              ? `, plus ${intlCount.toLocaleString("en-US")} international through-hike guides`
-              : ""}
-            . Snapshot created {manifest.generatedAt.slice(0, 10)}.
-          </p>
-          {manifest.sectionTotal != null && (
-            <p>
-              Built from {manifest.sectionTotal.toLocaleString("en-US")} mapped source sections.
-            </p>
-          )}
-          <ul>
-            {manifest.sources.map((s) => (
-              <li key={s.name}>
-                <a href={s.url} target="_blank" rel="noopener noreferrer">
-                  {s.name}
-                </a>{" "}
-                — {s.license}.{s.count > 0 ? ` ${s.count.toLocaleString("en-US")} sections.` : ""}
-              </li>
-            ))}
-          </ul>
-          <p>
-            Canadian coverage comes from Parks Canada locations and the Ontario Trail Network. U.S.
-            coverage is every named USGS trail plus unnamed trails marked for hiking, checked against and
-            extended with official National Park Service, U.S. Forest Service and BLM trail data. Ski resort
-            summer trails are listed by name and stated length from each resort’s own site. National Scenic
-            and long trails are joined end to end. International through-hikes are curated guides (not GPS tracks). State
-            and province labels use approximate{" "}
-            <a
-              href="https://www.naturalearthdata.com/about/terms-of-use/"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Natural Earth
-            </a>{" "}
-            boundaries.
-          </p>
-          <p>
-            Contains information licensed under the{" "}
-            <a
-              href="https://open.canada.ca/en/open-government-licence-canada"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open Government Licence – Canada
-            </a>{" "}
-            and the{" "}
-            <a
-              href="https://www.ontario.ca/page/open-government-licence-ontario"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Open Government Licence – Ontario
-            </a>
-            .
-          </p>
-          <a href="/api/trail-catalog/download" download>
-            Download the catalog index (compressed JSON)
-          </a>
-        </details>
-      </section>
+      <p className="catalog-source-line">
+        Trail data from park and forest agencies and community trail maps. <Link className="catalog-link" href="/about/data">Sources and licences</Link>
+      </p>
     </div>
   );
 }

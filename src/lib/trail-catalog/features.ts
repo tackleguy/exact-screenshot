@@ -43,7 +43,7 @@ export interface TrailFeature extends HikeFeature {
   offTrailFt: number;
 }
 
-export const FEATURE_SOURCE = "OpenStreetMap";
+export const FEATURE_SOURCE = "Mapped feature";
 
 export function featureFromRow(row: FeatureRow): HikeFeature {
   return { id: row[0], type: row[1], name: row[2] || FEATURE_LABELS[row[1]], lat: row[4], lon: row[3], source: FEATURE_SOURCE, extra: row[5] || {} };

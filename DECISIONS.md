@@ -135,6 +135,11 @@ vertex-count lengths, packet defaults) were deleted.
   worldwide trail is findable without a multi-hundred-MB download. Trail pages find a trail through a 256-file
   id lookup instead of the search index.
 
+- **Sections together.** A route relation that contains other route relations (a long-distance trail split
+  into stages) lists them as its sections, and each stage links to the smallest route containing it
+  (`pipeline/steps/sections.ts`: 4,739 routes, 31,521 stages). Lists and the map show the route rather than its
+  stages when both match; a search still finds a stage by its own name.
+
 ## Map
 
 - **Basemaps (licences):** Topo = OpenFreeMap "liberty" vector tiles (free for any use, OpenMapTiles schema, ©
@@ -143,6 +148,14 @@ vertex-count lengths, packet defaults) were deleted.
   Imagery with Esri reference layers, shown with Esri's attribution; heavy commercial traffic may need an ArcGIS
   Location Platform key (free tier available). The OSM US tile server was dropped because its terms don't
   clearly cover a public consumer app.
+- **Basemaps (more styles):** besides Topo, Satellite and Standard: Outdoors (Esri World Topo), Terrain (Esri
+  World Terrain Base + hillshade + contours), Shaded relief, National Geographic, USGS Topo and USGS Imagery Topo
+  (U.S. only, public domain), Satellite + contours, Bright, Light and Dark (OpenFreeMap). The choice is
+  remembered on the device. Trail pages use the same MapLibre map and styles (the Leaflet map and the
+  openstreetmap.org tile servers, whose policy doesn't allow app traffic, are no longer used there).
+- **Every trail in view:** each trail carries its line's extent, is listed in every 2° cell its line crosses,
+  and counts as in view when any part of it is; the map draws up to 2,500 trails and no longer merges trails
+  that share a name.
 - **Clusters:** zoomed out, count bubbles come from a build-time overview (counts per grid cell at six sizes,
   per section) so no full-catalog download is needed; from zoom 11 the app loads only the 2° cells in view and
   MapLibre clusters those pins in its worker.

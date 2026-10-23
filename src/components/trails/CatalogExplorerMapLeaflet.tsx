@@ -12,10 +12,10 @@ import { CatalogPhotos } from "./CatalogPhotos";
 
 const TILE_URL =
   process.env.NEXT_PUBLIC_CATALOG_TILE_URL ??
-  "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}";
 const TILE_ATTRIBUTION =
   process.env.NEXT_PUBLIC_CATALOG_TILE_ATTRIBUTION ??
-  '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>';
+  "Basemap © Esri and its data providers · Trails © OpenStreetMap contributors";
 
 function viewportBounds(map: L.Map): CatalogBounds {
   const bounds = map.getBounds();

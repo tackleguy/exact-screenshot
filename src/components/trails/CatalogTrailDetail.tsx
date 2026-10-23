@@ -2,14 +2,15 @@ import Link from "next/link";
 import { CatalogMapView } from "./CatalogMapView";
 import { TrailMapAndDirections } from "./TrailMapAndDirections";
 import { TripTools } from "./TripTools";
+import { TrailElevationSection } from "./TrailElevationSection";
 import { TrailFeatureList } from "./TrailFeatureList";
 import { CatalogPhotos } from "./CatalogPhotos";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { TrailWeatherForecast } from "./TrailWeatherForecast";
 import type { CatalogManifest, CatalogTrail } from "@/lib/trail-catalog/types";
-import { countryName, sourceName, trailPlace } from "@/lib/trail-catalog/types";
+import { countryName, sourceName } from "@/lib/trail-catalog/types";
 import { CONFIDENCE_LABELS, SOURCE_TYPE_LABELS, TRAIL_TYPE_LABELS } from "@/lib/trail-catalog/agencies";
-import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, ROUTE_TYPE_LABELS, formatDistance } from "@/lib/trail-catalog/quality";
+import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, formatDistance } from "@/lib/trail-catalog/quality";
 import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, resolveDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
 import { CatalogTrailHero } from "./CatalogTrailHero";
 import "./catalog.css";
@@ -48,431 +49,221 @@ export function CatalogTrailDetail({
       </Link>
       <CatalogTrailHero trail={t} difficulty={difficulty.difficulty} distance={distance.primary} hasLines={hasLines} />
       {t.peakCategory && (
-        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem", flexWrap: "wrap", alignItems: "center" }}>
-          <span className="catalog-badge" style={{ background: "#7c3aed", color: "#fff", fontWeight: "bold" }}>
-            {t.peakCategory === "14er" ? "⛰️ 14er (14,000+ ft Peak)" : t.peakCategory === "8000m" ? "🏔️ 8,000m Earth Giant" : "👑 Seven Summits"}
-          </span>
-          {t.summitElevationFt && (
-            <span className="catalog-badge" style={{ background: "#0f766e", color: "#fff" }}>
-              Summit: {t.summitElevationFt.toLocaleString()} ft ({t.summitElevationM?.toLocaleString()} m)
-            </span>
-          )}
-        </div>
+        <p className="trail-notes">
+          <span className="catalog-badge">{t.peakCategory === "14er" ? "14er · 14,000+ ft peak" : t.peakCategory === "8000m" ? "8,000 m peak" : "Seven Summits"}</span>
+          {t.summitElevationFt && <span className="catalog-badge">Summit {t.summitElevationFt.toLocaleString()} ft ({t.summitElevationM?.toLocaleString()} m)</span>}
+        </p>
       )}
       {t.partOfRoute && (
-        <div className="catalog-quality-note" style={{ borderLeft: "4px solid #2563eb", background: "rgba(37, 99, 235, 0.08)", marginTop: "1rem" }} role="note">
-          <strong>Section of Through-Hike.</strong> This trail is an official section of <strong>{t.partOfRoute.name}</strong> ({t.partOfRoute.totalMiles.toLocaleString()} mi total).
-          <div style={{ marginTop: "0.5rem" }}>
-            <Link className="catalog-button" style={{ display: "inline-block", fontSize: "0.85rem", padding: "0.4rem 0.8rem" }} href={`/explore/trails/${encodeURIComponent(t.partOfRoute.id)}`}>
-              View Full Thru-Hike (All Together) →
-            </Link>
-          </div>
-        </div>
+        <p className="trail-callout">
+          Part of <Link className="catalog-link" href={`/explore/trails/${encodeURIComponent(t.partOfRoute.id)}`}>{t.partOfRoute.name}</Link>
+          {t.partOfRoute.totalMiles > 0 && <> · {formatDistance(t.partOfRoute.totalMiles).primary} in all</>}
+        </p>
       )}
       {t.linkedTrailId && t.linkedTrailId !== t.id && (
         <p className="catalog-section-note">
-          This guide’s map shows the real mapped line of{" "}
-          <Link className="catalog-link" href={`/explore/trails/${encodeURIComponent(t.linkedTrailId)}`}>the matching trail in the catalog</Link>.
+          This guide’s map shows <Link className="catalog-link" href={`/explore/trails/${encodeURIComponent(t.linkedTrailId)}`}>the matching trail</Link>.
         </p>
       )}
-      {(t.peakCategory || t.partOfRoute || t.kind === "route") && !hasLines && (
-        <p className="catalog-section-note">No mapped route line is available for this guide, so only its location is shown.</p>
-      )}
-      {isRoute && !t.peakCategory && <span className="catalog-badge">Through-hike</span>}
       {t.winterUse && (
-        <div className="catalog-quality-note" role="note">
-          {t.winterUse === "downhill" ? (
-            <>
-              <strong>Downhill ski run{t.skiArea ? ` at ${t.skiArea}` : ""}.</strong> This line follows a mapped ski piste,
-              so it is listed with ski trails, not hikes. Resorts set their own rules for summer access and uphill travel.
-            </>
-          ) : t.winterUse === "oversnow" ? (
-            <>
-              <strong>Winter over-snow route.</strong> This is mapped as a snowmobile, ski or snowshoe route
-              (for example a U.S. Forest Service snow trail), so it is listed with ski trails, not hikes.
-            </>
-          ) : (
-            <>
-              <strong>Nordic ski track{t.skiArea ? ` at ${t.skiArea}` : ""}.</strong> This trail is groomed for
-              cross-country skiing in winter; check whether walking is allowed on the tracks then.
-            </>
-          )}
-        </div>
+        <p className="trail-callout">
+          {t.winterUse === "downhill"
+            ? <><strong>Ski or sled run{t.skiArea ? ` at ${t.skiArea}` : ""}.</strong> A winter run; resorts set their own rules for summer access.</>
+            : t.winterUse === "oversnow"
+              ? <><strong>Winter route.</strong> Mapped for skiing, snowshoeing or snowmobiles.</>
+              : <><strong>Nordic ski track{t.skiArea ? ` at ${t.skiArea}` : ""}.</strong> Groomed for cross-country skiing in winter.</>}
+        </p>
       )}
       {warning && (
-        <div className="catalog-quality-note" role="note">
+        <p className="trail-callout trail-callout--warn" role="note">
           <strong>{t.flags?.includes("motorized") ? "Motorized route" : t.flags?.includes("sidewalk") ? "Sidewalk or road path" : QUALITY_STATUS_LABELS[t.quality!]}.</strong> {warning}
-          {parent && (
-            <>
-              {" "}
-              <Link className="catalog-link" href={`/explore/trails/${encodeURIComponent(parent.id)}`}>
-                View {parent.name} ({formatDistance(parent.miles).primary})
-              </Link>
-            </>
-          )}
-        </div>
+          {parent && <> <Link className="catalog-link" href={`/explore/trails/${encodeURIComponent(parent.id)}`}>View {parent.name} ({formatDistance(parent.miles).primary})</Link></>}
+        </p>
       )}
-      {t.wiki?.extract && (
+      {(t.wiki?.extract || t.osm?.description || isRoute || (t.source === "resort" && t.note)) && (
         <section className="catalog-about" aria-label="About this trail">
-          <p>{t.wiki.extract}</p>
-          <p className="catalog-muted">
-            From <a href={t.wiki.url} target="_blank" rel="noopener noreferrer">Wikipedia: {t.wiki.title}</a> (CC BY-SA 4.0).
-          </p>
+          <p>{t.wiki?.extract ?? t.osm?.description ?? (t.source === "resort" ? t.note : t.note ?? "A through-hike guide. Confirm distance, permits and current conditions with the trail association or land manager.")}</p>
+          {t.wiki?.extract && <p className="catalog-muted">From <a href={t.wiki.url} target="_blank" rel="noopener noreferrer">Wikipedia</a> (CC BY-SA 4.0).</p>}
         </section>
       )}
-      {t.osm?.description && !t.wiki?.extract && <p className="catalog-about">{t.osm.description}</p>}
-      <p className="catalog-section-note">
-        {isRoute
-          ? t.note ??
-            "This is a through-hike / long-route guide. Confirm distance, permits, and current conditions with the official trail association or land manager."
-          : t.source === "resort" && t.note
-            ? t.note
-          : t.osm
-            ? `This trail is an OpenStreetMap route relation: its mapped ways joined in order into one trail${t.sources?.length ? `, matched to ${t.sources.length} official record${t.sources.length > 1 ? "s" : ""}` : ""}. Check access, trailheads and conditions before you go.`
-          : sections > 1
-            ? `This trail joins ${sections.toLocaleString("en-US")} connected source sections that share its name. It may link to other trails; check access, trailheads and the complete route before planning your hike.`
-            : "This record is a mapped trail. It may link to other trails; check access, trailheads and the complete route before planning your hike."}
-      </p>
-      <dl className="catalog-facts">
-        <div>
-          <dt>{isRoute ? "Route distance" : "Trail distance"}</dt>
-          <dd>
-            {distance.primary}
-            {distance.secondary && <span className="catalog-distance-alt"> · {distance.secondary}</span>}
-            <small>
-              {isRoute
-                ? t.source === "route-aggregate"
-                  ? "Official corridor length"
-                  : "Curated guide length"
-                : t.factSources?.miles
-                  ? t.factSources.miles
-                : sections > 1
-                  ? `Sum of ${sections.toLocaleString("en-US")} mapped sections, overlaps counted once`
-                  : t.source === "resort"
-                    ? "Stated by the resort"
-                  : t.distanceBasis === "geometry"
-                    ? "Measured along the mapped line"
-                    : "Reported by the source; matches the mapped line"}
-              {t.routeType === "point-to-point" && !isRoute ? ". One way; double it for an out-and-back." : ""}
-            </small>
-          </dd>
-        </div>
-        <div>
-          <dt>Difficulty</dt>
-          <dd>
-            {DIFFICULTY_LABELS[difficulty.difficulty as TrailDifficulty] ?? difficulty.difficulty}
-            <small title={DIFFICULTY_FORMULA}>{difficulty.label}</small>
-          </dd>
-        </div>
-        {t.sectionCount != null && t.sectionCount > 1 ? (
-          <div>
-            <dt>Mapped sections</dt>
-            <dd>
-              {t.sectionCount.toLocaleString("en-US")}
-              <small>
-                {t.mappedMiles != null
-                  ? `~${t.mappedMiles.toLocaleString("en-US")} mi mapped`
-                  : "Joined into this trail"}
-              </small>
-            </dd>
-          </div>
-        ) : (
-          <div>
-            <dt>Route type</dt>
-            <dd>
-              {t.routeType ? ROUTE_TYPE_LABELS[t.routeType] : isRoute ? "Long-distance route" : "Not stated"}
-              <small>{t.source === "resort" ? "As the resort lists it" : "From the mapped line’s shape"}</small>
-            </dd>
-          </div>
-        )}
-        <div>
-          <dt>{isRoute ? "Season" : "Dogs"}</dt>
-          <dd>
-            {isRoute
-              ? (t.season ?? "Not reported")
-              : t.dogs === true
-                ? "Source reports allowed"
-                : t.dogs === false
-                  ? "Source reports not allowed"
-                  : "Not reported"}
-          </dd>
-        </div>
-      </dl>
-      {t.tags && t.tags.length > 0 && (
-        <ul className="catalog-tag-list">
-          {t.tags.map((tag) => (
-            <li key={tag}>{tag}</li>
-          ))}
-        </ul>
-      )}
-      <div className="catalog-detail-map-heading">
-        <h2>{hasLines ? (isRoute ? "Mapped route" : "Trail map") : "Approximate location"}</h2>
-        {hasLines && (
-          <a
-            className="catalog-button secondary"
-            href={`/api/trail-catalog/${encodeURIComponent(t.id)}/gpx`}
-            download
-          >
-            Download trail GPX
-          </a>
-        )}
-      </div>
-      {hasLines && !isRoute ? (
-        <TrailMapAndDirections name={t.name} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }} />
-      ) : hasLines ? (
-        <CatalogMapView lines={lines} />
-      ) : (
-        <CatalogMapView trails={[t]} />
-      )}
-      <p className="catalog-muted">
-        {!hasLines
-          ? t.source === "resort"
-            ? "Pin marks the resort base area. The resort doesn’t publish this trail’s route, so check its summer trail map before you go."
-            : "Pin marks an approximate trailhead or corridor midpoint — not a verified start. This is not a GPS track."
-          : isRoute
-            ? "Mapped sections joined for discovery; gaps are stretches no source has mapped. This is not a GPS track."
-            : "Generalized source geometry for discovery. Trailheads come from OpenStreetMap and are not verified; confirm access, parking and road conditions before you go."}
-        {(isRoute || !hasLines) && hasLocation && (
-          <>
-            {" "}
-            <a href={googleMapsDirectionsUrl(t.latitude, t.longitude)} target="_blank" rel="noopener noreferrer">
-              Directions to the map pin in Google Maps
-            </a>
-          </>
-        )}
-      </p>
-      {hasLocation && (
-        <TrailWeatherForecast
-          variant="catalog"
-          lat={t.latitude}
-          lng={t.longitude}
-          locationLabel={isRoute && !hasLines ? "approximate trailhead" : "map pin"}
-        />
-      )}
-      <TripTools trailId={t.id} hasLine={hasLines} miles={t.miles} />
-      <TrailFeatureList trailId={t.id} hasLine={hasLines} />
-      {hasLocation && <CatalogPhotos trailId={t.id} />}
       {t.sections && t.sections.length > 0 && (
-        <section className="catalog-sections-breakdown" style={{ marginTop: "2rem", marginBottom: "2rem" }}>
-          <h2 style={{ fontSize: "1.25rem", marginBottom: "0.25rem" }}>Trail Sections & Segments ({t.sections.length})</h2>
-          <p style={{ margin: "0 0 1rem 0", fontSize: "0.875rem", color: "var(--mist, #94a3b8)" }}>
-            Hike the entire through-hike all together or explore individual sections below.
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "1rem" }}>
-            {t.sections.map((sec, idx) => (
-              <div key={sec.id} style={{ border: "1px solid var(--border, #334155)", borderRadius: "8px", padding: "1rem", background: "var(--surface-elevated, #1e293b)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.5rem" }}>
-                  <span style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--accent, #38bdf8)", fontWeight: 600 }}>
-                    Section {idx + 1}
-                  </span>
-                  <span style={{ fontSize: "0.875rem", fontWeight: "bold" }}>{sec.miles} mi</span>
-                </div>
-                <h3 style={{ fontSize: "0.95rem", margin: "0 0 0.5rem 0", lineHeight: 1.3 }}>{sec.name}</h3>
-                {sec.elevationFt && (
-                  <p style={{ margin: "0 0 0.75rem 0", fontSize: "0.8rem", color: "var(--mist, #94a3b8)" }}>
-                    +{sec.elevationFt.toLocaleString()} ft gain
-                  </p>
-                )}
-                <Link
-                  href={`/explore/trails/${encodeURIComponent(sec.id)}`}
-                  className="catalog-button secondary"
-                  style={{ display: "inline-block", fontSize: "0.8rem", padding: "0.35rem 0.75rem", width: "100%", textAlign: "center" }}
-                >
-                  View Section Details →
+        <section className="trail-sections" aria-labelledby="trail-sections-heading">
+          <h2 id="trail-sections-heading">Sections <small>{t.sections.length}</small></h2>
+          <ol>
+            {t.sections.map((sec) => (
+              <li key={sec.id}>
+                <Link href={`/explore/trails/${encodeURIComponent(sec.id)}`}>
+                  <span>{sec.name}</span>
+                  {sec.miles > 0 && <small>{formatDistance(sec.miles).primary}</small>}
                 </Link>
-              </div>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
       )}
-      <div className="catalog-detail-grid">
-        <section>
-          <h2>Plan around the whole route.</h2>
-          <p>
-            Confirm the full hike and its distance with the land manager, then build your gear list
-            and packing plan in Hyked.
-          </p>
-          <Link
-            className="catalog-button"
-            href={`/plan?region=${encodeURIComponent(t.region ?? countryName(t.country))}&prompt=${encodeURIComponent(t.name)}`}
-          >
-            Prepare a trip for {t.name}
-          </Link>
-          <p className="catalog-muted">
-            Camping permission, water availability and current closures are not confirmed by this
-            record.
-          </p>
-        </section>
-        <section>
-          <h2>Source details</h2>
-          <dl className="catalog-source-details">
+      <h2 className="trail-heading">{hasLines ? "Map" : "Approximate location"}</h2>
+      {hasLines && !isRoute ? (
+        <TrailMapAndDirections name={t.name} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }}>
+          <TrailElevationSection trailId={t.id} />
+        </TrailMapAndDirections>
+      ) : (
+        <>
+          <CatalogMapView lines={hasLines ? lines : undefined} trails={hasLines ? undefined : [t]} name={t.name} />
+          {!hasLines && (
+            <p className="catalog-muted">
+              {t.source === "resort" ? "Pin marks the resort base area; the resort doesn’t publish this trail’s route." : "Pin marks an approximate trailhead or corridor midpoint, not a GPS track."}
+              {hasLocation && <> <a href={googleMapsDirectionsUrl(t.latitude, t.longitude)} target="_blank" rel="noopener noreferrer">Directions in Google Maps</a></>}
+            </p>
+          )}
+          {hasLines && <TrailElevationSection trailId={t.id} />}
+        </>
+      )}
+      {hasLocation && (
+        <details className="trail-more">
+          <summary><span>Weather</span><small>7-day forecast near the trail</small></summary>
+          <TrailWeatherForecast variant="catalog" lat={t.latitude} lng={t.longitude} locationLabel={isRoute && !hasLines ? "approximate trailhead" : "map pin"} />
+        </details>
+      )}
+      {hasLines && (
+        <details className="trail-more">
+          <summary><span>Along the trail</span><small>Water, campsites, shelters and viewpoints by mile</small></summary>
+          <TrailFeatureList trailId={t.id} hasLine={hasLines} />
+        </details>
+      )}
+      <details className="trail-more">
+        <summary><span>Trip planning</span><small>Water stretches, nearby towns, resupply days and downloads</small></summary>
+        <TripTools trailId={t.id} hasLine={hasLines} miles={t.miles} />
+      </details>
+      {hasLocation && (
+        <details className="trail-more">
+          <summary><span>Photos</span><small>Photos from near the trail</small></summary>
+          <CatalogPhotos trailId={t.id} />
+        </details>
+      )}
+      <details className="trail-more">
+        <summary><span>About this data</span><small>Sources, checks and licences</small></summary>
+        <dl className="catalog-source-details">
+          <div>
+            <dt>Distance</dt>
+            <dd>{distance.primary}{distance.secondary && ` · ${distance.secondary}`} <small className="catalog-muted">{isRoute ? (t.source === "route-aggregate" ? "official corridor length" : "guide length") : sections > 1 ? `${sections.toLocaleString("en-US")} sections joined` : t.source === "resort" ? "stated by the resort" : t.distanceBasis === "geometry" ? "measured along the mapped line" : "reported by the source"}{t.routeType === "point-to-point" && !isRoute ? "; one way" : ""}</small></dd>
+          </div>
+          <div>
+            <dt>Difficulty</dt>
+            <dd>{DIFFICULTY_LABELS[difficulty.difficulty as TrailDifficulty] ?? difficulty.difficulty} <small className="catalog-muted" title={DIFFICULTY_FORMULA}>{difficulty.label}</small></dd>
+          </div>
+          <div>
+            <dt>Dogs</dt>
+            <dd>{t.dogs === true ? "Source reports allowed" : t.dogs === false ? "Source reports not allowed" : "Not reported"}</dd>
+          </div>
+          <div>
+            <dt>Managed by</dt>
+            <dd>{t.manager ?? (t.source === "osm" ? "Not reported" : sourceName(t.source))}</dd>
+          </div>
+          {t.sourceType && (
             <div>
-              <dt>Originator</dt>
-              <dd>{t.manager ?? sourceName(t.source)}</dd>
+              <dt>Source</dt>
+              <dd>{t.source === "osm" ? (t.osm ? "Mapped route" : "Mapped trail") : SOURCE_TYPE_LABELS[t.sourceType]}{lastChecked && <small className="catalog-muted"> · checked {lastChecked}</small>}</dd>
             </div>
-            {t.sourceType && (
-              <div>
-                <dt>Source type</dt>
-                <dd>
-                  {SOURCE_TYPE_LABELS[t.sourceType]}
-                  {lastChecked && <small className="catalog-muted"> · checked {lastChecked}</small>}
-                </dd>
-              </div>
-            )}
-            {t.confidence && (
-              <div>
-                <dt>Confidence</dt>
-                <dd>{CONFIDENCE_LABELS[t.confidence]}</dd>
-              </div>
-            )}
-            {t.officialTrailId && (
-              <div>
-                <dt>Official trail number</dt>
-                <dd>#{t.officialTrailId}</dd>
-              </div>
-            )}
-            {(t.forest ?? t.park ?? t.blmArea ?? t.skiResort) && (
-              <div>
-                <dt>{t.forest ? "National forest" : t.park ? "Park" : t.blmArea ? "BLM area" : "Ski resort"}</dt>
-                <dd>
-                  {t.skiResort && !t.forest && !t.park && !t.blmArea ? (
-                    <Link className="catalog-link" href={`/explore/trails?resort=${encodeURIComponent(t.skiResort)}`}>
-                      {t.skiResort} hiking trails
-                    </Link>
-                  ) : (
-                    t.forest ?? t.park ?? t.blmArea
-                  )}
-                </dd>
-              </div>
-            )}
-            {t.trailType && (
-              <div>
-                <dt>Trail type</dt>
-                <dd>{TRAIL_TYPE_LABELS[t.trailType]}{t.uses?.length ? ` · ${t.uses.join(", ")}` : ""}</dd>
-              </div>
-            )}
-            {t.trailStatus && t.trailStatus !== "UNKNOWN" && (
-              <div>
-                <dt>Status</dt>
-                <dd>{{ OPEN: "Open", CLOSED: "Closed", SEASONAL: "Seasonal", RESTRICTED: "Access restricted", UNKNOWN: "Not reported" }[t.trailStatus]}</dd>
-              </div>
-            )}
+          )}
+          {t.confidence && (
             <div>
-              <dt>Surface</dt>
-              <dd>{t.surface ?? "Not reported"}</dd>
+              <dt>Confidence</dt>
+              <dd>{CONFIDENCE_LABELS[t.confidence]}</dd>
             </div>
-            {t.originalName && (
-              <div>
-                <dt>Name in source</dt>
-                <dd>{t.originalName}</dd>
-              </div>
-            )}
+          )}
+          {t.officialTrailId && (
             <div>
-              <dt>Season</dt>
-              <dd>{t.season ?? "Not reported"}</dd>
+              <dt>Official trail number</dt>
+              <dd>#{t.officialTrailId}</dd>
             </div>
+          )}
+          {(t.forest ?? t.park ?? t.blmArea ?? t.skiResort) && (
             <div>
-              <dt>Source edit date</dt>
-              <dd>{t.sourceDate?.slice(0, 10) ?? "Not reported"}</dd>
-            </div>
-            <div>
-              <dt>{t.elevationFt ? "Elevation range" : "Elevation gain"}</dt>
+              <dt>{t.forest ? "National forest" : t.park ? "Park" : t.blmArea ? "BLM area" : "Ski resort"}</dt>
               <dd>
-                {t.elevationFt
-                  ? `${t.elevationFt.min.toLocaleString("en-US")}–${t.elevationFt.max.toLocaleString("en-US")} ft (sampled; not total gain)`
-                  : hasLines
-                    ? "Measured along the line in the elevation profile (AWS Terrain Tiles)"
-                    : "No mapped line to measure"}
+                {t.skiResort && !t.forest && !t.park && !t.blmArea ? (
+                  <Link className="catalog-link" href={`/explore/trails?resort=${encodeURIComponent(t.skiResort)}`}>{t.skiResort} hiking trails</Link>
+                ) : (
+                  t.forest ?? t.park ?? t.blmArea
+                )}
               </dd>
             </div>
+          )}
+          {(t.trailType || t.uses?.length) && (
             <div>
-              <dt>Catalog snapshot</dt>
-              <dd>{manifest.generatedAt.slice(0, 10)}</dd>
+              <dt>Uses</dt>
+              <dd>{[t.trailType ? TRAIL_TYPE_LABELS[t.trailType] : null, ...(t.uses ?? [])].filter(Boolean).join(", ")}</dd>
             </div>
-            {t.quality && (
-              <div>
-                <dt>Data checks</dt>
-                <dd>
-                  {QUALITY_STATUS_LABELS[t.quality]} ({manifest.generatedAt.slice(0, 10)})
-                  {flags.length > 0 && (
-                    <ul className="catalog-flag-list">
-                      {flags.map((flag) => (
-                        <li key={flag}>{QUALITY_FLAGS[flag]}</li>
-                      ))}
-                    </ul>
-                  )}
-                </dd>
-              </div>
-            )}
-          </dl>
-          {t.osm && (
-            <p className="catalog-muted">
-              <a href={`https://www.openstreetmap.org/relation/${t.osm.relation}`} target="_blank" rel="noopener noreferrer">OpenStreetMap relation {t.osm.relation}</a>
-              {t.osm.network && ` · ${({ iwn: "International", nwn: "National", rwn: "Regional", lwn: "Local", icn: "International", ncn: "National", rcn: "Regional", lcn: "Local" } as Record<string, string>)[t.osm.network] ?? t.osm.network} network`}
-              {t.osm.ref && ` · ref ${t.osm.ref}`}
-              {t.osm.website && <> · <a href={t.osm.website} target="_blank" rel="noopener noreferrer">website</a></>}
-              . Line © OpenStreetMap contributors (ODbL).
-            </p>
           )}
-          {t.sources && t.sources.length > 0 && (
-            <p className="catalog-muted">
-              {t.source === "osm" ? "Official records:" : "Also mapped in:"}{" "}
-              {/* One link per distinct source, with a count when an agency mapped several pieces. */}
-              {[...new Map(t.sources.map((ref) => [`${ref.type}:${ref.officialTrailId ?? ""}`, ref])).values()].map((ref, i) => {
-                const pieces = t.sources!.filter((x) => x.type === ref.type && (x.officialTrailId ?? "") === (ref.officialTrailId ?? "")).length;
-                return (
-                  <span key={`${ref.type}-${ref.id}`}>
-                    {i > 0 && " · "}
-                    <a href={ref.url} target="_blank" rel="noopener noreferrer">
-                      {SOURCE_TYPE_LABELS[ref.type]}
-                      {ref.officialTrailId ? ` trail #${ref.officialTrailId}` : ""}
-                      {pieces > 1 ? ` (${pieces} sections)` : ref.name !== t.name ? ` (“${ref.name}”)` : ""}
-                    </a>
-                  </span>
-                );
-              })}
-            </p>
+          {t.trailStatus && t.trailStatus !== "UNKNOWN" && (
+            <div>
+              <dt>Status</dt>
+              <dd>{{ OPEN: "Open", CLOSED: "Closed", SEASONAL: "Seasonal", RESTRICTED: "Access restricted", UNKNOWN: "Not reported" }[t.trailStatus]}</dd>
+            </div>
           )}
-          <p>
-            <a href={t.sourceUrl} target="_blank" rel="noopener noreferrer">
-              {isRoute ? "Official trail information" : t.source === "resort" ? "Resort’s summer trail information" : "View original source record"}
-            </a>
-            {t.officialUrl && t.officialUrl !== t.sourceUrl && (
-              <>
-                {" "}
-                ·{" "}
-                <a href={t.officialUrl} target="_blank" rel="noopener noreferrer">
-                  Land manager’s website
-                </a>
-              </>
-            )}
-          </p>
+          {t.surface && (
+            <div>
+              <dt>Surface</dt>
+              <dd>{t.surface}</dd>
+            </div>
+          )}
+          {t.season && (
+            <div>
+              <dt>Season</dt>
+              <dd>{t.season}</dd>
+            </div>
+          )}
+          {t.originalName && (
+            <div>
+              <dt>Name in source</dt>
+              <dd>{t.originalName}</dd>
+            </div>
+          )}
+          {t.quality && (
+            <div>
+              <dt>Data checks</dt>
+              <dd>
+                {QUALITY_STATUS_LABELS[t.quality]} ({manifest.generatedAt.slice(0, 10)})
+                {flags.length > 0 && (
+                  <ul className="catalog-flag-list">
+                    {flags.map((flag) => <li key={flag}>{QUALITY_FLAGS[flag]}</li>)}
+                  </ul>
+                )}
+              </dd>
+            </div>
+          )}
+        </dl>
+        {t.sources && t.sources.length > 0 && (
           <p className="catalog-muted">
-            {isRoute
-              ? `Guide ID: ${t.sourceId}.`
-              : t.source === "resort"
-                ? `Listed by ${t.skiResort ?? t.manager}; pinned at the resort base area. Entry ID: ${t.sourceId}.`
-                : `State or province is estimated from a point on the trail; long trails may cross boundaries. Source ID${sections > 1 ? " of the longest section" : ""}: ${t.sourceId}.`}
+            {t.source === "osm" ? "Official records:" : "Also mapped in:"}{" "}
+            {/* One link per distinct source, with a count when an agency mapped several pieces. */}
+            {[...new Map(t.sources.map((ref) => [`${ref.type}:${ref.officialTrailId ?? ""}`, ref])).values()].map((ref, i) => {
+              const pieces = t.sources!.filter((x) => x.type === ref.type && (x.officialTrailId ?? "") === (ref.officialTrailId ?? "")).length;
+              return (
+                <span key={`${ref.type}-${ref.id}`}>
+                  {i > 0 && " · "}
+                  <a href={ref.url} target="_blank" rel="noopener noreferrer">
+                    {SOURCE_TYPE_LABELS[ref.type]}
+                    {ref.officialTrailId ? ` trail #${ref.officialTrailId}` : ""}
+                    {pieces > 1 ? ` (${pieces} sections)` : ref.name !== t.name ? ` (“${ref.name}”)` : ""}
+                  </a>
+                </span>
+              );
+            })}
           </p>
+        )}
+        <p>
+          <a href={t.sourceUrl} target="_blank" rel="noopener noreferrer">{isRoute ? "Official trail information" : t.source === "resort" ? "Resort’s summer trail information" : "View the source record"}</a>
+          {t.officialUrl && t.officialUrl !== t.sourceUrl && <> · <a href={t.officialUrl} target="_blank" rel="noopener noreferrer">Land manager’s website</a></>}
+        </p>
+        <p className="catalog-muted">
+          {t.source === "osm" || t.osm || t.sources?.some((ref) => ref.type === "OPENSTREETMAP") ? "Trail line © OpenStreetMap contributors (ODbL). " : ""}
           {t.country === "CA" && !isRoute && (
-            <p className="catalog-muted">
-              Contains information licensed under the{" "}
-              <a
-                href={
-                  t.source === "ontario"
-                    ? "https://www.ontario.ca/page/open-government-licence-ontario"
-                    : "https://open.canada.ca/en/open-government-licence-canada"
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open Government Licence – {t.source === "ontario" ? "Ontario" : "Canada"}
-              </a>
-              .
-            </p>
+            <>Contains information licensed under the <a href={t.source === "ontario" ? "https://www.ontario.ca/page/open-government-licence-ontario" : "https://open.canada.ca/en/open-government-licence-canada"} target="_blank" rel="noopener noreferrer">Open Government Licence – {t.source === "ontario" ? "Ontario" : "Canada"}</a>. </>
           )}
-        </section>
-      </div>
+          Region is estimated from a point on the trail. Snapshot {manifest.generatedAt.slice(0, 10)} · ID {t.sourceId}.
+        </p>
+      </details>
     </article>
   );
 }

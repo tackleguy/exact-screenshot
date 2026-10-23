@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CatalogMapView } from "./CatalogMapView";
-import type { MapPin } from "./CatalogMapViewLeaflet";
+import type { MapPin } from "./CatalogMapViewGl";
 import {
   appleMapsDirectionsUrl,
   googleMapsDirectionsUrl,
@@ -29,7 +29,8 @@ function duration(seconds: number) {
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
 }
 
-export function TrailMapAndDirections({ name, lines, trailhead, landManager }: { name: string; miles?: number | null; lines: Lines; trailhead?: AccessPoint; landManager?: { name: string | null; url: string | null } }) {
+/** The trail map, then `children` (the elevation profile), then directions folded away until opened. */
+export function TrailMapAndDirections({ name, lines, trailhead, landManager, children }: { name: string; miles?: number | null; lines: Lines; trailhead?: AccessPoint; landManager?: { name: string | null; url: string | null }; children?: ReactNode }) {
   const [startIndex, setStartIndex] = useState(0);
   const [origin, setOrigin] = useState<Origin | null>(null);
   const [route, setRoute] = useState<Route | null>(null);
@@ -105,9 +106,10 @@ export function TrailMapAndDirections({ name, lines, trailhead, landManager }: {
 
   return (
     <>
-      <CatalogMapView lines={lines} route={route?.line} pins={pins} />
-      <section className="catalog-directions" aria-labelledby="directions-heading">
-        <h2 id="directions-heading">Getting there</h2>
+      <CatalogMapView lines={lines} route={route?.line} pins={pins} name={name} />
+      {children}
+      <details className="trail-more catalog-directions">
+        <summary><span>Getting there</span><small>Trailhead, parking and driving directions</small></summary>
         {start && (
           <div className="catalog-directions-grid">
             <div>
@@ -118,7 +120,7 @@ export function TrailMapAndDirections({ name, lines, trailhead, landManager }: {
               </select>
               <p className="catalog-muted">
                 {start.latitude.toFixed(5)}, {start.longitude.toFixed(5)}
-                {start.osmUrl && <> · <a href={start.osmUrl} target="_blank" rel="noopener noreferrer">OpenStreetMap record</a></>}
+                {start.osmUrl && <> · <a href={start.osmUrl} target="_blank" rel="noopener noreferrer">Map record</a></>}
                 {start.officialUrl && <> · <a href={start.officialUrl} target="_blank" rel="noopener noreferrer">Forest Service page</a></>}
               </p>
               {start.water && <p className="catalog-muted">Water at the trailhead (Forest Service): {start.water}</p>}
@@ -188,7 +190,7 @@ export function TrailMapAndDirections({ name, lines, trailhead, landManager }: {
             </div>
           </div>
         )}
-      </section>
+      </details>
     </>
   );
 }

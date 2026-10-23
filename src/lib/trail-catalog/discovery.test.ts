@@ -8,7 +8,8 @@ test("local trails appear only after zooming in", () => {
   assert.equal(localTrailsVisible(15), true);
 });
 test("discovery draws a bounded selection and lists fewer cards than it draws", () => {
-  assert.ok(MAP_TRAIL_LIMIT <= 500);
+  // Every trail in view is drawn, but the selection stays bounded so a dense view never stalls the map.
+  assert.ok(MAP_TRAIL_LIMIT <= 5000);
   assert.ok(TRAIL_CARD_LIMIT < MAP_TRAIL_LIMIT);
 });
 test("unnamed source trails never acquire an invented official name", () => {

@@ -5,15 +5,35 @@ import { TRAIL_DETAIL_ZOOM } from "@/lib/trail-catalog/discovery";
 
 /**
  * Basemaps (licences in DECISIONS.md):
- * - topo: OpenFreeMap "liberty" vector map (OpenMapTiles schema, © OpenStreetMap contributors) with hillshading and
- *   contour lines computed in a web worker from AWS Terrain Tiles (Terrarium DEM).
- * - standard: the same OpenFreeMap map without terrain.
- * - satellite: Esri World Imagery with Esri reference roads and place names.
+ * - topo, standard, bright, light, dark: OpenFreeMap vector maps ("liberty", "bright", "positron", "dark";
+ *   OpenMapTiles schema, © OpenStreetMap contributors); topo adds hillshading and contour lines computed in a web
+ *   worker from AWS Terrain Tiles (Terrarium DEM).
+ * - outdoors, terrain, relief, natgeo, satellite: Esri raster basemaps (World Topo, World Terrain Base, World
+ *   Shaded Relief, National Geographic, World Imagery) with Esri's attribution; terrain, relief and hybrid add
+ *   hillshading and contours from the same DEM.
+ * - usgs, usgs-imagery: USGS The National Map (U.S. only, public domain).
  */
-export type Basemap = "topo" | "satellite" | "standard";
+export type Basemap = "topo" | "outdoors" | "terrain" | "relief" | "natgeo" | "usgs" | "usgs-imagery" | "satellite" | "hybrid" | "standard" | "bright" | "light" | "dark";
+
+/** Every basemap with its picker label, hint and swatch (a tile of Yosemite Valley, or a CSS pattern). */
+export const BASEMAPS: readonly { key: Basemap; label: string; hint: string }[] = [
+  { key: "topo", label: "Topo", hint: "Contours and terrain shading" },
+  { key: "outdoors", label: "Outdoors", hint: "Topographic map with trails and relief" },
+  { key: "terrain", label: "Terrain", hint: "Landforms, shading and contours" },
+  { key: "relief", label: "Shaded relief", hint: "Mountains and valleys in relief" },
+  { key: "natgeo", label: "National Geographic", hint: "Classic atlas style" },
+  { key: "usgs", label: "USGS Topo", hint: "U.S. government topo maps (U.S. only)" },
+  { key: "usgs-imagery", label: "USGS Imagery Topo", hint: "Aerial photos with topo lines (U.S. only)" },
+  { key: "satellite", label: "Satellite", hint: "Aerial imagery with roads" },
+  { key: "hybrid", label: "Satellite + contours", hint: "Imagery with contour lines" },
+  { key: "standard", label: "Standard", hint: "Streets and places" },
+  { key: "bright", label: "Bright", hint: "Colourful streets and parks" },
+  { key: "light", label: "Light", hint: "Quiet grey map that lets trails stand out" },
+  { key: "dark", label: "Dark", hint: "Night-friendly dark map" },
+];
 
 const TERRARIUM = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png";
-const OPENFREEMAP = "https://tiles.openfreemap.org/styles/liberty";
+const OPENFREEMAP = "https://tiles.openfreemap.org/styles";
 const GLYPHS = "https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf";
 
 export const TERRAIN_SOURCE: maplibreTypes.RasterDEMSourceSpecification = {
@@ -77,59 +97,93 @@ function contours() {
   return dem;
 }
 
-let libertyStyle: Promise<maplibreTypes.StyleSpecification> | null = null;
-function liberty() {
-  libertyStyle ??= fetch(OPENFREEMAP).then((r) => {
-    if (!r.ok) throw new Error(`Basemap style ${r.status}`);
-    return r.json() as Promise<maplibreTypes.StyleSpecification>;
-  }).catch((error) => { libertyStyle = null; throw error; });
-  return libertyStyle;
+const vectorStyles = new Map<string, Promise<maplibreTypes.StyleSpecification>>();
+/** An OpenFreeMap vector style (liberty, bright, positron, dark), fetched once. */
+function openFreeMap(name: string) {
+  let hit = vectorStyles.get(name);
+  if (!hit) {
+    hit = fetch(`${OPENFREEMAP}/${name}`).then((r) => {
+      if (!r.ok) throw new Error(`Basemap style ${r.status}`);
+      return r.json() as Promise<maplibreTypes.StyleSpecification>;
+    }).catch((error) => { vectorStyles.delete(name); throw error; });
+    vectorStyles.set(name, hit);
+  }
+  return hit;
 }
 
-/** Hillshading under the roads and water, contours (feet) with labels on index lines. */
-function withTerrain(style: maplibreTypes.StyleSpecification): maplibreTypes.StyleSpecification {
-  const layers = [...style.layers];
-  const at = (re: RegExp) => { const i = layers.findIndex((l) => re.test(l.id)); return i < 0 ? layers.length : i; };
-  layers.splice(at(/^water/), 0, {
-    id: "hillshade", type: "hillshade", source: "terrain",
-    paint: { "hillshade-exaggeration": 0.35, "hillshade-shadow-color": "#4b5a49", "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#6b7b67" },
-  });
-  const contourLayers: maplibreTypes.LayerSpecification[] = [
+const hillshadeLayer = (exaggeration = 0.35, dark = false): maplibreTypes.LayerSpecification => ({
+  id: "hillshade", type: "hillshade", source: "terrain",
+  paint: dark
+    ? { "hillshade-exaggeration": exaggeration, "hillshade-shadow-color": "#000000", "hillshade-highlight-color": "#3a4a3a", "hillshade-accent-color": "#111a11" }
+    : { "hillshade-exaggeration": exaggeration, "hillshade-shadow-color": "#4b5a49", "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#6b7b67" },
+});
+
+/** Contour lines (feet) with labels on index lines, coloured for a light or an imagery background. */
+function contourLayers(onImagery = false): maplibreTypes.LayerSpecification[] {
+  return [
     { id: "contours", type: "line", source: "contours", "source-layer": "contours", minzoom: 10,
-      paint: { "line-color": "#8a6b4a", "line-opacity": ["case", [">", ["get", "level"], 0], 0.55, 0.28], "line-width": ["case", [">", ["get", "level"], 0], 1, 0.5] } },
+      paint: { "line-color": onImagery ? "#f7e7c6" : "#8a6b4a", "line-opacity": ["case", [">", ["get", "level"], 0], onImagery ? 0.7 : 0.55, onImagery ? 0.4 : 0.28], "line-width": ["case", [">", ["get", "level"], 0], 1, 0.5] } },
     { id: "contour-labels", type: "symbol", source: "contours", "source-layer": "contours", minzoom: 12, filter: [">", ["get", "level"], 0],
       layout: { "symbol-placement": "line", "text-field": ["concat", ["number-format", ["get", "ele"], {}], " ft"], "text-font": ["Noto Sans Regular"], "text-size": 10 },
-      paint: { "text-color": "#7a5c3c", "text-halo-color": "#fbf8f1", "text-halo-width": 1.2 } },
+      paint: onImagery ? { "text-color": "#fff8e8", "text-halo-color": "#3b2f1f", "text-halo-width": 1.2 } : { "text-color": "#7a5c3c", "text-halo-color": "#fbf8f1", "text-halo-width": 1.2 } },
   ];
-  layers.splice(at(/^(tunnel|road|bridge|building)/), 0, ...contourLayers);
+}
+
+/** The DEM sources every style carries: terrain (hillshading and 3D) and generated contour tiles. */
+function demSources(): Record<string, maplibreTypes.SourceSpecification> {
   return {
-    ...style,
-    sources: {
-      ...style.sources,
-      terrain: TERRAIN_SOURCE,
-      contours: {
-        type: "vector",
-        tiles: [contours().contourProtocolUrl({ multiplier: 3.28084, thresholds: { 10: [200, 1000], 12: [100, 500], 13: [50, 250], 15: [20, 100] }, elevationKey: "ele", levelKey: "level", contourLayer: "contours" })],
-        maxzoom: 15,
-      },
+    terrain: TERRAIN_SOURCE,
+    contours: {
+      type: "vector",
+      tiles: [contours().contourProtocolUrl({ multiplier: 3.28084, thresholds: { 10: [200, 1000], 12: [100, 500], 13: [50, 250], 15: [20, 100] }, elevationKey: "ele", levelKey: "level", contourLayer: "contours" })],
+      maxzoom: 15,
     },
-    layers,
   };
 }
 
+/** Hillshading under the roads and water, contours (feet) with labels on index lines. */
+function withTerrain(style: maplibreTypes.StyleSpecification, exaggeration = 0.35, dark = false): maplibreTypes.StyleSpecification {
+  const layers = [...style.layers];
+  const at = (re: RegExp) => { const i = layers.findIndex((l) => re.test(l.id)); return i < 0 ? layers.length : i; };
+  layers.splice(at(/^water/), 0, hillshadeLayer(exaggeration, dark));
+  if (!dark) layers.splice(at(/^(tunnel|road|bridge|building)/), 0, ...contourLayers());
+  return { ...style, sources: { ...style.sources, ...demSources() }, layers };
+}
+
 const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
-function satellite(): maplibreTypes.StyleSpecification {
+const USGS = "https://basemap.nationalmap.gov/arcgis/rest/services";
+const esri = (service: string) => `${ESRI}/${service}/MapServer/tile/{z}/{y}/{x}`;
+const ESRI_CREDIT = "Basemap © Esri and its data providers";
+
+/** A raster basemap: base tiles, optional hillshading and contours from the DEM, optional label tiles on top. */
+function rasterStyle(base: { tiles: string; maxzoom: number; attribution: string }, opts: { hillshade?: number; contours?: boolean; onImagery?: boolean; labels?: string[] } = {}): maplibreTypes.StyleSpecification {
+  const sources: Record<string, maplibreTypes.SourceSpecification> = {
+    ...demSources(),
+    base: { type: "raster", tiles: [base.tiles], tileSize: 256, maxzoom: base.maxzoom, attribution: base.attribution },
+  };
+  const layers: maplibreTypes.LayerSpecification[] = [{ id: "base", type: "raster", source: "base" }];
+  if (opts.hillshade) layers.push(hillshadeLayer(opts.hillshade));
+  if (opts.contours) layers.push(...contourLayers(opts.onImagery));
+  (opts.labels ?? []).forEach((url, i) => {
+    sources[`labels-${i}`] = { type: "raster", tiles: [url], tileSize: 256, maxzoom: 19 };
+    layers.push({ id: `labels-${i}`, type: "raster", source: `labels-${i}` });
+  });
+  return { version: 8, glyphs: GLYPHS, sources, layers };
+}
+
+function satellite(withContours = false): maplibreTypes.StyleSpecification {
   return {
     version: 8,
     glyphs: GLYPHS,
     sources: {
-      terrain: TERRAIN_SOURCE,
+      ...demSources(),
       satellite: { type: "raster", tiles: [`${ESRI}/World_Imagery/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19, attribution: "Imagery © Esri, Maxar, Earthstar Geographics" },
       roads: { type: "raster", tiles: [`${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 },
       labels: { type: "raster", tiles: [`${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`], tileSize: 256, maxzoom: 19 },
     },
     layers: [
       { id: "satellite", type: "raster", source: "satellite" },
+      ...(withContours ? contourLayers(true) : []),
       { id: "roads", type: "raster", source: "roads" },
       { id: "labels", type: "raster", source: "labels" },
     ],
@@ -137,10 +191,22 @@ function satellite(): maplibreTypes.StyleSpecification {
 }
 
 export async function explorerStyle(basemap: Basemap): Promise<maplibreTypes.StyleSpecification> {
-  if (basemap === "satellite") return satellite();
+  switch (basemap) {
+    case "satellite": return satellite();
+    case "hybrid": return satellite(true);
+    case "outdoors": return rasterStyle({ tiles: esri("World_Topo_Map"), maxzoom: 19, attribution: ESRI_CREDIT });
+    case "terrain": return rasterStyle({ tiles: esri("World_Terrain_Base"), maxzoom: 13, attribution: ESRI_CREDIT }, { hillshade: 0.45, contours: true, labels: [esri("Reference/World_Reference_Overlay")] });
+    case "relief": return rasterStyle({ tiles: esri("World_Shaded_Relief"), maxzoom: 13, attribution: ESRI_CREDIT }, { hillshade: 0.3, labels: [esri("Reference/World_Boundaries_and_Places")] });
+    case "natgeo": return rasterStyle({ tiles: esri("NatGeo_World_Map"), maxzoom: 16, attribution: `${ESRI_CREDIT}, National Geographic` });
+    case "usgs": return rasterStyle({ tiles: `${USGS}/USGSTopo/MapServer/tile/{z}/{y}/{x}`, maxzoom: 16, attribution: "USGS The National Map" });
+    case "usgs-imagery": return rasterStyle({ tiles: `${USGS}/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}`, maxzoom: 16, attribution: "USGS The National Map" });
+  }
   try {
-    const style = await liberty();
-    return basemap === "topo" ? withTerrain(style) : { ...style, sources: { ...style.sources, terrain: TERRAIN_SOURCE } };
+    const name = { topo: "liberty", standard: "liberty", bright: "bright", light: "positron", dark: "dark" }[basemap];
+    const style = await openFreeMap(name);
+    if (basemap === "topo") return withTerrain(style);
+    if (basemap === "dark") return withTerrain(style, 0.25, true);
+    return { ...style, sources: { ...style.sources, ...demSources() } };
   } catch {
     // The vector basemap is unreachable: imagery still gives a usable map with Hyked trails on top.
     return satellite();
@@ -270,10 +336,11 @@ export function installOverlay(map: maplibreTypes.Map, data: OverlayData) {
     id: "hy-pin", type: "circle", source: "hy-pins", minzoom: TRAIL_DETAIL_ZOOM, filter: ["!", ["has", "point_count"]],
     paint: {
       "circle-color": difficultyColor,
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 4, 5, 10, 7, 14, 6],
+      // Small start markers: the lines carry the map once they are drawn.
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, 4.5, 13, 3.5, 16, 4.5],
       "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 2,
-      "circle-opacity": ["interpolate", ["linear"], ["zoom"], 12, 1, 15, 0.85],
+      "circle-stroke-width": 1.5,
+      "circle-opacity": ["interpolate", ["linear"], ["zoom"], 12, 1, 14, 0.75],
     },
   });
   map.addLayer({
@@ -285,7 +352,7 @@ export function installOverlay(map: maplibreTypes.Map, data: OverlayData) {
   map.addSource("hy-pois", { type: "geojson", data: data.pois ?? EMPTY });
   for (const group of ["other", "camping", "water"] as const) {
     map.addLayer({
-      id: `hy-feat-${group}`, type: "circle", source: "hy-pois", minzoom: TRAIL_DETAIL_ZOOM, filter: ["==", ["get", "group"], group],
+      id: `hy-feat-${group}`, type: "circle", source: "hy-pois", minzoom: group === "other" ? 13.5 : 12, filter: ["==", ["get", "group"], group],
       paint: {
         "circle-color": FEATURE_GROUP_COLORS[group],
         "circle-radius": ["interpolate", ["linear"], ["zoom"], 11, group === "other" ? 3 : 4, 15, group === "other" ? 5.5 : 7],

@@ -2,8 +2,8 @@
 
 import dynamic from "next/dynamic";
 
-// Leaflet reads `window` when imported, so the map only renders in the browser.
+// MapLibre needs the browser (WebGL), so the map only renders on the client.
 export const CatalogMapView = dynamic(
-  () => import("./CatalogMapViewLeaflet").then((m) => m.CatalogMapView),
+  () => import("./CatalogMapViewGl").then((m) => m.CatalogMapView),
   { ssr: false, loading: () => <div className="catalog-map-canvas" aria-hidden /> },
 );

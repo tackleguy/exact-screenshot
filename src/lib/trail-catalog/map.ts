@@ -8,6 +8,13 @@ export function withinBounds(longitude: number, latitude: number, [west, south, 
   return latitude >= south && latitude <= north && inLongitude;
 }
 
+/** True when a trail's line extent overlaps the box (both given west, south, east, north). */
+export function boundsOverlap([w, s, e, n]: [number, number, number, number], [west, south, east, north]: CatalogBounds) {
+  if (n < south || s > north) return false;
+  if (west > east) return e >= west || w <= east; // the box crosses the date line
+  return e >= west && w <= east;
+}
+
 /** The shortest longitudinal extent also handles sections on either side of the date line. */
 export function catalogBounds(trails: CatalogTrail[]): CatalogBounds | null {
   if (!trails.length) return null;

@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { TrailElevationProfile } from "./TrailElevationProfile";
 import { useMyGear } from "@/lib/account/my-gear";
 import type { WaterReport } from "@/lib/trip/water";
-import type { ElevationProfile } from "@/lib/trip/elevation";
 import type { TownDayPlan } from "@/lib/trip/town-days";
 import type { TownWithServices } from "@/lib/trip/trail-trip";
 import { SERVICE_LABELS, type ServiceKey } from "@/lib/trip/services";
-import { feet, isNum, join } from "@/lib/display";
+import { isNum, join } from "@/lib/display";
 
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; data: T };
 const WATER = { tap: "Tap", spring: "Spring", river: "River", stream: "Stream", lake: "Lake" } as const;
@@ -29,10 +27,9 @@ function useJson<T>(url: string | null): Load<T> {
 
 const services = (t: TownWithServices) => (t.services ? (Object.keys(SERVICE_LABELS) as ServiceKey[]).filter((k) => (t.services!.counts[k] ?? 0) > 0) : []);
 
-/** Elevation, water, towns, town days and downloads for a catalog trail, all from the public API. */
+/** Water, towns, town days and downloads for a catalog trail, all from the public API (elevation has its own section). */
 export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLine: boolean; miles: number | null }) {
   const base = `/api/trail-catalog/${encodeURIComponent(trailId)}`;
-  const elevation = useJson<ElevationProfile>(hasLine ? `${base}/elevation` : null);
   const water = useJson<WaterReport>(hasLine ? `${base}/water` : null);
   const towns = useJson<{ towns: TownWithServices[]; attribution: string }>(`${base}/towns`);
   const myGear = useMyGear();
@@ -67,21 +64,6 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
   return (
     <section className="catalog-trip-tools" aria-labelledby="trip-tools-heading">
       <h2 id="trip-tools-heading">Trip tools</h2>
-
-      {hasLine && (
-        <div className="catalog-trip-block">
-          <h3>Elevation</h3>
-          {elevation.state === "loading" && <p className="catalog-muted" role="status">Measuring elevation…</p>}
-          {elevation.state === "error" && <p className="catalog-muted">{elevation.message}</p>}
-          {elevation.state === "ready" && (
-            <>
-              <p>{join([feet(elevation.data.gainFt) && `+${feet(elevation.data.gainFt)} climb`, feet(elevation.data.lossFt) && `−${feet(elevation.data.lossFt)} descent`, feet(elevation.data.minFt) && feet(elevation.data.maxFt) && `${elevation.data.minFt.toLocaleString("en-US")}–${feet(elevation.data.maxFt)}`])} <small className="catalog-muted">(in the direction the trail is mapped)</small></p>
-              <TrailElevationProfile samples={elevation.data.profile.map(([mi, ft]) => ({ distance_m: mi * 1609.344, elevation_ft: ft }))} />
-              <p className="catalog-muted">{elevation.data.partial ? "Part of the elevation data couldn’t be loaded, so these totals cover only part of the trail. Reload to try again." : "Estimated from sampled ground elevation along the mapped line."}</p>
-            </>
-          )}
-        </div>
-      )}
 
       {hasLine && (
         <div className="catalog-trip-block">

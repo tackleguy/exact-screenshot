@@ -212,7 +212,7 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
         <button type="button" className="hx-btn" disabled={!start || !end} onClick={reverse}>Reverse</button>
         <button type="button" className="hx-btn" disabled={!start && !end} onClick={clear}>Clear</button>
       </div>
-      <label className="hx-check rb-check"><input type="checkbox" checked={connectors} onChange={(e) => apply({ connectors: e.target.checked })} /> Allow road connectors <small>(walk roads between trail networks, routed on OpenStreetMap roads)</small></label>
+      <label className="hx-check rb-check"><input type="checkbox" checked={connectors} onChange={(e) => apply({ connectors: e.target.checked })} /> Allow road connectors <small>(walk roads between trail networks, routed on public roads)</small></label>
       {picking && <p className="rb-picking" role="status">Tap the map to set the {picking === "via" ? "waypoint" : picking}.</p>}
       {busy && <p className="rb-status" role="status"><span className="hx-spinner" aria-hidden="true" /> Finding the best trails…</p>}
       {error && <p className="rb-error" role="alert">{error}</p>}
