@@ -246,4 +246,15 @@ async function main() {
   await writeFile(path.resolve("public/robots.txt"), `User-agent: *\nAllow: /\nDisallow: /admin\n\nSitemap: ${SITE}/sitemap.xml\n`);
   console.log(`Prepared ${(rows.length + worldRows).toLocaleString("en-US")} trails (${worldRows.toLocaleString("en-US")} worldwide in ${countriesWithTrails.length} countries) in ${cells.size} + ${Object.values(worldCells).flat().length} cell files; ${names.length} sitemap files.`);
 }
-main().catch((error) => { console.error(error); process.exitCode = 1; });
+/** Lovable hosting rejects builds with more than 50,000 files; keep generated data well under that. */
+const MAX_FILES = Number(process.env.MAX_TRAIL_FILES ?? 40_000);
+async function countFiles(dir: string): Promise<number> {
+  let n = 0;
+  for (const e of await readdir(dir, { withFileTypes: true })) n += e.isDirectory() ? await countFiles(path.join(dir, e.name)) : 1;
+  return n;
+}
+main().then(async () => {
+  const n = await countFiles(path.resolve("public"));
+  console.log(`public/ holds ${n.toLocaleString("en-US")} files`);
+  if (n > MAX_FILES) throw new Error(`Too many generated files (${n} > ${MAX_FILES}); hosting caps builds at 50,000.`);
+}).catch((error) => { console.error(error); process.exitCode = 1; });
