@@ -69,7 +69,7 @@ const SUB_ACTIVITIES: Record<TrailSectionKey, CatalogActivity[]> = {
 const ALL_LABEL: Partial<Record<CatalogActivity, string>> = { hike: "All on foot", bike: "All biking" };
 const LINE_ZOOM = TRAIL_DETAIL_ZOOM;
 
-interface Filters { activity: CatalogActivityFilter; difficulty: string[]; length: string; routeType: string }
+interface Filters { activity: CatalogActivityFilter; difficulty: string[]; length: string; routeType: string; verified: boolean; dogs: boolean }
 
 function filterParams(f: Filters) {
   const p = new URLSearchParams({ activity: f.activity });
@@ -78,6 +78,8 @@ function filterParams(f: Filters) {
   if (min) p.set("minMiles", min);
   if (max) p.set("maxMiles", max);
   if (f.routeType) p.set("routeType", f.routeType);
+  if (f.verified) p.set("verified", "true");
+  if (f.dogs) p.set("dogFriendly", "true");
   return p;
 }
 
@@ -119,7 +121,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const fetchAbort = useRef<AbortController | null>(null);
   const hovered = useRef<number | string | null>(null);
 
-  const [filters, setFilters] = useState<Filters>({ activity: initial.activity, difficulty: [], length: "", routeType: "" });
+  const [filters, setFilters] = useState<Filters>({ activity: initial.activity, difficulty: [], length: "", routeType: "", verified: false, dogs: false });
   const filtersRef = useRef(filters);
   // The chosen map style is remembered on this device.
   const [basemap, setBasemapState] = useState<Basemap>(() => {
@@ -618,7 +620,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     if (q.length < 3) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      const p = filterParams({ ...filtersRef.current, difficulty: [], length: "", routeType: "" });
+      const p = filterParams({ ...filtersRef.current, difficulty: [], length: "", routeType: "", verified: false, dogs: false });
       p.set("q", q); p.set("limit", "8");
       void fetch(`/api/trail-catalog?${p}`, { signal: controller.signal })
         .then((r) => (r.ok ? r.json() : null))
@@ -675,7 +677,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     if (next) setFilters((f) => ({ ...f, activity: next.activity }));
     if (key === "snow") setLayers((prev) => ({ ...prev, ski: true }));
   };
-  const activeFilters = filters.difficulty.length + (filters.length ? 1 : 0) + (filters.routeType ? 1 : 0);
+  const activeFilters = filters.difficulty.length + (filters.length ? 1 : 0) + (filters.routeType ? 1 : 0) + (filters.verified ? 1 : 0) + (filters.dogs ? 1 : 0);
   const selectedCard = cards.find((t) => t[0] === selectedId);
   const gain = elevation && elevation !== "none" ? effortClimbFt(elevation, detail?.trail.routeType) : null;
 
@@ -885,8 +887,10 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
               </div>
             )}
           </div>
+          <button type="button" className="hx-chip" aria-pressed={filters.verified} onClick={() => setFilters((f) => ({ ...f, verified: !f.verified }))}>Verified</button>
+          <button type="button" className="hx-chip" aria-pressed={filters.dogs} onClick={() => setFilters((f) => ({ ...f, dogs: !f.dogs }))}>Dogs allowed</button>
           {activeFilters > 0 && (
-            <button type="button" className="hx-chip hx-chip--clear" onClick={() => setFilters((f) => ({ ...f, difficulty: [], length: "", routeType: "" }))}>
+            <button type="button" className="hx-chip hx-chip--clear" onClick={() => setFilters((f) => ({ ...f, difficulty: [], length: "", routeType: "", verified: false, dogs: false }))}>
               Clear {activeFilters}
             </button>
           )}

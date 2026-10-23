@@ -15,16 +15,28 @@ export const cellFile = (ref: string) => {
   return country ? `cell-${key}-${country}.json.gz` : `cell-${key}.json.gz`;
 };
 
-/** Trail id → where it lives, in 256 files: `lookup/l-<hh>.json.gz` ({ id: "c:<cell ref>" | "r:<id it merged into>" }). */
-export const LOOKUP_SHARDS = 256;
-export function lookupShard(id: string) {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
-  return (h % LOOKUP_SHARDS).toString(16).padStart(2, "0");
-}
-
 /** Bounds [west, south, east, north] of a 2° pin cell key. */
 export function cellBounds(key: string): [number, number, number, number] {
   const [x, y] = key.split("_").map(Number);
   return [x * 2 - 180, y * 2 - 90, x * 2 - 178, y * 2 - 88];
 }
+
+/** Every trail's full record, in 16,384 files by id: `rows/r-<hhhh>.json.gz` ({ id: trail | "r:<id it merged into>" }). */
+export const ROW_SHARDS = 16384;
+export function rowShard(id: string) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193) >>> 0;
+  return (h % ROW_SHARDS).toString(16).padStart(4, "0");
+}
+
+/**
+ * Search files: `q/<key>.json.gz` holds every trail with a name, other-name or park/forest word starting with the
+ * key (the word's first three letters). Words this common in trail names are not keys; a trail named only with
+ * them is filed under them anyway.
+ */
+export const SEARCH_STOPWORDS = new Set(
+  "national forest park state county recreation area regional provincial reserve trail trails route chemin bike footpath road des camino loop track del weg via street unnamed avenue path sentier sentiero wanderweg rundweg rundwanderweg les the and walk spur lane way circuit von der die das und sur aux con per los las".split(" "),
+);
+export const searchKey = (word: string) => word.slice(0, 3);
+/** Region and country files: the best-documented trails of a region (`q/r-<region>.json.gz`) or country (`q/c-<CC>.json.gz`). */
+export const regionSlug = (normalizedRegion: string) => normalizedRegion.replace(/ /g, "-");

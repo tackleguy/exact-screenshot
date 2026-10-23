@@ -192,8 +192,8 @@ async function main() {
 
   // ---- worldwide (skipped when the build has no worldwide trails) ----
   const pointer = JSON.parse(await readFile(path.join(DATA, "current.json"), "utf8")) as { directory: string };
-  const manifest = JSON.parse(await readFile(path.join(DATA, pointer.directory, "manifest.json"), "utf8")) as { searchShards?: string[] };
-  const world = (manifest.searchShards ?? []).length > 0;
+  const manifest = JSON.parse(await readFile(path.join(DATA, pointer.directory, "manifest.json"), "utf8")) as { searchCountries?: string[] };
+  const world = (manifest.searchCountries ?? []).length > 2;
   const worldSearch = (label: string, q: string, name: RegExp, country: string) => check(label, async () => {
     if (!world) return { skip: "no worldwide trails in this build" };
     const { ok, data } = await search(q);

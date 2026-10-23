@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type { SkiArea, SkiFeatureSummary } from "@/lib/ski";
 import type { MapMarker } from "@/lib/types";
@@ -26,6 +26,19 @@ export function SkiMapClient() {
     zoom?: number;
   } | null>(null);
   const [loading, setLoading] = useState(false);
+  // Every ski area in view (count bubbles when zoomed out), so the map is never empty.
+  const [inView, setInView] = useState<{ areas: SkiArea[]; clusters: { lat: number; lng: number; count: number; name: string }[]; total: number } | null>(null);
+  const viewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const zoomRef = useRef(4);
+  const loadInView = useCallback((b: { west: number; south: number; east: number; north: number }) => {
+    clearTimeout(viewTimer.current);
+    viewTimer.current = setTimeout(() => {
+      const zoom = Math.max(1, Math.log2(360 / Math.max(0.01, b.east - b.west)) + 2);
+      zoomRef.current = zoom;
+      const bbox = [b.west, b.south, b.east, b.north].map((v) => v.toFixed(3)).join(",");
+      fetch(`/api/ski/areas?bbox=${bbox}&zoom=${zoom.toFixed(1)}`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d) setInView(d); }).catch(() => undefined);
+    }, 150);
+  }, []);
   const trimmedQuery = query.trim();
   const location = useLocationPermission();
 
@@ -87,8 +100,10 @@ export function SkiMapClient() {
       .catch(() => {});
   }, [searchParams, flyToArea]);
 
+  const searching = Boolean(trimmedQuery && results.length);
   const markers = useMemo((): MapMarker[] => {
-    return results.map((area) => ({
+    const areas = searching ? results : inView?.areas ?? [];
+    const pins: MapMarker[] = areas.map((area) => ({
       id: area.id,
       type: "resort" as const,
       name: area.name,
@@ -97,18 +112,28 @@ export function SkiMapClient() {
       subtitle: area.region,
       href: `/explore/ski?area=${area.id}`,
     }));
-  }, [results]);
+    if (searching) return pins;
+    return [...pins, ...(inView?.clusters ?? []).map((c) => ({
+      id: `cluster:${c.lat}:${c.lng}`,
+      type: "resort" as const,
+      name: `${c.count} ski areas, including ${c.name}`,
+      latitude: c.lat,
+      longitude: c.lng,
+      href: "",
+      clusterCount: c.count,
+    }))];
+  }, [results, searching, inView]);
+  const areaById = useMemo(() => new Map([...results, ...(inView?.areas ?? [])].map((a) => [a.id, a])), [results, inView]);
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] min-h-[480px] flex-col md:h-[calc(100dvh-4.5rem)]">
       <div className="shrink-0 border-b border-[var(--border)] bg-surface-elevated px-4 py-3">
         <p className="section-label">Explore · Ski</p>
         <h1 className="font-display text-xl font-semibold text-cream">
-          Nordic ski trails
+          Ski areas
         </h1>
         <p className="mt-1 text-xs text-mist">
-          Zoom in for nordic ski trails. Search a resort to fly
-          there, or{" "}
+          {inView ? `${inView.total.toLocaleString("en-US")} ski ${inView.total === 1 ? "area" : "areas"} in view. ` : ""}Tap one for runs and lifts, search a resort, or{" "}
           <Link
             href="/explore/trails?activity=ski&includeWinter=true"
             className="font-semibold text-accent"
@@ -172,7 +197,8 @@ export function SkiMapClient() {
           markers={markers}
           className="h-full w-full rounded-none"
           geolocate
-          fitToMarkers={markers.length > 0 && !mapFocus}
+          fitToMarkers={searching && !mapFocus}
+          onBoundsChange={loadInView}
           focus={mapFocus}
           onGeolocate={(lat, lng) =>
             setMapFocus({ lat, lng, zoom: 11 })
@@ -183,7 +209,11 @@ export function SkiMapClient() {
             setMapFocus({ lat: feature.lat, lng: feature.lng, zoom: 14 });
           }}
           onMarkerClick={(marker) => {
-            const area = results.find((r) => r.id === marker.id);
+            if (marker.clusterCount) {
+              setMapFocus({ lat: marker.latitude, lng: marker.longitude, zoom: Math.min(13, zoomRef.current + 2) });
+              return;
+            }
+            const area = areaById.get(marker.id);
             if (area) flyToArea(area);
           }}
         />

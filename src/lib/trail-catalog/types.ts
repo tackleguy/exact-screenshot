@@ -190,6 +190,10 @@ export interface CatalogFilters {
   collection?: string;
   peakCategory?: "14er" | "8000m" | "seven-summits";
   thruHikeSections?: boolean;
+  /** Only trails an official agency or guide confirms (tier "verified"). */
+  verified?: boolean;
+  /** List order: best (default), shortest or longest first. */
+  sort?: "best" | "short" | "long";
 }
 
 const COUNTRY_NAMES: Record<string, string> = {

@@ -1,13 +1,17 @@
 import Link from "next/link";
 import type { CatalogManifest, CatalogTrail, CatalogMapResult } from "@/lib/trail-catalog/types";
 import { parseCatalogFilters } from "@/lib/trail-catalog/search";
-import { headlineCount, countryName, displayMiles, trailPlace } from "@/lib/trail-catalog/types";
+import { headlineCount, countryName, displayMiles, trailPlace, trailSacScale } from "@/lib/trail-catalog/types";
+import { resolveDifficulty } from "@/lib/trail-difficulty";
 import { QUALITY_STATUS_LABELS } from "@/lib/trail-catalog/quality";
 import { CatalogMap } from "@/components/trails/CatalogMap";
 import { NavIcon } from "@/components/nav/NavIcon";
 import { SectionIcon } from "@/components/explore/SectionIcon";
 import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf } from "@/lib/trail-catalog/activity";
 import "@/components/trails/catalog.css";
+
+const ROUTE_SHAPES = { loop: "Loop", "point-to-point": "One way", network: "Connected paths" } as const;
+const LENGTHS = [["", "Any length"], ["-3", "Under 3 mi"], ["3-8", "3 – 8 mi"], ["8-15", "8 – 15 mi"], ["15-", "Over 15 mi"]] as const;
 
 export interface CatalogResult { trails: CatalogTrail[]; total: number; page: number; pages: number; limit: number; manifest: CatalogManifest; /** Name/place matches when more matched than were ranked and loaded. */ queryMatches?: number }
 export function CatalogPresentation({ params, result, mapData }: { params: URLSearchParams; result: CatalogResult; mapData: CatalogMapResult | null }) {
@@ -31,8 +35,15 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
     filters.uniqueNames && "Unique names",
     filters.includeFragments && "Partial segments",
     filters.region,
-    filters.minMiles !== undefined && `${filters.minMiles}+ mi`,
-    filters.maxMiles !== undefined && `Up to ${filters.maxMiles} mi`,
+    filters.minMiles !== undefined && filters.maxMiles !== undefined
+      ? `${filters.minMiles}–${filters.maxMiles} mi`
+      : filters.minMiles !== undefined ? `${filters.minMiles}+ mi` : filters.maxMiles !== undefined && `Under ${filters.maxMiles} mi`,
+    filters.difficulty && filters.difficulty[0].toUpperCase() + filters.difficulty.slice(1),
+    filters.routeType && ROUTE_SHAPES[filters.routeType],
+    filters.dogFriendly && "Dogs allowed",
+    filters.verified && "Verified only",
+    filters.sort === "short" && "Shortest first",
+    filters.sort === "long" && "Longest first",
   ]
     .filter(Boolean)
     .join(" · ");
@@ -145,37 +156,43 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                 </select>
               </label>
               <label>
-                Minimum miles
-                <input
-                  name="minMiles"
-                  type="number"
-                  min="0"
-                  max="10000"
-                  step="any"
-                  defaultValue={params.get("minMiles") ?? ""}
-                  placeholder="Any"
-                />
+                Length
+                <select name="length" defaultValue={params.get("length") ?? ""}>
+                  {LENGTHS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
               </label>
               <label>
-                Maximum miles
-                <input
-                  name="maxMiles"
-                  type="number"
-                  min="0"
-                  max="10000"
-                  step="any"
-                  defaultValue={params.get("maxMiles") ?? ""}
-                  placeholder="Any"
-                />
+                Difficulty
+                <select name="difficulty" defaultValue={params.get("difficulty") ?? ""}>
+                  <option value="">Any difficulty</option>
+                  <option value="easy">Easy</option>
+                  <option value="moderate">Moderate</option>
+                  <option value="hard">Hard</option>
+                  <option value="expert">Expert</option>
+                </select>
+              </label>
+              <label>
+                Route shape
+                <select name="routeType" defaultValue={params.get("routeType") ?? ""}>
+                  <option value="">Any shape</option>
+                  {Object.entries(ROUTE_SHAPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label>
+                Sort
+                <select name="sort" defaultValue={params.get("sort") ?? ""}>
+                  <option value="">Best match</option>
+                  <option value="short">Shortest first</option>
+                  <option value="long">Longest first</option>
+                </select>
               </label>
               <label className="catalog-checkbox">
-                <input
-                  type="checkbox"
-                  name="uniqueNames"
-                  value="true"
-                  defaultChecked={params.get("uniqueNames") === "true"}
-                />
-                One card per trail name
+                <input type="checkbox" name="dogFriendly" value="true" defaultChecked={params.get("dogFriendly") === "true"} />
+                Dogs allowed
+              </label>
+              <label className="catalog-checkbox">
+                <input type="checkbox" name="verified" value="true" defaultChecked={params.get("verified") === "true"} />
+                Verified by a park or agency
               </label>
               <label className="catalog-checkbox">
                 <input
@@ -247,7 +264,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                         </h2>
                         <p>
                           {t.region ?? countryName(t.country)} · {trailPlace(t)}
-                          {t.difficulty ? ` · ${t.difficulty}` : ""}
+                          {` · ${resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty}`}
                           {t.sections && t.sections.length > 0 ? ` · ${t.sections.length} sections` : ""}
                           {t.summitElevationFt ? ` · Summit ${t.summitElevationFt.toLocaleString()} ft` : ""}
                         </p>

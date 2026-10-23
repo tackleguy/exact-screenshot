@@ -20,6 +20,7 @@
     "source:trails": "tsx scripts/ingestion/source-catalog.ts",
     "audit:trails": "tsx scripts/ingestion/audit-catalog.ts",
     "source:ski": "tsx scripts/ingestion/ski-runs.ts",
+    "source:ski-areas": "tsx scripts/ingestion/ski-areas.ts",
     "source:trailheads": "tsx scripts/ingestion/trailheads.ts",
     "verify:trails": "tsx scripts/ingestion/verify-osm.ts",
     "source:resorts": "tsx scripts/ingestion/resort-trails.ts",
