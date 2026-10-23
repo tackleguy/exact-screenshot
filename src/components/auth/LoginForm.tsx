@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
-import { GoogleButton } from "./GoogleButton";
 import { nextFromLocation, SIGN_IN_UNAVAILABLE } from "@/lib/account/auth";
 
 const inputClass =
