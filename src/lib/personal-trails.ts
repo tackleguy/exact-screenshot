@@ -50,7 +50,8 @@ async function session(): Promise<{ client: SupabaseClient; userId: string } | n
 
 async function signedUrl(client: SupabaseClient, path: string | null) {
   if (!path) return null;
-  const { data } = await client.storage.from(BUCKET).createSignedUrl(path, 3600);
+  // Short-lived so revoking a share cuts off photo access almost immediately.
+  const { data } = await client.storage.from(BUCKET).createSignedUrl(path, 60);
   return data?.signedUrl ?? null;
 }
 
