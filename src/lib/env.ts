@@ -10,7 +10,8 @@ export function getSupabaseEnv() {
 }
 
 export function isSupabaseConfigured(): boolean {
-  return getSupabaseEnv() !== null;
+  // The browser client always has the project's public values built in.
+  return typeof window !== "undefined" || getSupabaseEnv() !== null;
 }
 
 export const missingEnvMessage =

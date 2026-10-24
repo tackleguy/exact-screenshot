@@ -17,3 +17,4 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - The route builder (src/lib/routing) routes over mapped trail lines with shared-vertex topology (vertices merged within 10 m, line ends joined within 25 m, crossings split); never fabricate straight connectors across gaps. Road connectors are opt-in and come only from real foot routing (/api/directions?profile=foot). Saved routes become personal trails that feed trip preparation.
 - Trail catalog navigation and forms target /explore/trails/catalog so filters, collections and pagination do not accidentally open the map workspace.
 - Keep homepage promotion isolated from account activity views in a shared presentation component so appearance updates preserve signed-in history and trail navigation.
+- The browser account client falls back to the project's built-in public URL and publishable key when build-time env values are missing, because published builds may run without env files.
