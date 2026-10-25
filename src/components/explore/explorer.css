@@ -180,7 +180,8 @@
 @media(max-width:767px) {
   .hx { height: calc(100dvh - 56px - 60px); }
   .hx-top { gap: 8px; }
-  .hx-chips { overflow: visible; }
+  /* One swipeable row of filters; their menus are fixed to the screen on phones, so the row can scroll. */
+  .hx-chips { width: 100%; max-width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   .hx-filter-options { position: fixed; top: 160px; left: 12px; right: 12px; width: auto; max-height: calc(100dvh - 270px); overflow-y: auto; }
   .hx-filter-options .hx-pop { position: static; width: auto; }
   .hx-status { top: 110px; max-width: calc(100% - 80px); font-size: 11px; }

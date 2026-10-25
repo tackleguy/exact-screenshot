@@ -14,6 +14,9 @@ import { matchesCatalogActivity, parseCatalogActivity } from "./activity";
 import { dedupeSectionsByName } from "./through-hikes";
 import { trailSacScale } from "./types";
 
+/** Names that say "this is not a trail" (a driveway or parking lot mapped as a path); listed only with partial segments. */
+export const NOT_A_TRAIL_NAME = /^(driveway|private( drive| driveway| road| property)?|parking( lot| area| access)?|service (road|drive)|access (road|drive)|fire lane|alley|sidewalk|gate|path|trail|footpath|connector|spur|shortcut|no name|none)$/i;
+
 export const normalize = (value: string) =>
   value
     .normalize("NFKD")
@@ -65,7 +68,7 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     if (review === "reject" && !filters.includeFragments) return false;
     const approved = review === "approve";
     // Pieces of longer trails, unnamed stubs, connectors and closed trails are not presented as hikes unless asked for.
-    if (!approved && !filters.includeFragments && (r.quality === "fragment" || r.flags?.includes("closed"))) return false;
+    if (!approved && !filters.includeFragments && (r.quality === "fragment" || r.flags?.includes("closed") || NOT_A_TRAIL_NAME.test(r.name.trim()))) return false;
     // Sidewalks and road sidepaths are not hikes; they stay listed for biking.
     if (!approved && !filters.includeFragments && activity !== "bike" && activity !== "path-bike" && activity !== "all" && r.flags?.includes("sidewalk")) return false;
     // Motorized routes are not hikes, runs or bike rides; they show only with every activity or partial segments.

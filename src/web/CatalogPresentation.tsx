@@ -10,6 +10,8 @@ import { SectionIcon } from "@/components/explore/SectionIcon";
 import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf } from "@/lib/trail-catalog/activity";
 import "@/components/trails/catalog.css";
 
+/** Same colours as the map's difficulty legend (kept here so the list doesn't load the map code). */
+const DIFFICULTY_COLORS: Record<string, string> = { e: "#2f9e5b", m: "#2f7fd8", h: "#d8452f", x: "#1d1d1d" };
 const ROUTE_SHAPES = { loop: "Loop", "point-to-point": "One way", network: "Connected paths" } as const;
 const LENGTHS = [["", "Any length"], ["-3", "Under 3 mi"], ["3-8", "3 – 8 mi"], ["8-15", "8 – 15 mi"], ["15-", "Over 15 mi"]] as const;
 
@@ -264,7 +266,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                         </h2>
                         <p>
                           {t.region ?? countryName(t.country)} · {trailPlace(t)}
-                          {` · ${resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty}`}
+ · {(() => { const d = resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty; return <span className="catalog-difficulty"><i style={{ background: DIFFICULTY_COLORS[d === "expert" ? "x" : d[0]] }} aria-hidden="true" />{d}</span>; })()}
                           {t.sections && t.sections.length > 0 ? ` · ${t.sections.length} sections` : ""}
                           {t.summitElevationFt ? ` · Summit ${t.summitElevationFt.toLocaleString()} ft` : ""}
                         </p>

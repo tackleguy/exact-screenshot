@@ -14,6 +14,20 @@ import { trailSacScale } from "@/lib/trail-catalog/types";
 
 const CHIP: Record<string, string> = { easy: "easy", moderate: "moderate", hard: "hard", expert: "expert" };
 
+/**
+ * Satellite picture of the trail's area (Esri World Imagery) for trails without a photo: the trail's extent when
+ * known, otherwise about 5 km around its start, in the banner's 1200 × 420 shape.
+ */
+function satelliteImage(t: CatalogTrail) {
+  const [w, s, e, n] = t.bounds ?? [t.longitude - 0.03, t.latitude - 0.012, t.longitude + 0.03, t.latitude + 0.012];
+  const cx = (w + e) / 2, cy = (s + n) / 2;
+  const cos = Math.max(0.2, Math.cos((cy * Math.PI) / 180));
+  const half = Math.min(25, Math.max(0.02, (e - w) / 2, ((n - s) / 2 / cos) * (1200 / 420)) * 1.15);
+  const halfY = Math.min(80, (half * cos * 420) / 1200);
+  const box = [cx - half, Math.max(-85, cy - halfY), cx + half, Math.min(85, cy + halfY)].map((v) => v.toFixed(5)).join(",");
+  return `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/export?${new URLSearchParams({ bbox: box, bboxSR: "4326", imageSR: "3857", size: "1200,420", format: "jpg", f: "image" })}`;
+}
+
 /** AllTrails-style header: photo, name, difficulty chip, key stats and primary actions. */
 export function CatalogTrailHero({ trail: t, difficulty, distance, hasLines }: { trail: CatalogTrail; difficulty: string; distance: string; hasLines: boolean }) {
   const [photo, setPhoto] = useState<CatalogPhoto | null>(null);
@@ -36,14 +50,14 @@ export function CatalogTrailHero({ trail: t, difficulty, distance, hasLines }: {
   const planPrompt = join([`A trip on ${t.name}`, t.park ?? t.forest ?? t.region, displayMiles(t.miles)], ", ");
   return (
     <header className="trail-hero">
-      <div className={`trail-hero-photo${photo ? "" : " trail-hero-photo--none"}`} style={photo ? { backgroundImage: `url("${photo.url}")` } : undefined}>
+      <div className={`trail-hero-photo${photo ? "" : " trail-hero-photo--satellite"}`} style={{ backgroundImage: `url("${photo ? photo.url : satelliteImage(t)}")` }}>
         <div className="trail-hero-text">
           <span className={`trail-chip ${CHIP[level] ?? ""}`}>{DIFFICULTY_LABELS[level] ?? level}</span>
           {badge && <span className={`trail-confidence trail-confidence--${badge.tier}`} title={badge.detail}>{badge.label}</span>}
           <h1>{t.name}</h1>
           <p>{join([t.park ?? t.forest, t.region, countryName(t.country)])}</p>
         </div>
-        {photo && <a className="trail-hero-credit" href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">Photo: {photo.artist} · {photo.license}</a>}
+        {photo ? <a className="trail-hero-credit" href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">Photo: {photo.artist} · {photo.license}</a> : <span className="trail-hero-credit">Imagery: Esri, Maxar, Earthstar Geographics</span>}
       </div>
       <dl className="trail-stats">
         {text(distance) && <div><dt>Length</dt><dd>{distance}</dd></div>}

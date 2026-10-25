@@ -94,9 +94,9 @@ export function CatalogMapView({
       map.on("style.load", () => install(map));
       map.on("load", () => {
         setReady(true);
-        // Start the compact attribution folded; the (i) button still opens it.
-        container.current?.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
       });
+      // Start the compact attribution folded (after the first render, when MapLibre opens it); the (i) button still opens it.
+      map.once("idle", () => container.current?.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show"));
       map.on("error", (e) => { if (/style/i.test(e.error?.message ?? "")) setFailed(true); });
       observer = new ResizeObserver(() => map.resize());
       observer.observe(container.current);

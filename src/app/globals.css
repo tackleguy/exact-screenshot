@@ -552,7 +552,24 @@ html { scroll-padding-block:20px 100px; }
   .home-tool p { max-width: none; }
 }
 .discovery-hero--no-photo { background: linear-gradient(160deg, #173f35, #36745b 55%, #8aa38f); }
-.discovery-proof { margin: 14px 0 0; max-width: 46ch; font-size: 14px; line-height: 1.5; opacity: 0.92; }
+.discovery-proof { margin: 14px auto 0; max-width: 46ch; font-size: 14px; line-height: 1.5; opacity: 0.92; text-align: center; }
+/* Home: activities and famous long trails. */
+.home-activities, .home-long-trails { max-width: 1160px; margin: 0 auto; padding: 44px 32px; }
+.home-activity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.home-activity { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-elevated, rgb(255 255 255 / 0.03)); color: var(--cream, inherit); text-decoration: none; transition: border-color 160ms ease-out, background-color 160ms ease-out; }
+.home-activity:hover, .home-activity:focus-visible { border-color: var(--accent); }
+.home-activity > svg { flex: none; color: var(--accent); }
+.home-activity span { display: grid; gap: 3px; min-width: 0; }
+.home-activity strong { font-size: 16px; }
+.home-activity small { font-size: 13px; color: var(--mist, #9aa59a); line-height: 1.4; }
+.home-long-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.home-long { position: relative; display: grid; gap: 4px; padding: 16px 40px 16px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--cream, inherit); text-decoration: none; transition: border-color 160ms ease-out; }
+.home-long:hover, .home-long:focus-visible { border-color: var(--accent); }
+.home-long strong { font-size: 15px; }
+.home-long small { font-size: 12.5px; color: var(--mist, #9aa59a); }
+.home-long > svg { position: absolute; top: 16px; right: 14px; color: var(--accent); }
+@media (max-width: 1023px) { .home-activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .home-long-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .home-activities, .home-long-trails { padding: 32px 20px; } .home-activity-grid, .home-long-grid { grid-template-columns: 1fr; gap: 10px; } }
 .home-near-me { margin-top: 14px; border: 0; background: none; cursor: pointer; font: inherit; }
 .guest-save-banner { position: fixed; z-index: 70; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: min(560px, calc(100vw - 24px)); padding: 12px 12px 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--foreground); box-shadow: 0 8px 24px #173f3526; }
 .guest-save-banner p { flex: 1; margin: 0; font-size: 14px; }

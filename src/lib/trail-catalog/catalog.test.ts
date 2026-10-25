@@ -116,8 +116,14 @@ test("more filters: any country, length presets, verified only, shortest or long
   assert.deepEqual(filterCatalog(rows,{verified:true,sort:"short"}).trails.map(t=>t.id),["c","b"]);
   assert.deepEqual(filterCatalog(rows,{sort:"long"}).trails.map(t=>t.id),["b","c","a"]);
 });
+test("names that aren't trails are left out of lists unless partial segments are asked for",()=>{
+  const base = { country:"US",region:"Nevada",latitude:39,longitude:-119,miles:2,difficulty:null,dogs:null,manager:null } as CatalogTrail;
+  const rows = [{...base,id:"a",name:"Driveway"},{...base,id:"b",name:"Parking Lot"},{...base,id:"c",name:"Silver Creek Trail"}];
+  assert.deepEqual(filterCatalog(rows,{}).trails.map(t=>t.id),["c"]);
+  assert.equal(filterCatalog(rows,{includeFragments:true}).total,3);
+});
 test("trip research orders mapped sections by target length without discarding unknowns or changing default order", () => {
-  const base = { name: "Trail", country: "US", region: "Colorado", latitude: 40, longitude: -105 } as CatalogTrail;
+  const base = { name: "Ridge Trail", country: "US", region: "Colorado", latitude: 40, longitude: -105 } as CatalogTrail;
   const rows = [{ ...base, id: "one", miles: null }, { ...base, id: "two", miles: 4 }, { ...base, id: "three", miles: 10 }];
   const before = rows.map(row => row.id);
   const result = filterCatalog(rows, { targetMiles: 5 });

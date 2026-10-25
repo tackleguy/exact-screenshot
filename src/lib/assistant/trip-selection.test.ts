@@ -22,7 +22,7 @@ test("geocoding retains ambiguous US/Canada choices and rejects malformed coordi
   assert.equal(places.length, 2); assert.equal(places[0].latitude, 51.17); assert.equal(places[0].longitude, -115.57);
 });
 test("nearby catalog stays within radius even when distant sections better match trip length", () => {
-  const base = { name: "Trail", country: "CA", region: "Alberta", longitude: -115.57, miles: 3 } as CatalogTrail;
+  const base = { name: "Lake Trail", country: "CA", region: "Alberta", longitude: -115.57, miles: 3 } as CatalogTrail;
   const rows = [{ ...base, id: "near", latitude: 51.18 }, { ...base, id: "farther", latitude: 51.24 }, { ...base, id: "outside", latitude: 52, miles: 30 }];
   const filters = { lat: 51.17, lng: -115.57, radiusKm: 10 };
   assert.deepEqual(filterCatalog(rows, filters).trails.map(r => r.id), ["near", "farther"]);

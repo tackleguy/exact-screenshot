@@ -6,8 +6,21 @@ import { ArrowUpRight, Search } from "lucide-react";
 import { headlineCount, type CatalogManifest, type CatalogTrail } from "@/lib/trail-catalog/types";
 import { join, miles as fmtMiles } from "@/lib/display";
 import discovery from "@/assets/trail-discovery.jpg";
+import { TRAIL_SECTIONS } from "@/lib/trail-catalog/activity";
+import { SectionIcon } from "@/components/explore/SectionIcon";
 
 const photo = typeof discovery === "string" ? discovery : discovery.src;
+/** Famous long-distance trails: Hyked guides first, then worldwide classics found by search. */
+const LONG_TRAILS = [
+  { name: "Appalachian Trail", detail: "Georgia to Maine · 2,190 mi", href: "/explore/trails/route-at" },
+  { name: "Pacific Crest Trail", detail: "Mexico to Canada · 2,650 mi", href: "/explore/trails/route-pct" },
+  { name: "John Muir Trail", detail: "Yosemite to Mount Whitney · 211 mi", href: "/explore/trails/route-jmt" },
+  { name: "Colorado Trail", detail: "Denver to Durango · 486 mi", href: "/explore/trails/route-ct" },
+  { name: "Tour du Mont Blanc", detail: "France, Italy, Switzerland", href: "/explore/trails/catalog?q=tour+du+mont+blanc" },
+  { name: "West Highland Way", detail: "Scotland · 96 mi", href: "/explore/trails/catalog?q=west+highland+way" },
+  { name: "Milford Track", detail: "New Zealand · 33 mi", href: "/explore/trails/catalog?q=milford+track" },
+  { name: "Kungsleden", detail: "Swedish Lapland", href: "/explore/trails/catalog?q=kungsleden" },
+];
 const destinations = [
   { name: "Yosemite", detail: "Granite peaks & waterfall walks", lat: 37.745, lng: -119.596 },
   { name: "Mount Rainier", detail: "Alpine meadows & mountain air", lat: 46.852, lng: -121.76 },
@@ -63,6 +76,19 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
           {nearby.status !== "ready" && <button type="button" className="fieldbook-text-link home-near-me" onClick={() => nearby.find(true)} disabled={nearby.status === "loading"}>{nearby.status === "loading" ? "Finding trails near you…" : nearby.status === "denied" ? "Location is off — allow it in your browser to see trails near you" : "Show trails near me"}</button>}
         </>
       )}
+    </section>
+    <section className="home-activities" aria-label="Trails by activity">
+      <div className="home-section-heading"><div><p className="section-label">EVERY WAY OUTSIDE</p><h2>Pick your adventure.</h2></div></div>
+      <div className="home-activity-grid">
+        {TRAIL_SECTIONS.map((s) => <Link key={s.key} href={`/explore/trails?activity=${s.activity}`} className="home-activity"><SectionIcon section={s.key} size={26} /><span><strong>{s.label}</strong><small>{s.blurb}</small></span></Link>)}
+        <Link href="/explore/ski" className="home-activity"><SectionIcon section="snow" size={26} /><span><strong>Ski areas</strong><small>Every ski area worldwide, with runs and lifts</small></span></Link>
+      </div>
+    </section>
+    <section className="home-long-trails" aria-label="Famous long-distance trails">
+      <div className="home-section-heading"><div><p className="section-label">THE BIG ONES</p><h2>Legendary long trails.</h2></div><Link href="/explore/trails/catalog?collection=thru-hikes" className="fieldbook-text-link">All through-hikes <ArrowUpRight size={16} aria-hidden /></Link></div>
+      <div className="home-long-grid">
+        {LONG_TRAILS.map((t) => <Link key={t.name} href={t.href} className="home-long"><strong>{t.name}</strong><small>{t.detail}</small><ArrowUpRight size={18} aria-hidden /></Link>)}
+      </div>
     </section>
     <section className="home-invitation"><h2>Make the next one yours.</h2><Link href={signedIn ? "/explore/trails" : "/signup"} className="btn-primary">{signedIn ? "Find your next trail" : "Join Hyked"}<ArrowUpRight size={18} aria-hidden /></Link>{!signedIn && <p>Already part of the adventure? <Link href="/login">Sign in</Link></p>}</section>
   </div>;
