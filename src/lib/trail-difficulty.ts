@@ -1,33 +1,7 @@
 import type { Difficulty } from "@/lib/types";
 
-export type DifficultySource = "community" | "computed" | "reported" | "unknown";
-
-export interface DifficultyInput {
-  name?: string | null;
-  description?: string | null;
-  miles?: number | null;
-  /** @deprecated elevation range; pass gainFt (measured climb) instead. */
-  elevationFt?: number | null;
-  /** Measured climb in feet along the trail (from a DEM profile). */
-  gainFt?: number | null;
-  /** OpenStreetMap sac_scale value. */
-  sacScale?: string | null;
-  reported?: string | null;
-  communityDifficulty?: string | null;
-  difficultyRatingCount?: number | null;
-}
-
-export interface ResolvedDifficulty {
-  difficulty: Difficulty | "expert";
-  label: string;
-  source: DifficultySource;
-  ratingCount: number;
-}
-
 const LEVELS = ["easy", "moderate", "hard", "expert"] as const;
 export type TrailDifficulty = (typeof LEVELS)[number];
-
-const COMMUNITY_THRESHOLD = 5;
 
 export function normalizeDifficulty(raw?: string | null): TrailDifficulty | null {
   if (!raw?.trim()) return null;
@@ -46,71 +20,55 @@ export function difficultyScore(level: TrailDifficulty): number {
   return LEVELS.indexOf(level) + 1;
 }
 
-export function scoreToDifficulty(score: number): TrailDifficulty {
-  if (score < 1.5) return "easy";
-  if (score < 2.5) return "moderate";
-  if (score < 3.5) return "hard";
-  return "expert";
-}
-
-export function averageDifficulties(levels: TrailDifficulty[]): TrailDifficulty | null {
-  if (levels.length === 0) return null;
-  const mean = levels.reduce((sum, level) => sum + difficultyScore(level), 0) / levels.length;
-  return scoreToDifficulty(mean);
-}
-
 /**
- * The one difficulty scale (Easy · Moderate · Hard · Very hard), computed the same way for every trail:
+ * The one difficulty rating, used by the trail list, the map, page titles, the trail page and the data build:
+ * effort = miles + feet of climb ÷ 500 (AllTrails-style). Easy under 4, Moderate 4–8, Hard 8–14, Expert over 14.
  */
 export const DIFFICULTY_FORMULA =
-  "Effort = miles + 2 × (feet of climb ÷ 1,000), so 1,000 ft of climbing counts like 2 flat miles. Easy under 4, Moderate 4–9, Hard 9–16, Very hard 16 and over. The OpenStreetMap sac_scale tag sets a minimum: mountain_hiking is at least Moderate, demanding_mountain_hiking at least Hard, alpine_hiking or harder Very hard. Without a measured climb, distance alone is used.";
+  "Effort = miles + feet of climb ÷ 500. Easy under 4, Moderate 4–8, Hard 8–14, Expert over 14. A trail that climbs more than 800 ft per mile or tops out above 10,000 ft is rated one level harder (up to Hard), and one that climbs more than 2,000 ft is never Easy. Climb is measured along the mapped line from elevation data.";
 
-export const DIFFICULTY_LABELS: Record<TrailDifficulty, string> = { easy: "Easy", moderate: "Moderate", hard: "Hard", expert: "Very hard" };
+export const DIFFICULTY_LABELS: Record<TrailDifficulty, string> = { easy: "Easy", moderate: "Moderate", hard: "Hard", expert: "Expert" };
+/** The difficulty colours used by chips, dots and the elevation chart. */
+export const DIFFICULTY_COLORS: Record<TrailDifficulty, string> = { easy: "#2f9e5b", moderate: "#2f7fd8", hard: "#d8452f", expert: "#1d1d1d" };
 
-const SAC_FLOOR: Record<string, TrailDifficulty> = {
-  mountain_hiking: "moderate",
-  demanding_mountain_hiking: "hard",
-  alpine_hiking: "expert",
-  demanding_alpine_hiking: "expert",
-  difficult_alpine_hiking: "expert",
-};
+export interface DifficultyMeasures {
+  lengthMi?: number | null;
+  /** Climb along the trail in feet (for a line, the larger of the climb in either direction). */
+  gainFt?: number | null;
+  /** Steepest sustained grade in percent; carried with the measures for display, not part of the rating. */
+  steepestGradePct?: number | null;
+  /** Highest point of the trail in feet. */
+  maxElevFt?: number | null;
+}
 
-export function computeDifficulty({ miles, gainFt, sacScale }: { miles?: number | null; gainFt?: number | null; sacScale?: string | null }): TrailDifficulty | null {
-  // Accepts the OSM value (mountain_hiking) or the "T3 Demanding Mountain" label form.
-  const t = sacScale?.match(/^T(\d)/)?.[1];
-  const floor = sacScale ? SAC_FLOOR[sacScale] ?? (t ? ([null, null, "moderate", "hard", "expert", "expert", "expert"] as const)[Number(t)] ?? null : null) : null;
-  if (!Number.isFinite(miles) && !floor) return null;
-  const effort = (Number.isFinite(miles) ? Number(miles) : 0) + (Number.isFinite(gainFt) ? (2 * Math.max(0, Number(gainFt))) / 1000 : 0);
-  const fromEffort: TrailDifficulty = effort < 4 ? "easy" : effort < 9 ? "moderate" : effort < 16 ? "hard" : "expert";
-  return floor && difficultyScore(floor) > difficultyScore(fromEffort) ? floor : fromEffort;
+const finite = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v);
+
+/**
+ * Difficulty from measured length and climb. Steep (more than 800 ft per mile) or high (above 10,000 ft) trails go
+ * up one level, but a bump never makes a trail Expert — that takes an effort over 14. Anything climbing more than
+ * 2,000 ft is at least Moderate. Null when the length is unknown.
+ */
+export function computeDifficulty({ lengthMi, gainFt, maxElevFt }: DifficultyMeasures): TrailDifficulty | null {
+  if (!finite(lengthMi) || lengthMi < 0) return null;
+  const gain = finite(gainFt) ? Math.max(0, gainFt) : 0;
+  const effort = lengthMi + gain / 500;
+  let level = effort < 4 ? 0 : effort < 8 ? 1 : effort <= 14 ? 2 : 3;
+  const steep = lengthMi > 0 && gain / lengthMi > 800;
+  const high = finite(maxElevFt) && maxElevFt > 10_000;
+  if ((steep || high) && level < 2) level++;
+  if (gain > 2000 && level === 0) level = 1;
+  return LEVELS[level];
+}
+
+/** A catalog trail's difficulty from its stored measures (Moderate when even the length is unknown). */
+export function trailDifficulty(t: { miles: number | null; gainFt?: number | null; steepestGradePct?: number | null; maxElevFt?: number | null }): TrailDifficulty {
+  return computeDifficulty({ lengthMi: t.miles, gainFt: t.gainFt, steepestGradePct: t.steepestGradePct, maxElevFt: t.maxElevFt }) ?? "moderate";
 }
 
 /** Naismith's rule: 3 mph plus an hour per 2,000 ft of climb. Null over 50 miles or without a measured climb. */
 export function naismithHours(miles: number | null | undefined, gainFt: number | null | undefined) {
   if (!Number.isFinite(miles) || !Number.isFinite(gainFt) || Number(miles) <= 0 || Number(miles) >= 50) return null;
   return Number(miles) / 3 + Math.max(0, Number(gainFt)) / 2000;
-}
-
-export function resolveDifficulty(input: DifficultyInput): ResolvedDifficulty {
-  const ratingCount = Math.max(0, Math.floor(Number(input.difficultyRatingCount) || 0));
-  const community = normalizeDifficulty(input.communityDifficulty);
-  if (community && ratingCount >= COMMUNITY_THRESHOLD) {
-    return {
-      difficulty: community,
-      label: `Community average · ${ratingCount} ratings`,
-      source: "community",
-      ratingCount,
-    };
-  }
-  const gainFt = input.gainFt ?? null;
-  const computed = computeDifficulty({ miles: input.miles, gainFt, sacScale: input.sacScale });
-  if (computed) {
-    const basis = [Number.isFinite(input.miles) && "distance", Number.isFinite(gainFt) && "climb", input.sacScale && "terrain"].filter(Boolean).join(", ");
-    return { difficulty: computed, label: `Computed from ${basis}`, source: "computed", ratingCount };
-  }
-  const reported = normalizeDifficulty(input.reported);
-  if (reported) return { difficulty: reported, label: "Source reported", source: "reported", ratingCount };
-  return { difficulty: "moderate", label: "Not enough data to rate", source: "unknown", ratingCount };
 }
 
 export const DIFFICULTY_OPTIONS: { value: TrailDifficulty; label: string }[] = [
@@ -120,7 +78,6 @@ export const DIFFICULTY_OPTIONS: { value: TrailDifficulty; label: string }[] = [
   { value: "expert", label: "Expert" },
 ];
 
-export { COMMUNITY_THRESHOLD };
 
 /**
  * Climb that counts for effort: a loop's gain; for a line, whichever direction climbs more (data often runs

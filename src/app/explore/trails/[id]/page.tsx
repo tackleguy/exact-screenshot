@@ -20,7 +20,7 @@ import { TrailPoisSection } from "@/components/trails/TrailPoisSection";
 import { TrailWeatherForecast } from "@/components/trails/TrailWeatherForecast";
 import { GpxRouteUpload } from "@/components/trails/GpxRouteUpload";
 import { difficultyColor, formatRating } from "@/lib/utils";
-import { resolveDifficulty } from "@/lib/trail-difficulty";
+import { computeDifficulty, DIFFICULTY_FORMULA } from "@/lib/trail-difficulty";
 import { buildTrailJsonLd } from "@/lib/seo/trail-jsonld";
 import type { GeoLineString } from "@/lib/types";
 import { getCatalogTrail } from "@/lib/trail-catalog/server";
@@ -100,15 +100,10 @@ export default async function ExploreTrailDetailPage({
     ]);
 
   const jsonLd = buildTrailJsonLd(trail);
-  const resolvedDifficulty = resolveDifficulty({
-    reported: trail.difficulty,
-    communityDifficulty: trail.community_difficulty,
-    difficultyRatingCount: trail.difficulty_rating_count,
-    miles: trail.length_miles,
-    elevationFt: trail.elevation_ft,
-    name: trail.trail_name,
-    description: trail.description,
-  });
+  const resolvedDifficulty = {
+    difficulty: computeDifficulty({ lengthMi: trail.length_miles, gainFt: trail.elevation_ft }) ?? "moderate",
+    label: DIFFICULTY_FORMULA,
+  };
 
   const heroPhoto = photos.find((p) => p.is_hero) ?? photos[0] ?? null;
   const routes: GeoLineString[] = trail.segments?.length

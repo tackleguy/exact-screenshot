@@ -8,7 +8,7 @@ import { readFile } from "node:fs/promises";
 import { gunzipSync } from "node:zlib";
 import path from "node:path";
 import type { CatalogTrail } from "../../src/lib/trail-catalog/types";
-import { resolveDifficulty, DIFFICULTY_LABELS } from "../../src/lib/trail-difficulty";
+import { trailDifficulty, DIFFICULTY_LABELS } from "../../src/lib/trail-difficulty";
 import { trailSacScale } from "../../src/lib/trail-catalog/types";
 import { PEAK_DEFINITIONS } from "../../src/lib/trail-catalog/peaks";
 import { elevations } from "../../src/lib/geo/tiles";
@@ -71,8 +71,8 @@ async function main() {
   console.log("\n10 random trails:");
   for (let i = 0; i < 10; i++) {
     const r = shown[Math.floor(rand() * shown.length)];
-    const d = resolveDifficulty({ reported: r.difficulty, miles: r.miles, sacScale: trailSacScale(r) });
-    console.log(`- ${r.name} (${r.region ?? r.country}) · ${r.miles ?? "?"} mi · ${DIFFICULTY_LABELS[d.difficulty]} · score ${r.qualityScore ?? 0} · ${r.osm ? `OSM relation ${r.osm.relation}` : r.source}${r.sources?.length ? ` + ${r.sources.length} official` : ""}${r.trailhead && r.trailhead.kind !== "trail-end" ? " · trailhead" : ""}${r.wiki ? ` · Wikidata ${r.wiki.qid}` : ""}`);
+    const d = trailDifficulty(r);
+    console.log(`- ${r.name} (${r.region ?? r.country}) · ${r.miles ?? "?"} mi · ${DIFFICULTY_LABELS[d]} · score ${r.qualityScore ?? 0} · ${r.osm ? `OSM relation ${r.osm.relation}` : r.source}${r.sources?.length ? ` + ${r.sources.length} official` : ""}${r.trailhead && r.trailhead.kind !== "trail-end" ? " · trailhead" : ""}${r.wiki ? ` · Wikidata ${r.wiki.qid}` : ""}`);
   }
 }
 main()

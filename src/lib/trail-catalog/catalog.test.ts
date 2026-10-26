@@ -19,7 +19,8 @@ test("search handles accents, combined geography and unknown measurements",()=>{
   assert.deepEqual(filterCatalog(rows,{minMiles:1,maxMiles:6}).trails.map(t=>t.id),["two"]);
   assert.deepEqual(filterCatalog(rows,{difficulty:"easy",dogFriendly:true}).trails.map(t=>t.id),["two"]);
   assert.equal(filterCatalog(rows,{q:"missing"}).total,0);
-  const end = filterCatalog(rows,{page:99999,limit:2});assert.equal(end.page,2);assert.deepEqual(end.trails.map(t=>t.id),["three"]);
+  // Trails of unknown length rank after measured ones ("best-documented first").
+  const end = filterCatalog(rows,{page:99999,limit:2});assert.equal(end.page,2);assert.deepEqual(end.trails.map(t=>t.id),["one"]);
   assert.equal(filterCatalog(rows,{lat:0,lng:0,radiusKm:10}).total,0);
 });
 test("bundled snapshot contains whole trails with complete map geometry",async()=>{
@@ -89,8 +90,11 @@ test("server catalog paginates, isolates countries, and rejects invalid detail I
   assert.ok(intl.trails.every(t=>t.country!=="US" && t.country!=="CA"));
   const section = first.trails.find((t) => t.kind === "segment") ?? (await searchCatalog({ country: "CA", kind: "segment", limit: 1 })).trails[0];
   const detail = await getCatalogTrail(section.id);assert.ok(detail?.lines.length);
-  const guide = routes.trails.find((t) => t.source === "guide")!;
-  const guideDetail = await getCatalogTrail(guide.id);
+  // Guides may rank below documented relations on the first page; look further when needed.
+  let guide = routes.trails.find((t) => t.source === "guide");
+  for (let page = 2; !guide && page <= 20; page++) guide = (await searchCatalog({ kind: "route", limit: 48, page })).trails.find((t) => t.source === "guide");
+  assert.ok(guide, "a curated guide is listed among routes");
+  const guideDetail = await getCatalogTrail(guide!.id);
   assert.equal(guideDetail!.trail.kind,"route");
   assert.equal(guideDetail!.lines.length,0);
   const at = await getCatalogTrail("route-at");
@@ -116,14 +120,21 @@ test("more filters: any country, length presets, verified only, shortest or long
   assert.deepEqual(filterCatalog(rows,{verified:true,sort:"short"}).trails.map(t=>t.id),["c","b"]);
   assert.deepEqual(filterCatalog(rows,{sort:"long"}).trails.map(t=>t.id),["b","c","a"]);
 });
+test("names that aren't trails are left out of lists unless partial segments are asked for",()=>{
+  const base = { country:"US",region:"Nevada",latitude:39,longitude:-119,miles:2,difficulty:null,dogs:null,manager:null } as CatalogTrail;
+  const rows = [{...base,id:"a",name:"Driveway"},{...base,id:"b",name:"Parking Lot"},{...base,id:"c",name:"Silver Creek Trail"}];
+  assert.deepEqual(filterCatalog(rows,{}).trails.map(t=>t.id),["c"]);
+  assert.equal(filterCatalog(rows,{includeFragments:true}).total,3);
+});
 test("trip research orders mapped sections by target length without discarding unknowns or changing default order", () => {
-  const base = { name: "Trail", country: "US", region: "Colorado", latitude: 40, longitude: -105 } as CatalogTrail;
+  const base = { name: "Ridge Trail", country: "US", region: "Colorado", latitude: 40, longitude: -105 } as CatalogTrail;
   const rows = [{ ...base, id: "one", miles: null }, { ...base, id: "two", miles: 4 }, { ...base, id: "three", miles: 10 }];
   const before = rows.map(row => row.id);
   const result = filterCatalog(rows, { targetMiles: 5 });
   assert.equal(result.trails[0].id, "two");
   assert.equal(result.total, rows.length);
   assert.deepEqual(rows.map(row => row.id), before);
-  assert.deepEqual(filterCatalog(rows, {}).trails.map(row => row.id), before);
+  // Default order: real hikes (1 mi or more) first, then the rest; unknown lengths go last.
+  assert.deepEqual(filterCatalog(rows, {}).trails.map(row => row.id), ["two", "three", "one"]);
   assert.equal(parseCatalogFilters(new URLSearchParams("targetMiles=NaN")).targetMiles, undefined);
 });

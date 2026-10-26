@@ -1,0 +1,24 @@
+/* Save hearts, star ratings and reviews: shared by trail cards, the map and trail pages. */
+.trail-stars { display: inline-flex; gap: 1px; color: #f2b632; vertical-align: middle; }
+.save-heart { display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; color: var(--foreground); }
+.save-heart.is-saved { color: #e0475b; }
+.save-heart--card { position: absolute; top: 8px; right: 8px; z-index: 2; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: rgb(255 255 255 / 0.92); color: #1d1d1d; box-shadow: 0 1px 4px rgb(0 0 0 / 0.25); }
+.save-heart--card.is-saved { color: #e0475b; }
+.trail-reviews { margin: 1.5rem 0; padding: 1rem 1.1rem; border: 1px solid var(--border); border-radius: var(--radius-lg, 16px); background: var(--surface); }
+.trail-reviews-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.trail-reviews-head h2 { margin: 0; }
+.trail-reviews-summary { display: flex; align-items: center; gap: 0.5rem; font-variant-numeric: tabular-nums; }
+.trail-review-list { list-style: none; padding: 0; margin: 0.75rem 0; display: grid; gap: 0.75rem; }
+.trail-review-list li { padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); display: grid; gap: 0.25rem; }
+.trail-review-list li p { margin: 0; }
+.trail-review-form { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
+.trail-review-form fieldset { border: 0; padding: 0; margin: 0; display: flex; align-items: center; gap: 2px; }
+.trail-review-form legend { font-weight: 600; margin-bottom: 4px; }
+.trail-review-form fieldset button { font-size: 1.6rem; line-height: 1; padding: 2px; border: 0; background: none; color: var(--border-strong); cursor: pointer; }
+.trail-review-form fieldset button[aria-pressed="true"] { color: #f2b632; }
+.trail-review-form label { display: grid; gap: 4px; }
+.trail-review-form textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--border-strong); background: var(--surface-muted); color: var(--foreground); font: inherit; }
+.trail-review-form > div { display: flex; gap: 0.5rem; }
+.card-meta { display: flex !important; align-items: center; gap: 8px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.card-rating { display: inline-flex; align-items: center; gap: 4px; }
+.card-rating small, .card-meta > small { opacity: 0.8; font-size: 0.78rem; }

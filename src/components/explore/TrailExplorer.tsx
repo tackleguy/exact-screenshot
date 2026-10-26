@@ -1,5 +1,6 @@
 "use client";
 
+import { formatElevation, formatMeters } from "@/lib/units";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "@/lib/maplibre";
@@ -24,7 +25,6 @@ import {
   EMPTY,
   explorerStyle,
   installOverlay,
-  setSky,
   setFeatureLabelGroups,
   setLayerGroupVisibility,
   type Basemap,
@@ -32,9 +32,18 @@ import {
 } from "./explorer-map";
 import { snapPointToNearestLine } from "@/lib/geo/snap";
 import "./explorer.css";
-import { duration as displayDuration, feet, join as joinParts, miles as displayMiles } from "@/lib/display";
-import { effortClimbFt, naismithHours } from "@/lib/trail-difficulty";
+import { duration as displayDuration, join as joinParts, miles as displayMiles } from "@/lib/display";
+import { ROUTE_TYPE_LABELS } from "@/lib/trail-catalog/quality";
+import { effortClimbFt, trailDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
+import { TrailStats } from "@/components/trails/TrailStats";
+import { SaveHeart } from "@/components/trails/SaveHeart";
+import { CardRating, useRatings } from "@/components/trails/TrailReviews";
+import { metersBetween } from "@/lib/geo/line";
+import type { RouteType } from "@/lib/trail-catalog/quality";
 import { useRouter } from "next/navigation";
+import { skiAreaRows } from "@/web/trail-service";
+import { immediateStart, locate as locateVisitor, rememberPosition, saveLastView, useKnownPosition } from "@/lib/start-location";
+import { cameraUpTrail, PITCH_3D, setThreeD, trailLine3d } from "./three-d";
 import { createClient } from "@/lib/supabase/client";
 import { installExtras, applySectionFilter } from "./map-extras";
 import { useOpenSkiFeature } from "@/components/ski/SkiAreaMap";
@@ -56,8 +65,9 @@ const LENGTHS = [
 const ROUTE_TYPES = [
   { key: "", label: "Any route" },
   { key: "loop", label: "Loop" },
+  { key: "out-and-back", label: "Out & back" },
   { key: "point-to-point", label: "Point to point" },
-  { key: "network", label: "Trail network" },
+  { key: "segment", label: "Trail segment" },
 ] as const;
 const SUB_ACTIVITIES: Record<TrailSectionKey, CatalogActivity[]> = {
   foot: ["hike", "walk", "backpack", "run"],
@@ -85,7 +95,7 @@ function filterParams(f: Filters) {
 
 const fmtMiles = displayMiles;
 const fmtDuration = displayDuration;
-const ROUTE_LABEL: Record<string, string> = { loop: "Loop", "point-to-point": "Point to point", network: "Network" };
+const ROUTE_LABEL: Record<string, string> = ROUTE_TYPE_LABELS;
 
 function distanceKm(a: [number, number], b: [number, number]) {
   const r = Math.PI / 180, x = (b[0] - a[0]) * r * Math.cos(((a[1] + b[1]) / 2) * r), y = (b[1] - a[1]) * r;
@@ -99,6 +109,11 @@ export interface ExplorerStart {
   zoom: number | null;
   /** Opens the route builder with this start (the trail page's "Build a route from here"). */
   routeFrom?: { point: [number, number]; name: string } | null;
+}
+
+/** "2.4 mi away" / "3.9 km away" from the visitor's last known position. */
+function formatAway(meters: number) {
+  return `${formatMeters(meters)} away`;
 }
 
 export function TrailExplorer({ start: initial, workspace = false }: { start: ExplorerStart; workspace?: boolean }) {
@@ -154,15 +169,17 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const [points, setPoints] = useState<PointsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   // The map never sits blank: a skeleton covers it until the style and the first trails have loaded.
-  const [firstLoad, setFirstLoad] = useState(true);
+  const [, setFirstLoad] = useState(true);
   const [verifiedInView, setVerifiedInView] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [center, setCenter] = useState<[number, number]>(initial.center ?? [-98.6, 39.8]);
-  const [zoom, setZoom] = useState(initial.zoom ?? 3.6);
+  // URL → last view → (location, below) → time-zone region; the map opens at once, never on the middle of the U.S.
+  const [startView] = useState(() => immediateStart({ center: initial.center, zoom: initial.zoom }));
+  const [center, setCenter] = useState<[number, number]>(startView.center);
+  const [zoom, setZoom] = useState(startView.zoom);
   const [selectedId, setSelectedId] = useState<string | null>(initial.trail);
   // Per-trail results are kept with the id they belong to, so a new selection never shows stale data.
   const [detailFor, setDetailFor] = useState<{ id: string; value: Detail } | null>(null);
@@ -172,6 +189,9 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const [driveStateFor, setDriveStateFor] = useState<{ id: string; value: string } | null>(null);
   const detail = detailFor?.id === selectedId ? detailFor.value : null;
   const elevation = elevationFor?.id === selectedId ? elevationFor.value : null;
+  const detailRef = useRef<Detail | null>(null);
+  const elevationRef = useRef<Elevation | "none" | null>(null);
+  useEffect(() => { detailRef.current = detail; elevationRef.current = elevation; }, [detail, elevation]);
   const weather = weatherFor?.id === selectedId ? weatherFor.value : null;
   const drive = driveFor?.id === selectedId ? driveFor.value : null;
   const driveState = driveStateFor?.id === selectedId ? driveStateFor.value : null;
@@ -196,7 +216,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const refreshSki = useCallback(async () => {
     const map = mapRef.current; const client = createClient();
     const setLines = (fc: GeoJSON.FeatureCollection) => { extrasRef.current.skiLines = fc; (map?.getSource("hy-ski-lines") as maplibregl.GeoJSONSource | undefined)?.setData(fc); };
-    if (!map || !client || map.getZoom() < 12) { setLines(EMPTY); return; }
+    if (!map || !client || map.getZoom() < 12 || !skiAreas.current.length) { setLines(EMPTY); return; }
     const b = map.getBounds();
     const inView = skiAreas.current.filter((a) => b.contains([a.lng, a.lat])).slice(0, 8);
     const need = inView.filter((a) => !skiCache.current.has(a.slug)).map((a) => a.slug);
@@ -334,17 +354,20 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   useEffect(() => {
     if (!containerRef.current) return;
     let disposed = false;
-    const startCenter = initial.center ?? [-98.6, 39.8];
-    const startZoom = initial.zoom ?? 3.6;
+    const startCenter = startView.center;
+    const startZoom = startView.zoom;
     void explorerStyle(basemapRef.current).then((style) => {
       if (disposed || !containerRef.current) return;
       const map = new maplibregl.Map({ container: containerRef.current, style, center: startCenter, zoom: startZoom, maxPitch: 80, attributionControl: false, hash: false });
-      mapRef.current = map; (window as unknown as { __map: unknown }).__map = map; // DEBUG-TEMP
+      mapRef.current = map;
+      // Without a place in the URL or a last view, move to the visitor's location if the browser gives it quickly.
+      if (startView.source === "timezone") void locateVisitor(3000).then((at) => { if (at && !disposed && !initial.trail) map.jumpTo({ center: at, zoom: 11 }); });
       map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "Trails © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors (ODbL), NPS, USFS, BLM, USGS, Parks Canada · <a href=\"/about/data\">Data sources</a>" }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "imperial", maxWidth: 90 }), "bottom-left");
       // Blue dot for the visitor's position; our "Show my location" button triggers it.
       const geolocate = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true, timeout: 12_000 }, trackUserLocation: false, showUserLocation: true, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 12 } });
       map.addControl(geolocate, "bottom-right");
+      geolocate.on("geolocate", (p) => rememberPosition([p.coords.longitude, p.coords.latitude]));
       geolocate.on("error", () => setLoadError("Location is off for this site. Allow it in your browser to see trails near you."));
       geolocateRef.current = geolocate;
       map.on("style.load", () => { installOverlay(map, sourcesRef.current); installExtras(map, extrasRef.current); applySectionFilter(map, sectionRef.current); applyLayers(map, layersRef.current); });
@@ -362,6 +385,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       let timer: ReturnType<typeof setTimeout> | undefined;
       map.on("moveend", () => {
         const c = map.getCenter();
+        saveLastView(c.lng, c.lat, map.getZoom());
         setCenter([c.lng, c.lat]);
         setZoom(map.getZoom());
         const params = new URLSearchParams(window.location.search);
@@ -396,7 +420,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         if (map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-thru-hikes"] }).length) return;
         const f = e.features?.[0]; if (f) openSkiRef.current(f);
       });
-      map.on("click", "hy-ski-pin", (e) => { const s = e.features?.[0]?.properties?.slug; if (s) routerRef.current.push(`/ski-areas/${s}`); });
+      map.on("click", "hy-ski-pin", (e) => { const href = e.features?.[0]?.properties?.href; if (href) routerRef.current.push(href); });
 
       // Precision Map-Snapping on click: snap to closest vector segment if clicked near a trail
       map.on("click", (e) => {
@@ -476,19 +500,27 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh]);
 
-  // Pins for every ski area (requires sign-in to read).
+  // Pins for every ski area. Signed-in visitors read the account database's ski areas (with run maps); everyone
+  // else gets the site's own OpenSkiMap list — the database table refuses signed-out reads, so it isn't asked.
   useEffect(() => {
-    const client = createClient(); if (!client) return;
+    const client = createClient();
     let live = true;
     void (async () => {
-      const rows: { slug: string; name: string; latitude: number; longitude: number }[] = [];
-      for (let i = 0; i < 7; i++) {
-        const { data } = await client.from("ski_areas").select("slug,name,latitude,longitude").range(i * 1000, i * 1000 + 999);
-        if (!data?.length) break; rows.push(...data); if (data.length < 1000) break;
+      const rows: { slug: string | null; name: string; latitude: number; longitude: number; href: string }[] = [];
+      const signedIn = client ? Boolean((await client.auth.getSession()).data.session) : false;
+      for (let i = 0; client && signedIn && i < 7; i++) {
+        const { data, error } = await client.from("ski_areas").select("slug,name,latitude,longitude").range(i * 1000, i * 1000 + 999);
+        if (error || !data?.length) break;
+        rows.push(...data.map((r) => ({ ...r, href: `/ski-areas/${r.slug}` })));
+        if (data.length < 1000) break;
+      }
+      if (!rows.length) {
+        const builtIn = await skiAreaRows(window.fetch.bind(window)).catch(() => []);
+        rows.push(...builtIn.map((r) => ({ slug: null, name: r[1], latitude: r[3], longitude: r[2], href: `/explore/ski?area=${r[0]}` })));
       }
       if (!live) return;
-      skiAreas.current = rows.map((r) => ({ slug: r.slug, lng: r.longitude, lat: r.latitude }));
-      const fc: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: { slug: r.slug, name: r.name }, geometry: { type: "Point", coordinates: [r.longitude, r.latitude] } })) };
+      skiAreas.current = rows.flatMap((r) => (r.slug ? [{ slug: r.slug, lng: r.longitude, lat: r.latitude }] : []));
+      const fc: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: { href: r.href, name: r.name }, geometry: { type: "Point", coordinates: [r.longitude, r.latitude] } })) };
       extrasRef.current.skiPins = fc;
       (mapRef.current?.getSource("hy-ski-pins") as maplibregl.GeoJSONSource | undefined)?.setData(fc);
       void refreshSki();
@@ -519,27 +551,44 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       if (!live) return;
       map.setStyle(style, { diff: false });
       map.once("style.load", () => {
-        if (is3dRef.current) { map.setTerrain({ source: "terrain", exaggeration: 1.4 }); setSky(map, true); }
+        if (is3dRef.current) { setThreeD(map, true); trailLine3d(map, true); }
         syncSelectedPin();
       });
     });
     return () => { live = false; };
   }, [basemap, syncSelectedPin]);
 
+  // 3D: satellite imagery by default (the map style comes back when 3D is turned off), terrain, sky, no label
+  // clutter, a thicker trail line, and a camera looking up the selected trail with all of it in view.
+  const basemapBefore3d = useRef<Basemap | null>(null);
   useEffect(() => {
     is3dRef.current = is3d;
     const map = mapRef.current;
     if (!map || !ready) return;
+    setThreeD(map, is3d);
+    trailLine3d(map, is3d);
     if (is3d) {
-      map.setTerrain({ source: "terrain", exaggeration: 1.4 });
-      setSky(map, true);
-      map.easeTo({ pitch: 62, bearing: map.getBearing() || -20, zoom: Math.max(map.getZoom(), 11.5), duration: 900 });
-    } else {
-      map.setTerrain(null);
-      setSky(map, false);
-      map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+      const lines = detailRef.current?.lines;
+      const profile = elevationRef.current && elevationRef.current !== "none" ? elevationRef.current.profile : null;
+      if (lines?.length) cameraUpTrail(map, lines as [number, number][][], profile);
+      else map.easeTo({ pitch: PITCH_3D, zoom: Math.max(map.getZoom(), 11.5), duration: 900 });
     }
   }, [is3d, ready]);
+
+  /** 3D on switches to satellite imagery; off brings the chosen style back. */
+  const toggle3d = () => {
+    if (!is3d && basemap !== "satellite" && basemap !== "hybrid") { basemapBefore3d.current = basemap; setBasemap("satellite"); }
+    if (is3d && basemapBefore3d.current) { setBasemap(basemapBefore3d.current); basemapBefore3d.current = null; }
+    setIs3d(!is3d);
+  };
+
+  // A trail picked while in 3D: look up it, with all of it in view.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && is3d && detail?.lines.length) cameraUpTrail(map, detail.lines, elevation && elevation !== "none" ? elevation.profile : null);
+    // Only a newly loaded trail (or its profile) re-aims the camera; toggling 3D aims it above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail, elevation]);
 
   useEffect(() => {
     filtersRef.current = filters;
@@ -593,21 +642,24 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
   const cards = useMemo(() => {
     if (!localTrailsVisible(zoom)) return [];
-    // Nearest first, discounted by the quality score (40 points halve the distance), so whole, well-sourced
-    // trails come before stubs and connectors that happen to be closer.
-    const list = (points?.trails ?? []).map((t) => ({ t, km: distanceKm(center, [t[2], t[3]]) / (1 + Math.max(0, t[8] ?? 0) / 40) }));
-    list.sort((a, b) => a.km - b.km);
+    // Best-documented first: real hikes (1 mi or more) before stubs, then nearest, discounted by the list score
+    // (40 points halve the distance), so whole, well-sourced trails come before connectors that happen to be closer.
+    const list = (points?.trails ?? []).map((t) => ({ t, real: (t[4] ?? 0) >= 1, km: distanceKm(center, [t[2], t[3]]) / (1 + Math.max(0, t[12] ?? t[8] ?? 0) / 40) }));
+    list.sort((a, b) => Number(b.real) - Number(a.real) || a.km - b.km);
     const out = list.slice(0, TRAIL_CARD_LIMIT).map((x) => x.t);
     if (selectedId && !out.some((t) => t[0] === selectedId)) {
       const hit = points?.trails.find((t) => t[0] === selectedId);
       if (hit) out.unshift(hit);
       else if (detail?.trail.id === selectedId) {
         const t = detail.trail;
-        out.unshift([t.id, t.name, t.longitude, t.latitude, t.miles, "m", t.park ?? t.forest ?? t.region, t.routeType ?? null, t.qualityScore ?? 0]);
+        const code = ({ easy: "e", moderate: "m", hard: "h", expert: "x" } as const)[trailDifficulty(t)];
+        out.unshift([t.id, t.name, t.longitude, t.latitude, t.miles, code, t.park ?? t.forest ?? t.region, t.routeType ?? null, t.qualityScore ?? 0, t.gainFt ?? null, t.lossFt ?? null, t.steepestGradePct ?? null]);
       }
     }
     return out.slice(0, TRAIL_CARD_LIMIT);
   }, [points, center, selectedId, detail, zoom]);
+  const ratings = useRatings(cards.map((t) => t[0]));
+  const here = useKnownPosition();
 
   useEffect(() => {
     if (!selectedId) return;
@@ -707,7 +759,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       <header className="hx-workspace-header"><div><h1>{workspace ? "Explore trails" : "Trail map"}</h1><p>Find a route. Make it your next adventure.</p></div><nav aria-label="Trail workspace"><Link className="hx-btn" href="/explore/trails/catalog">Browse list</Link><Link className="hx-btn hx-btn--primary" href="/plan">Plan a trip</Link></nav></header>
       <div className="hx-map">
         <div ref={containerRef} className="hx-map-canvas" role="region" aria-label="Trail map" />
-        {(firstLoad || !ready) && (
+        {!ready && (
           <div className="hx-loading" role="status">
             <div className="hx-loading-sheen" aria-hidden="true" />
             <p>Loading the map and trails…</p>
@@ -734,7 +786,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         <button type="button" className="hx-ctl" aria-label="Full screen" title="Full screen" onClick={toggleFullscreen}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
         </button>
-        <button type="button" className="hx-ctl hx-ctl--text" aria-pressed={is3d} aria-label={is3d ? "Show flat map" : "Show 3D terrain"} onClick={() => setIs3d((v) => !v)}>3D</button>
+        <button type="button" className="hx-ctl hx-ctl--text" aria-pressed={is3d} aria-label={is3d ? "Show flat map" : "Show 3D terrain"} onClick={toggle3d}>3D</button>
         <button type="button" className="hx-ctl" aria-label="Build a route" title="Build a route" aria-pressed={routeOpen} onClick={() => { setRouteOpen((v) => !v); setSearchOpen(false); setSelectedId(null); }}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.2" /><circle cx="18" cy="5" r="2.2" /><path d="M8 18.5h7.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H16" /></svg>
         </button>
@@ -926,9 +978,10 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         {cards.length > 0 ? (
           <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, best-documented first">
             {cards.map((t) => {
-              const [id, name, , , miles, d, place, routeType] = t;
+              const [id, name, lng, lat, miles, d, place, routeType, , gainFt, lossFt, steepest] = t;
+              const away = here ? formatAway(metersBetween(here, [lng, lat])) : null;
               const active = id === selectedId;
-              const hours = active && gain !== null ? naismithHours(miles, gain) : null;
+              const level = (({ e: "easy", m: "moderate", h: "hard", x: "expert" } as const)[d as "e"] ?? "moderate") as TrailDifficulty;
               return (
                 <article key={id} data-id={id} role="listitem" className={`hx-card${active ? " hx-card--active" : ""}`}>
                   <button type="button" className="hx-card-hit" onClick={() => setSelectedId(active ? null : id)} aria-pressed={active} aria-label={`${name}${active ? ", selected" : ""}`} />
@@ -937,7 +990,9 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                     <div className="hx-card-title">
                       <h3>{name}</h3>
                       <p>{joinParts([place, routeType && ROUTE_LABEL[routeType]]) ?? "Location not recorded"}</p>
+                      <p className="card-meta"><CardRating rating={ratings.get(id)} />{away && <small>{away}</small>}</p>
                     </div>
+                    <SaveHeart trailId={id} name={name} className="save-heart--card" />
                     {active && weather && (weather.temperatureF ?? weather.lowF) !== undefined && (
                       <span className="hx-weather" title={weather.shortForecast}>
                         <strong>{Math.round(weather.temperatureF ?? weather.lowF ?? 0)}°F</strong>
@@ -945,17 +1000,12 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                       </span>
                     )}
                   </div>
-                  <dl className="hx-stats">
-                    <div><dt>Difficulty</dt><dd><span className="hx-dot" style={{ background: DIFFICULTY_COLORS[d] }} />{DIFFICULTY_LABELS[d]}</dd></div>
-                    {fmtMiles(miles) && <div><dt>Length</dt><dd>{fmtMiles(miles)}</dd></div>}
-                    {active && feet(gain) && <div><dt>Gain</dt><dd>{feet(gain)}</dd></div>}
-                    {fmtDuration(hours) && <div><dt>Est. time</dt><dd>{fmtDuration(hours)}</dd></div>}
-                  </dl>
+                  <TrailStats compact trail={{ miles, gainFt: gainFt ?? (active ? gain : null), lossFt, steepestGradePct: steepest, routeType: (routeType as RouteType | null) ?? null, difficulty: level, multiDay: (miles ?? 0) >= 50 }} />
                   {active && (
                     <div className="hx-card-more">
-                      {elevation && elevation !== "none" && elevation.profile.length > 2 ? <ElevationChart e={elevation} /> : elevation === null ? <div className="hx-elev hx-elev--loading" aria-label="Loading elevation" /> : null}
+                      {elevation && elevation !== "none" && elevation.profile.length > 2 ? <ElevationChart e={elevation} gainFt={gainFt} lossFt={lossFt} /> : elevation === null ? <div className="hx-elev hx-elev--loading" aria-label="Loading elevation" /> : null}
                       {drive && (
-                        <p className="hx-drive">Drive: <strong>{fmtDuration(drive.durationSeconds / 3600)}</strong> · {Math.round(drive.distanceMeters / 1609.344)} mi to {start?.kind === "trail-end" ? "the trail" : start?.name ?? "the trailhead"}</p>
+                        <p className="hx-drive">Drive: <strong>{fmtDuration(drive.durationSeconds / 3600)}</strong> · {formatMeters(drive.distanceMeters)} to {start?.kind === "trail-end" ? "the trail" : start?.name ?? "the trailhead"}</p>
                       )}
                       {driveState && <p className="hx-drive" role="status">{driveState}</p>}
                       <div className="hx-actions">
@@ -1039,7 +1089,8 @@ function TrailShape({ id, lines, color }: { id: string; lines?: [number, number]
   );
 }
 
-function ElevationChart({ e }: { e: Elevation }) {
+/** The card's small profile; its climb and descent are the trail's stored measures, matching the stats above. */
+function ElevationChart({ e, gainFt, lossFt }: { e: Elevation; gainFt?: number | null; lossFt?: number | null }) {
   const W = 320, H = 64;
   const maxMile = e.profile[e.profile.length - 1][0] || 1;
   const range = Math.max(40, e.maxFt - e.minFt);
@@ -1052,8 +1103,8 @@ function ElevationChart({ e }: { e: Elevation }) {
         <path d={line} className="hx-elev-line" vectorEffect="non-scaling-stroke" />
       </svg>
       <figcaption>
-        <span>{e.minFt.toLocaleString("en-US")}–{e.maxFt.toLocaleString("en-US")} ft</span>
-        <span>{e.gainFt.toLocaleString("en-US")} ft up · {e.lossFt.toLocaleString("en-US")} ft down{e.partial ? " (partial)" : ""}</span>
+        <span>{formatElevation(e.minFt)}–{formatElevation(e.maxFt)}</span>
+        <span>{formatElevation(Number.isFinite(gainFt) ? gainFt : e.gainFt)} up · {formatElevation(Number.isFinite(lossFt) ? lossFt : e.lossFt)} down{e.partial ? " (partial)" : ""}</span>
       </figcaption>
     </figure>
   );

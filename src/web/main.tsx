@@ -1,4 +1,6 @@
 import { StrictMode, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useUnits } from "@/lib/units";
+import { locate, timezoneRegion } from "@/lib/start-location";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import Link from "./compat/link";
@@ -43,33 +45,36 @@ import "@/app/globals.css";
 import "./web.css";
 const mountainUrl = typeof mountainNight === "string" ? mountainNight : mountainNight.src;
 
-function Status({ title, children }: { title: string; children?: ReactNode }) { return <section className="fieldbook-page"><h1>{title}</h1><p role="status">{children}</p></section>; }
+function Status({ title, children }: { title: string; children?: ReactNode }) { return <section className="fieldbook-page"><h1>{title}</h1><div role="status" className="fieldbook-status">{children}</div></section>; }
 function RequireAccount({ children }: { children: ReactNode }) {
   const { user, loading } = useAccount(); const location = useLocation();
   if (loading) return <Status title="Loading your account…" />;
   if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   return children;
 }
-/** Without a search or filter, the catalog opens on trails near the visitor (western U.S. if location is off). */
-const WEST: { lat: number; lng: number; fallback: true } = { lat: 38.5, lng: -119.6, fallback: true };
+/**
+ * Without a search or filter, the catalog opens on trails near the visitor, the same way the map starts: their
+ * location (3 s), else the hiking region of their time zone ("Trails in Southern California").
+ */
 function Catalog() {
   const { search } = useLocation();
   const needsOrigin = !["q", "collection", "lat", "bbox", "region", "country", "kind", "resort", "page"].some((k) => new URLSearchParams(search).has(k));
-  const [origin, setOrigin] = useState<{ lat: number; lng: number; fallback?: true } | null>(null);
+  const [origin, setOrigin] = useState<{ lat: number; lng: number; region?: string } | null>(null);
   const [state, setState] = useState<{ result?: CatalogResult; map?: CatalogMapResult; error?: string; for?: string }>({});
   useEffect(() => {
     if (!needsOrigin) return;
-    let settled = false;
-    const finish = (o: { lat: number; lng: number; fallback?: true }) => { if (!settled) { settled = true; setOrigin(o); } };
-    const timer = setTimeout(() => finish(WEST), 4000);
-    if (!("geolocation" in navigator)) finish(WEST);
-    else navigator.geolocation.getCurrentPosition((p) => finish({ lat: p.coords.latitude, lng: p.coords.longitude }), () => finish(WEST), { timeout: 4000, maximumAge: 600_000 });
-    return () => clearTimeout(timer);
+    let live = true;
+    void locate(3000).then((at) => {
+      if (!live) return;
+      if (at) setOrigin({ lat: at[1], lng: at[0] });
+      else { const r = timezoneRegion(); setOrigin({ lat: r.center[1], lng: r.center[0], region: r.label }); }
+    });
+    return () => { live = false; };
   }, [needsOrigin]);
   const query = useMemo(() => {
     const params = new URLSearchParams(search);
     if (!params.has("limit")) params.set("limit", "24");
-    if (needsOrigin && origin) { params.set("lat", origin.lat.toFixed(3)); params.set("lng", origin.lng.toFixed(3)); params.set("radiusKm", "50"); }
+    if (needsOrigin && origin) { params.set("lat", origin.lat.toFixed(3)); params.set("lng", origin.lng.toFixed(3)); params.set("radiusKm", "50"); if (origin.region) params.set("place", origin.region); }
     return params.toString();
   }, [search, needsOrigin, origin]);
   const waiting = needsOrigin && !origin;
@@ -85,7 +90,7 @@ function Catalog() {
   if (state.for === query && state.error) return <Status title="Trail catalog unavailable">{state.error}</Status>;
   if (waiting || state.for !== query || !state.result) return <Status title={waiting ? "Finding trails near you…" : "Loading trails…"} />;
   return <>
-    {needsOrigin && origin?.fallback && <p className="catalog-location-note" role="status">Showing trails in the western U.S. Allow location in your browser to see trails near you.</p>}
+    {needsOrigin && origin?.region && <p className="catalog-location-note" role="status">Showing trails in {origin.region}. Allow location in your browser to see trails near you.</p>}
     <CatalogPresentation key={query} params={new URLSearchParams(query)} result={state.result} mapData={state.map ?? null} />
   </>;
 }
@@ -183,9 +188,11 @@ function BackendPage() { const location = useLocation(); return <Status title="T
 function App() {
   const { user } = useAccount();
   const { pathname } = useLocation();
-  return <><RouteMeta pathname={pathname} /><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><AppShell><Routes>
+  // Pages redraw when the units setting changes (every formatter reads it).
+  const units = useUnits();
+  return <><RouteMeta pathname={pathname} /><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><AppShell><Routes key={units}>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<ExploreRedirect />} /><Route path="/my/trails/:id" element={<PersonalTrailRoute />} /><Route path="/shared/trails/:token" element={<PersonalTrailRoute shared />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
-    <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<MapPage />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
+    <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<ExploreRedirect />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
     <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/about/data" element={<DataSources />} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />

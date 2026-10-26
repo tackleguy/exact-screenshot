@@ -1,3 +1,4 @@
+import { formatElevation } from "@/lib/units";
 import Link from "next/link";
 import { CatalogMapView } from "./CatalogMapView";
 import { TrailMapAndDirections } from "./TrailMapAndDirections";
@@ -11,8 +12,13 @@ import type { CatalogManifest, CatalogTrail } from "@/lib/trail-catalog/types";
 import { countryName, sourceName } from "@/lib/trail-catalog/types";
 import { CONFIDENCE_LABELS, SOURCE_TYPE_LABELS, TRAIL_TYPE_LABELS } from "@/lib/trail-catalog/agencies";
 import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, formatDistance } from "@/lib/trail-catalog/quality";
-import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, resolveDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
+import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, trailDifficulty } from "@/lib/trail-difficulty";
 import { CatalogTrailHero } from "./CatalogTrailHero";
+import { TrailHighlights } from "./TrailHighlights";
+import { TrailReviews } from "./TrailReviews";
+import { estimatedTime } from "./TrailStats";
+import { describeTrail } from "@/lib/trail-catalog/describe";
+import { cleanTrailName } from "@/lib/trail-catalog/cleanup";
 import "./catalog.css";
 import { trailSacScale } from "@/lib/trail-catalog/types";
 
@@ -38,20 +44,21 @@ export function CatalogTrailDetail({
   const browse = new URLSearchParams({
     ...(t.country === "US" || t.country === "CA" ? { country: t.country } : { country: "intl" }),
     ...(isRoute ? { kind: "route" } : {}),
-    ...(t.region && (t.country === "US" || t.country === "CA") ? { region: t.region } : {}),
+    // Through-hikes span several states ("California · Oregon · Washington"), which isn't one region to filter by.
+    ...(t.region && !isRoute && !t.region.includes("·") && (t.country === "US" || t.country === "CA") ? { region: t.region } : {}),
   });
-  const difficulty = resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) });
+  const difficulty = trailDifficulty(t);
 
   return (
     <article className="catalog-shell catalog-detail">
-      <Link className="catalog-link" href={`/explore/trails?${browse}`}>
+      <Link className="catalog-link" href={`/explore/trails/catalog?${browse}`}>
         ← Browse {isRoute ? "through-hikes" : (t.region ?? countryName(t.country))}
       </Link>
-      <CatalogTrailHero trail={t} difficulty={difficulty.difficulty} distance={distance.primary} hasLines={hasLines} />
+      <CatalogTrailHero trail={t} difficulty={difficulty} distance={distance.primary} hasLines={hasLines} />
       {t.peakCategory && (
         <p className="trail-notes">
           <span className="catalog-badge">{t.peakCategory === "14er" ? "14er · 14,000+ ft peak" : t.peakCategory === "8000m" ? "8,000 m peak" : "Seven Summits"}</span>
-          {t.summitElevationFt && <span className="catalog-badge">Summit {t.summitElevationFt.toLocaleString()} ft ({t.summitElevationM?.toLocaleString()} m)</span>}
+          {t.summitElevationFt && <span className="catalog-badge">Summit {formatElevation(t.summitElevationFt)}</span>}
         </p>
       )}
       {t.partOfRoute && (
@@ -80,12 +87,12 @@ export function CatalogTrailDetail({
           {parent && <> <Link className="catalog-link" href={`/explore/trails/${encodeURIComponent(parent.id)}`}>View {parent.name} ({formatDistance(parent.miles).primary})</Link></>}
         </p>
       )}
-      {(t.wiki?.extract || t.osm?.description || isRoute || (t.source === "resort" && t.note)) && (
-        <section className="catalog-about" aria-label="About this trail">
-          <p>{t.wiki?.extract ?? t.osm?.description ?? (t.source === "resort" ? t.note : t.note ?? "A through-hike guide. Confirm distance, permits and current conditions with the trail association or land manager.")}</p>
-          {t.wiki?.extract && <p className="catalog-muted">From <a href={t.wiki.url} target="_blank" rel="noopener noreferrer">Wikipedia</a> (CC BY-SA 4.0).</p>}
-        </section>
-      )}
+      <TrailHighlights trail={t} hasLine={hasLines} />
+      <section className="catalog-about" aria-label="About this trail">
+        {/* The official or Wikipedia text when there is one; otherwise a summary written from the measured facts. */}
+        <p>{t.wiki?.extract ?? t.osm?.description ?? (t.source === "resort" && t.note ? t.note : isRoute ? (t.note ?? "A through-hike guide. Confirm distance, permits and current conditions with the trail association or land manager.") : describeTrail(t, { difficulty, time: estimatedTime({ miles: t.miles, gainFt: t.gainFt ?? null, lossFt: t.lossFt, steepestGradePct: t.steepestGradePct, routeType: t.routeType, difficulty, multiDay: Boolean(t.peakCategory) }) }))}</p>
+        {t.wiki?.extract && <p className="catalog-muted">From <a href={t.wiki.url} target="_blank" rel="noopener noreferrer">Wikipedia</a> (CC BY-SA 4.0).</p>}
+      </section>
       {t.sections && t.sections.length > 0 && (
         <section className="trail-sections" aria-labelledby="trail-sections-heading">
           <h2 id="trail-sections-heading">Sections <small>{t.sections.length}</small></h2>
@@ -103,19 +110,19 @@ export function CatalogTrailDetail({
       )}
       <h2 className="trail-heading">{hasLines ? "Map" : "Approximate location"}</h2>
       {hasLines && !isRoute ? (
-        <TrailMapAndDirections name={t.name} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }}>
-          <TrailElevationSection trailId={t.id} />
+        <TrailMapAndDirections name={t.name} trailId={t.id} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }}>
+          <TrailElevationSection trailId={t.id} stored={t} difficulty={difficulty} />
         </TrailMapAndDirections>
       ) : (
         <>
-          <CatalogMapView lines={hasLines ? lines : undefined} trails={hasLines ? undefined : [t]} name={t.name} />
+          <CatalogMapView lines={hasLines ? lines : undefined} trails={hasLines ? undefined : [t]} name={t.name} trailId={hasLines ? t.id : undefined} />
           {!hasLines && (
             <p className="catalog-muted">
               {t.source === "resort" ? "Pin marks the resort base area; the resort doesn’t publish this trail’s route." : "Pin marks an approximate trailhead or corridor midpoint, not a GPS track."}
               {hasLocation && <> <a href={googleMapsDirectionsUrl(t.latitude, t.longitude)} target="_blank" rel="noopener noreferrer">Directions in Google Maps</a></>}
             </p>
           )}
-          {hasLines && <TrailElevationSection trailId={t.id} />}
+          {hasLines && <TrailElevationSection trailId={t.id} stored={t} difficulty={difficulty} />}
         </>
       )}
       {hasLocation && (
@@ -140,6 +147,7 @@ export function CatalogTrailDetail({
           <CatalogPhotos trailId={t.id} />
         </details>
       )}
+      <TrailReviews trailId={t.id} name={t.name} />
       <details className="trail-more">
         <summary><span>About this data</span><small>Sources, checks and licences</small></summary>
         <dl className="catalog-source-details">
@@ -149,7 +157,7 @@ export function CatalogTrailDetail({
           </div>
           <div>
             <dt>Difficulty</dt>
-            <dd>{DIFFICULTY_LABELS[difficulty.difficulty as TrailDifficulty] ?? difficulty.difficulty} <small className="catalog-muted" title={DIFFICULTY_FORMULA}>{difficulty.label}</small></dd>
+            <dd>{DIFFICULTY_LABELS[difficulty]} <small className="catalog-muted" title={DIFFICULTY_FORMULA}>from length{Number.isFinite(t.gainFt) ? " and measured climb" : ""}</small></dd>
           </div>
           <div>
             <dt>Dogs</dt>
@@ -245,7 +253,7 @@ export function CatalogTrailDetail({
                   <a href={ref.url} target="_blank" rel="noopener noreferrer">
                     {SOURCE_TYPE_LABELS[ref.type]}
                     {ref.officialTrailId ? ` trail #${ref.officialTrailId}` : ""}
-                    {pieces > 1 ? ` (${pieces} sections)` : ref.name !== t.name ? ` (“${ref.name}”)` : ""}
+                    {pieces > 1 ? ` (${pieces} sections)` : ref.name && cleanTrailName(ref.name).name !== t.name ? ` (“${cleanTrailName(ref.name).name}”)` : ""}
                   </a>
                 </span>
               );

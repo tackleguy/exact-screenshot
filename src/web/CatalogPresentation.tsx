@@ -2,15 +2,23 @@ import Link from "next/link";
 import type { CatalogManifest, CatalogTrail, CatalogMapResult } from "@/lib/trail-catalog/types";
 import { parseCatalogFilters } from "@/lib/trail-catalog/search";
 import { headlineCount, countryName, displayMiles, trailPlace, trailSacScale } from "@/lib/trail-catalog/types";
-import { resolveDifficulty } from "@/lib/trail-difficulty";
+import { trailDifficulty } from "@/lib/trail-difficulty";
 import { QUALITY_STATUS_LABELS } from "@/lib/trail-catalog/quality";
 import { CatalogMap } from "@/components/trails/CatalogMap";
 import { NavIcon } from "@/components/nav/NavIcon";
 import { SectionIcon } from "@/components/explore/SectionIcon";
 import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf } from "@/lib/trail-catalog/activity";
 import "@/components/trails/catalog.css";
+import { SaveHeart } from "@/components/trails/SaveHeart";
+import { CardRating, useRatings } from "@/components/trails/TrailReviews";
+import { trailThumbnail } from "@/lib/trail-catalog/thumbnail";
+import { useKnownPosition } from "@/lib/start-location";
+import { metersBetween } from "@/lib/geo/line";
+import { formatMeters } from "@/lib/units";
 
-const ROUTE_SHAPES = { loop: "Loop", "point-to-point": "One way", network: "Connected paths" } as const;
+/** Same colours as the map's difficulty legend (kept here so the list doesn't load the map code). */
+const DIFFICULTY_COLORS: Record<string, string> = { e: "#2f9e5b", m: "#2f7fd8", h: "#d8452f", x: "#1d1d1d" };
+const ROUTE_SHAPES: Record<string, string> = { loop: "Loop", "out-and-back": "Out & back", "point-to-point": "Point to point", segment: "Trail segment" };
 const LENGTHS = [["", "Any length"], ["-3", "Under 3 mi"], ["3-8", "3 – 8 mi"], ["8-15", "8 – 15 mi"], ["15-", "Over 15 mi"]] as const;
 
 export interface CatalogResult { trails: CatalogTrail[]; total: number; page: number; pages: number; limit: number; manifest: CatalogManifest; /** Name/place matches when more matched than were ranked and loaded. */ queryMatches?: number }
@@ -18,6 +26,8 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
   const filters = parseCatalogFilters(params);
   const preview = filters.limit === undefined && (!filters.page || filters.page === 1);
   const { trails, total, page, pages, limit, manifest } = result;
+  const ratings = useRatings(trails.map((t) => t.id));
+  const here = useKnownPosition();
   const activity = filters.activity ?? "hike";
   const filterSummary = [
     filters.bbox && "Map area",
@@ -59,7 +69,8 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
 
   // One count for the whole page: "Showing the first 24 of 1,284 trails near you" when the list is capped.
   const first = (page - 1) * limit + 1, last = Math.min(page * limit, total);
-  const where = `${params.has("lat") && !params.get("q") ? " near you" : ""}${params.get("region") ? ` in ${params.get("region")}` : ""}`;
+  // "near you" only when the real location is known; a time-zone guess names its region instead.
+  const where = `${params.has("lat") && !params.get("q") ? (params.get("place") ? ` in ${params.get("place")}` : " near you") : ""}${params.get("region") ? ` in ${params.get("region")}` : ""}`;
   const resultSummary = !total
     ? "No matching trails"
     : result.queryMatches
@@ -244,11 +255,13 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
             <>
               <ul className="catalog-list">
                 {trails.map((t) => (
-                  <li key={t.id}>
-                    <Link href={`/explore/trails/${t.id}`} prefetch={false} className="catalog-row">
+                  <li key={t.id} className="catalog-list-item">
+                    <Link href={`/explore/trails/${encodeURIComponent(t.id)}`} prefetch={false} className="catalog-row">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- remote static map picture */}
+                      <img className="catalog-row-thumb" src={trailThumbnail(t)} alt="" loading="lazy" width={80} height={60} />
                       <div className="catalog-row-name">
-                        <h2>
-                          {t.name}
+                        <h2>{t.name}</h2>
+                        <span className="catalog-badges">
                           {t.peakCategory && (
                             <span className="catalog-badge" style={{ background: "#7c3aed", color: "#fff", fontWeight: "bold" }}>
                               {t.peakCategory === "14er" ? "14er" : t.peakCategory === "8000m" ? "8,000m" : "Seven Summits"}
@@ -261,19 +274,21 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                           {t.quality && t.quality !== "ok" && (
                             <span className={`catalog-badge quality-${t.quality}`}>{QUALITY_STATUS_LABELS[t.quality]}</span>
                           )}
-                        </h2>
+                        </span>
                         <p>
                           {t.region ?? countryName(t.country)} · {trailPlace(t)}
-                          {` · ${resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty}`}
+ · {(() => { const d = trailDifficulty(t); return <span className="catalog-difficulty"><i style={{ background: DIFFICULTY_COLORS[d === "expert" ? "x" : d[0]] }} aria-hidden="true" />{d[0].toUpperCase() + d.slice(1)}</span>; })()}
                           {t.sections && t.sections.length > 0 ? ` · ${t.sections.length} sections` : ""}
                           {t.summitElevationFt ? ` · Summit ${t.summitElevationFt.toLocaleString()} ft` : ""}
                         </p>
+                        <p className="card-meta"><CardRating rating={ratings.get(t.id)} />{here && <small>{formatMeters(metersBetween(here, [t.longitude, t.latitude]))} away</small>}</p>
                       </div>
                       <span className="catalog-distance">
                         {displayMiles(t.miles)}
                       </span>
                       <NavIcon name="chevron" />
                     </Link>
+                    <SaveHeart trailId={t.id} name={t.name} className="save-heart--card catalog-row-heart" />
                   </li>
                 ))}
               </ul>

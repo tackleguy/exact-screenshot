@@ -64,7 +64,7 @@ export function PersonalTrailPage({ id, token }: { id?: string; token?: string }
   const profile = elevation?.key === trail.id ? elevation.value : null;
   const gainFt = trail.stats.gainFt ?? profile?.gainFt ?? null;
   // No rating rather than a made-up one when the route has no measurable length.
-  const level = computeDifficulty({ miles: trail.stats.miles, gainFt });
+  const level = computeDifficulty({ lengthMi: trail.stats.miles, gainFt });
   const start = trail.geometry[0], finish = trail.geometry[trail.geometry.length - 1];
   const loop = metersBetween(start, finish) < 200;
   const water = trail.features.filter((f) => featureGroup(f.type) === "water").length;

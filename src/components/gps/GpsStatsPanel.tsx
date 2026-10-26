@@ -1,5 +1,6 @@
 "use client";
 
+import { formatElevation } from "@/lib/units";
 import { formatCoordinate } from "@/lib/gps";
 import type { GpsQuality } from "@/components/gps/useGpsTrack";
 
@@ -70,7 +71,7 @@ export function GpsStatsPanel({
         <Stat label="Speed" value={`${speedMph.toFixed(1)} mph`} highlight />
         <Stat
           label="Altitude"
-          value={altitudeFt !== null ? `${altitudeFt.toLocaleString()} ft` : "—"}
+          value={formatElevation(altitudeFt) ?? "—"}
           highlight
         />
         <Stat label="Heading" value={headingLabel(heading)} />

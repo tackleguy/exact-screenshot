@@ -1,3 +1,4 @@
+import { formatDistance, formatElevation } from "@/lib/units";
 import Link from "next/link";
 import Image from "next/image";
 import type { Trail } from "@/lib/types";
@@ -40,9 +41,9 @@ export function FeaturedTrailCard({ trail }: { trail: Trail }) {
           </p>
         )}
         <div className="mt-3 flex items-center gap-3 text-xs text-sage">
-          <span>{trail.length_miles} mi</span>
+          <span>{formatDistance(trail.length_miles)}</span>
           <span className="text-mist">·</span>
-          <span>{trail.elevation_ft.toLocaleString()} ft</span>
+          <span>{formatElevation(trail.elevation_ft)}</span>
           <span className="ml-auto font-semibold text-accent">
             ★ {formatRating(trail.avg_rating)}
           </span>

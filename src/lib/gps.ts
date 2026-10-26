@@ -1,3 +1,4 @@
+import { formatMeters, formatPace as unitsPace, formatSpeed as unitsSpeed } from "@/lib/units";
 import type { GeoLineString, GpsPoint } from "@/lib/types";
 
 const M_TO_MI = 0.000621371;
@@ -77,22 +78,18 @@ export function formatDuration(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/** A recorded distance in meters, in the visitor's units (src/lib/units.ts). */
 export function formatDistance(meters: number): string {
-  const miles = metersToMiles(meters);
-  return miles < 0.1 ? `${Math.round(meters)} m` : `${miles.toFixed(2)} mi`;
+  return formatMeters(meters) ?? "0 ft";
 }
 
-/** Pace as min:sec per mile */
+/** Pace per mile or per km, in the visitor's units. */
 export function formatPace(distanceM: number, durationSec: number): string {
-  if (distanceM <= 0 || durationSec <= 0) return "—";
-  const secPerMile = durationSec / metersToMiles(distanceM);
-  const m = Math.floor(secPerMile / 60);
-  const s = Math.round(secPerMile % 60);
-  return `${m}:${String(s).padStart(2, "0")} /mi`;
+  return unitsPace(distanceM, durationSec) ?? "—";
 }
 
 export function formatSpeed(mph: number): string {
-  return `${mph.toFixed(1)} mph`;
+  return unitsSpeed(mph) ?? "—";
 }
 
 export function formatCoordinate(value: number, isLat: boolean): string {

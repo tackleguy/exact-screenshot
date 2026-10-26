@@ -1,3 +1,4 @@
+import { formatDistance } from "@/lib/units";
 export interface CatalogTrail {
   id: string;
   name: string;
@@ -9,7 +10,16 @@ export interface CatalogTrail {
   distanceBasis: "source" | "geometry";
   latitude: number;
   longitude: number;
+  /** Difficulty from computeDifficulty (src/lib/trail-difficulty.ts), stored by the data build. */
   difficulty: string | null;
+  /** The source's own difficulty wording, when it gave one (kept for reference; not used for the rating). */
+  reportedDifficulty?: string | null;
+  /** Measured along the line from elevation data by the data build: climb (larger direction for a line), descent, range, steepest 100 m grade. */
+  gainFt?: number | null;
+  lossFt?: number | null;
+  minElevFt?: number | null;
+  maxElevFt?: number | null;
+  steepestGradePct?: number | null;
   dogs: boolean | null;
   source: "usgs" | "parks-canada" | "ontario" | "nps" | "usfs" | "blm" | "resort" | "guide" | "route-aggregate" | "peak" | "osm";
   sourceId: string;
@@ -257,11 +267,9 @@ export function trailPlace(t: Pick<CatalogTrail, "park" | "forest" | "blmArea" |
   return (t.sourceType && agency[t.sourceType]) ?? sourceName(t.source);
 }
 
-/** Short trails show meters instead of a misleading "<0.1 mi". */
+/** A trail's length in the visitor's units (short trails in feet or metres, never "<0.1 mi"). */
 export function displayMiles(miles: number | null) {
-  if (miles === null) return "Distance unknown";
-  if (miles < 0.1) return `${Math.round((miles * 1609.344) / 5) * 5} m`;
-  return miles >= 100 ? `${Math.round(miles).toLocaleString("en-US")} mi` : `${miles.toFixed(1)} mi`;
+  return formatDistance(miles) ?? "Distance unknown";
 }
 
 /** OSM sac_scale for a trail, from its route relation or its joined ways. */

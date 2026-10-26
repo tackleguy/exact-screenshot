@@ -1,3 +1,4 @@
+import { formatDistance, formatElevation } from "@/lib/units";
 import Link from "next/link";
 import Image from "next/image";
 import type { Trail } from "@/lib/types";
@@ -41,8 +42,8 @@ export function TrailCard({ trail }: { trail: Trail }) {
         </div>
       </div>
       <div className="flex items-center justify-between px-4 py-3 text-sm text-sage">
-        <span>{trail.length_miles} mi</span>
-        <span>{trail.elevation_ft.toLocaleString()} ft ↑</span>
+        <span>{formatDistance(trail.length_miles)}</span>
+        <span>{formatElevation(trail.elevation_ft)} ↑</span>
         <span className="font-semibold text-accent">★ {formatRating(trail.avg_rating)}</span>
       </div>
     </Link>

@@ -1,3 +1,4 @@
+import { computeDifficulty } from "@/lib/trail-difficulty";
 import type { CatalogTrail } from "./types";
 
 export interface PeakDefinition {
@@ -966,7 +967,10 @@ export function peakToCatalogTrail(p: PeakDefinition): CatalogTrail {
     distanceBasis: "source",
     latitude: p.latitude,
     longitude: p.longitude,
-    difficulty: p.difficultyClass.startsWith("Class 1") ? "easy" : p.difficultyClass.startsWith("Class 2") ? "moderate" : "hard",
+    difficulty: computeDifficulty({ lengthMi: p.roundTripMiles, gainFt: p.elevationGainFt, maxElevFt: p.summitElevationFt }),
+    reportedDifficulty: p.difficultyClass,
+    gainFt: p.elevationGainFt,
+    maxElevFt: p.summitElevationFt,
     dogs: p.category === "14er" ? true : false,
     source: "peak",
     sourceId: p.id,

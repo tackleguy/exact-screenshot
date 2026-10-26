@@ -34,6 +34,7 @@ disk. A full run takes roughly an hour (most of it downloading the OSM extracts)
 | 4d. Worldwide build (`--world`) | `pipeline/steps/world.ts` | `world/index-<country>.json.gz`, `world/geometry-<cell>.json.gz`, `world/report.json` in the snapshot |
 | 4d. Pieces together | `pipeline/steps/join.ts` | one named trail split into pieces by the map data (beach walks, coastal paths cut by roads) becomes one trail: same name, country and activity, ends within 400 m; gaps are not drawn or counted |
 | 4e. Sections | `pipeline/steps/sections.ts` | routes list their stages (`sections`), stages link to their route (`partOfRoute`), from OSM route relations that contain other routes |
+| 4f. Elevation | `pipeline/steps/elevation.ts` | climb, descent, highest/lowest point and steepest 100 m grade of every trail from AWS Terrain Tiles (z12); the build stores them and rates difficulty with `computeDifficulty` |
 | 5. Hike features | `pipeline/steps/features.ts` | `features/f-<cell>.json.gz` in the snapshot: every feature with its mile on each nearby trail, plus `features-report.json` |
 | 6. Validation report | `pipeline/steps/validate.ts` | printed; the build also writes `build-report.json` in the snapshot |
 | 7. App files (`npm run build`) | `scripts/prepare-trail-assets.ts` | `public/trail-data/…` (worldwide trails read one country at a time: cells per country, a search index per country, id lookup in 256 files), `public/sitemap.xml`, `public/sitemaps/*.xml`, `public/robots.txt` (generated, not committed) |

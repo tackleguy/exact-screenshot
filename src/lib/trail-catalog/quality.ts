@@ -1,3 +1,4 @@
+import { formatDistance as formatUnits, getUnits } from "@/lib/units";
 import defaults from "../../../config/trail-quality.json";
 import type { CatalogTrail } from "./types";
 import { normalizeTrailName } from "./through-hikes";
@@ -16,10 +17,12 @@ export const QUALITY_RULES = Object.fromEntries(Object.entries(defaults).filter(
  *   but left out of default search and map results so it is not presented as a full hike.
  */
 export type QualityStatus = "ok" | "short" | "review" | "fragment";
-export type RouteType = "loop" | "point-to-point" | "network";
+/** "network" is the older label for several unjoined pieces; it reads as "Trail segment". */
+export type RouteType = "loop" | "out-and-back" | "point-to-point" | "segment" | "network";
 
 export const QUALITY_FLAGS = {
   "placeholder-name": "Source name is a placeholder; shown as Unnamed trail",
+  "needs-review": "The source marked this trail for review",
   unnamed: "No trail name in the source",
   connector: "Name marks a connector, spur, access path or road",
   "network-name": "Agency-wide name shared by many separate pieces",
@@ -305,10 +308,8 @@ export function findFragmentParents(candidates: FragmentCandidate[], rules: Qual
 /** Distance labels that never hide a short trail behind "<0.1". */
 export function formatDistance(miles: number | null) {
   if (miles === null || !Number.isFinite(miles)) return { primary: "Distance unknown", secondary: null as string | null };
-  const meters = miles * MILE_METERS;
-  const km = meters / 1000;
-  if (miles < 0.1) return { primary: `${Math.round(meters / 5) * 5} m`, secondary: `${miles.toFixed(2)} mi` };
-  return { primary: `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toLocaleString("en-US")} mi`, secondary: km < 1 ? `${Math.round(meters / 10) * 10} m` : `${km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString("en-US")} km` };
+  const units = getUnits();
+  return { primary: formatUnits(miles, units) ?? "Distance unknown", secondary: formatUnits(miles, units === "imperial" ? "metric" : "imperial") };
 }
 
 /**
@@ -317,8 +318,10 @@ export function formatDistance(miles: number | null) {
  */
 export const ROUTE_TYPE_LABELS: Record<RouteType, string> = {
   loop: "Loop",
-  "point-to-point": "Out and back / point to point",
-  network: "Trail network",
+  "out-and-back": "Out & back",
+  "point-to-point": "Point to point",
+  segment: "Trail segment",
+  network: "Trail segment",
 };
 
 export const QUALITY_STATUS_LABELS: Record<QualityStatus, string> = {

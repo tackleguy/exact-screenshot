@@ -523,6 +523,15 @@ html { scroll-padding-block:20px 100px; }
 .home-destination p { font-size: 12px; color: var(--sage); margin-top: 6px; line-height: 1.5; }
 .home-destination > svg { color: var(--accent); flex-shrink: 0; }
 .home-destination:hover h3 { color: var(--accent); }
+.home-near-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.home-near-card { position: relative; }
+.home-near-card > a { display: grid; gap: 6px; text-decoration: none; color: inherit; }
+.home-near-card img { width: 100%; aspect-ratio: 16 / 9; height: auto; object-fit: cover; border-radius: 12px; background: var(--surface-muted); }
+.home-near-card h3 { font-size: 16px; font-weight: 650; margin: 4px 0 0; }
+.home-near-card p { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--sage); margin: 0; font-variant-numeric: tabular-nums; }
+.home-near-card p i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.home-near-card:hover h3 { color: var(--accent); }
+@media (max-width: 900px) { .home-near-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .home-outdoor-tools { padding-top: 24px; padding-bottom: 64px; }
 .home-tools-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 40px; }
 .home-tool > svg { color: var(--accent); width: 26px; height: 26px; margin-bottom: 20px; }
@@ -552,8 +561,24 @@ html { scroll-padding-block:20px 100px; }
   .home-tool p { max-width: none; }
 }
 .discovery-hero--no-photo { background: linear-gradient(160deg, #173f35, #36745b 55%, #8aa38f); }
-.discovery-proof { margin: 14px 0 0; max-width: 46ch; font-size: 14px; line-height: 1.5; opacity: 0.92; }
-.home-near-me { margin-top: 14px; border: 0; background: none; cursor: pointer; font: inherit; }
+.discovery-proof { margin: 14px auto 0; max-width: 46ch; font-size: 14px; line-height: 1.5; opacity: 0.92; text-align: center; }
+/* Home: activities and famous long trails. */
+.home-activities, .home-long-trails { max-width: 1160px; margin: 0 auto; padding: 44px 32px; }
+.home-activity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.home-activity { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface-elevated, rgb(255 255 255 / 0.03)); color: var(--cream, inherit); text-decoration: none; transition: border-color 160ms ease-out, background-color 160ms ease-out; }
+.home-activity:hover, .home-activity:focus-visible { border-color: var(--accent); }
+.home-activity > svg { flex: none; color: var(--accent); }
+.home-activity span { display: grid; gap: 3px; min-width: 0; }
+.home-activity strong { font-size: 16px; }
+.home-activity small { font-size: 13px; color: var(--mist, #9aa59a); line-height: 1.4; }
+.home-long-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.home-long { position: relative; display: grid; gap: 4px; padding: 16px 40px 16px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); color: var(--cream, inherit); text-decoration: none; transition: border-color 160ms ease-out; }
+.home-long:hover, .home-long:focus-visible { border-color: var(--accent); }
+.home-long strong { font-size: 15px; }
+.home-long small { font-size: 12.5px; color: var(--mist, #9aa59a); }
+.home-long > svg { position: absolute; top: 16px; right: 14px; color: var(--accent); }
+@media (max-width: 1023px) { .home-activity-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .home-long-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 767px) { .home-activities, .home-long-trails { padding: 32px 20px; } .home-activity-grid, .home-long-grid { grid-template-columns: 1fr; gap: 10px; } }
 .guest-save-banner { position: fixed; z-index: 70; left: 50%; bottom: 24px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: min(560px, calc(100vw - 24px)); padding: 12px 12px 12px 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--foreground); box-shadow: 0 8px 24px #173f3526; }
 .guest-save-banner p { flex: 1; margin: 0; font-size: 14px; }
 .guest-save-close { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--sage); cursor: pointer; }
@@ -567,3 +592,31 @@ html { scroll-padding-block:20px 100px; }
 .data-sources-list span { color: var(--sage); line-height: 1.5; }
 .data-sources-list small, .data-sources-list small a { color: var(--sage); font-size: 13px; }
 .data-sources-note { font-size: 13px; }
+
+/* Units switch in the More menu. */
+.nav-units { display: flex; align-items: center; gap: 6px; padding: 10px 12px 4px; font-size: 13px; color: var(--mist); }
+.nav-units span { margin-right: auto; }
+.nav-units button { min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--cream); font: inherit; font-size: 12.5px; cursor: pointer; }
+.nav-units button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--forest, #0d120d); font-weight: 600; }
+/* Measurements line up in columns. */
+.trail-stats dd, .catalog-distance, .hx-stat, .trail-stat-value { font-variant-numeric: tabular-nums; }
+
+/* GPS recorder: resume / background / off-trail banners and map pills. */
+.recorder-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-elevated); color: var(--cream); font-size: 14px; }
+.recorder-banner p { margin: 0; flex: 1 1 260px; }
+.recorder-banner div { display: flex; gap: 8px; }
+.recorder-banner--warn { border-color: #eab308; background: rgb(234 179 8 / 0.12); }
+.recorder-map-tools { display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 8px; }
+.recorder-pill { min-height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-elevated); color: var(--cream); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.recorder-pill[aria-pressed="true"] { border-color: var(--accent); }
+.recorder-pill--weak { display: inline-flex; align-items: center; margin-right: auto; border-color: #eab308; background: rgb(234 179 8 / 0.18); color: #fde68a; cursor: default; }
+
+/* Recording pill: on every other page while a GPS recording runs, leading back to the recorder. */
+.recording-pill { position: fixed; z-index: 70; top: 14px; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 999px; background: #10291f; color: #f4f1e8; border: 1px solid rgb(255 255 255 / 0.18); box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); text-decoration: none; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.recording-pill i { width: 10px; height: 10px; border-radius: 50%; background: #e0475b; animation: recording-pulse 1.4s ease-in-out infinite; }
+.recording-pill--paused i { background: #f2b632; animation: none; }
+.recording-pill--acquiring i { background: #2f7fd8; }
+.recording-pill small { padding: 2px 8px; border-radius: 999px; background: rgb(255 255 255 / 0.14); font-size: 12px; }
+@keyframes recording-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .recording-pill i { animation: none; } }
+@media (max-width: 767px) { .recording-pill { top: auto; bottom: calc(84px + env(safe-area-inset-bottom)); } }

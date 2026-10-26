@@ -25,6 +25,8 @@ import { createHash } from "node:crypto";
 import { buildThroughHikeOverlay } from "../src/lib/trail-catalog/through-hikes";
 import { buildResortOverlay } from "../src/lib/trail-catalog/resorts";
 import { normalizeSeason, titleCaseName } from "../src/lib/trail-catalog/agencies";
+import { computeDifficulty, effortClimbFt } from "../src/lib/trail-difficulty";
+import { cleanTrailName, dedupeKey, isJunkSegment, overlapShare, routeTypeFromLines } from "../src/lib/trail-catalog/cleanup";
 import { sectionOf, trailActivities } from "../src/lib/trail-catalog/activity";
 import { countryName, type CatalogTrail } from "../src/lib/trail-catalog/types";
 import { pinCell, regionSlug, rowShard, searchKey, SEARCH_STOPWORDS } from "../src/lib/trail-catalog/static-data";
@@ -91,6 +93,20 @@ async function main() {
   const routes = buildThroughHikeOverlay(sections);
   const resorts = buildResortOverlay(JSON.parse(await readFile(path.join(root, "resort-trails.json"), "utf8")).resorts, sections);
   const redirects: Record<string, string> = Object.fromEntries(sections.filter((t) => t.mergedInto).map((t) => [t.id, t.mergedInto!]));
+  // Measured elevation (pipeline/steps/elevation.ts): [gainFt, lossFt, minFt, maxFt, steepestGradePct] by trail id.
+  const elevation: Record<string, [number, number, number, number, number | null]> = await readFile(path.join(source, "elevation.json.gz")).then((b) => JSON.parse(gunzipSync(b).toString())).catch(() => ({}));
+  /** Stores the measured climb and the one difficulty rating (src/lib/trail-difficulty.ts) on a trail. */
+  const rate = (t: CatalogTrail) => {
+    const e = elevation[t.id];
+    if (e) {
+      const climb = effortClimbFt({ gainFt: e[0], lossFt: e[1] }, t.routeType);
+      t.gainFt = climb;
+      t.lossFt = climb === e[0] ? e[1] : e[0];
+      t.minElevFt = e[2]; t.maxElevFt = e[3]; t.steepestGradePct = e[4];
+    }
+    if (t.reportedDifficulty === undefined) t.reportedDifficulty = t.difficulty ?? null;
+    t.difficulty = computeDifficulty({ lengthMi: t.miles, gainFt: t.gainFt, steepestGradePct: t.steepestGradePct, maxElevFt: t.maxElevFt }) ?? t.difficulty;
+  };
   const rows = [...sections.filter(shown), ...routes, ...resorts];
 
   await rm(path.resolve("public/trail-data"), { recursive: true, force: true });
@@ -141,6 +157,7 @@ async function main() {
 
   // ---- geometry: U.S./Canada lines of shown trails, merged with the worldwide lines of the same 1° cell ----
   const boundsById = new Map<string, [number, number, number, number]>();
+  const routeTypeById = new Map<string, CatalogTrail["routeType"]>();
   const worldGeometry = new Set((await readdir(path.join(source, "world")).catch(() => [] as string[])).filter((f) => /^geometry-.+\.json\.gz$/.test(f)));
   const geometryCells = new Set([...wanted.keys(), ...[...worldGeometry].map((f) => f.slice(9, -8))]);
   for (const shard of geometryCells) {
@@ -150,19 +167,77 @@ async function main() {
       try { data = Object.fromEntries(Object.entries(JSON.parse(gunzipSync(await readFile(path.join(source, `geometry-${shard}.json.gz`))).toString()) as Record<string, unknown>).filter(([id]) => ids.has(id))); } catch { /* no lines in this cell */ }
     }
     if (worldGeometry.has(`geometry-${shard}.json.gz`)) Object.assign(data, JSON.parse(gunzipSync(await readFile(path.join(source, "world", `geometry-${shard}.json.gz`))).toString()));
-    for (const [id, lines] of Object.entries(data)) boundsById.set(id, extent(lines as [number, number][][]));
+    for (const [id, lines] of Object.entries(data)) {
+      boundsById.set(id, extent(lines as [number, number][][]));
+      routeTypeById.set(id, routeTypeFromLines(lines as [number, number][][]));
+    }
     if (Object.keys(data).length) await writeFile(path.join(output, `geometry-${shard}.json.gz`), zipped(data));
   }
 
+  // ---- cleanup (src/lib/trail-catalog/cleanup.ts): names, route type from the line, rating, junk, near-duplicates ----
+  const tally = { renamed: 0, review: 0, routeTypes: 0, dropped: 0, merged: 0 };
+  const lineCache = new Map<string, Record<string, [number, number][][]>>();
+  const linesOf = async (t: CatalogTrail) => {
+    if (!t.geometryShard || t.geometryShard === "route") return null;
+    let cell = lineCache.get(t.geometryShard);
+    if (!cell) {
+      cell = await readFile(path.join(output, `geometry-${t.geometryShard}.json.gz`)).then((b) => JSON.parse(gunzipSync(b).toString())).catch(() => ({}));
+      lineCache.set(t.geometryShard, cell!);
+      if (lineCache.size > 64) lineCache.delete(lineCache.keys().next().value!);
+    }
+    return cell![t.id] ?? null;
+  };
+  const overlaps = (a: [number, number, number, number], b: [number, number, number, number]) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+  const cleanup = async (list: CatalogTrail[]) => {
+    for (const t of list) {
+      const { name, needsReview } = cleanTrailName(t.name);
+      if (name !== t.name) { t.name = name; tally.renamed++; }
+      // Section lists and "part of" links carry copies of other trails' names.
+      if (t.sections) for (const sec of t.sections) sec.name = cleanTrailName(sec.name).name;
+      if (t.partOfRoute) t.partOfRoute = { ...t.partOfRoute, name: cleanTrailName(t.partOfRoute.name).name };
+      if (needsReview) { t.quality = "review"; t.flags = [...new Set([...(t.flags ?? []), "needs-review" as const])]; tally.review++; }
+      const type = t.kind === "segment" ? routeTypeById.get(t.id) : undefined;
+      if (type && type !== t.routeType) { t.routeType = type; tally.routeTypes++; }
+      if (t.routeType === "network") t.routeType = "segment";
+      t.bounds = boundsById.get(t.id) ?? t.bounds;
+      rate(t);
+    }
+    const kept = list.filter((t) => !isJunkSegment(t));
+    tally.dropped += list.length - kept.length;
+    // The same trail mapped twice under slightly different names ("Valley Loop Trail" and "Yosemite Valley Loop
+    // Trail"): when the lines overlap by more than 60%, the shorter becomes a segment of the longer.
+    const groups = new Map<string, CatalogTrail[]>();
+    for (const t of kept) {
+      if (t.kind !== "segment" || t.partOfRoute || !t.bounds) continue;
+      const key = dedupeKey(t);
+      if (key) (groups.get(`${t.country}|${key}`) ?? groups.set(`${t.country}|${key}`, []).get(`${t.country}|${key}`)!).push(t);
+    }
+    for (const group of groups.values()) {
+      if (group.length < 2 || group.length > 60) continue;
+      group.sort((a, b) => (b.miles ?? 0) - (a.miles ?? 0));
+      for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) {
+        const long = group[i], short = group[j];
+        if (long.partOfRoute || short.partOfRoute || !overlaps(long.bounds!, short.bounds!)) continue;
+        const [a, b] = await Promise.all([linesOf(short), linesOf(long)]);
+        if (!a || !b || overlapShare(a, b) <= 0.6) continue;
+        short.partOfRoute = { id: long.id, name: long.name, totalMiles: long.miles ?? 0 };
+        if ((long.sections?.length ?? 0) < 120) long.sections = [...(long.sections ?? []), { id: short.id, name: short.name, miles: short.miles ?? 0, difficulty: short.difficulty ?? null }];
+        tally.merged++;
+      }
+    }
+    return kept;
+  };
+
   // ---- U.S. and Canada: trails by 2° cell; a trail is listed in every cell its line passes through ----
+  const naRows = await cleanup(rows);
   const cells = new Map<string, CatalogTrail[]>();
-  for (const row of rows) {
+  for (const row of naRows) {
     const b = boundsById.get(row.id);
     if (b) row.bounds = b;
     for (const key of cellKeysOf(row)) (cells.get(key) ?? cells.set(key, []).get(key)!).push(row);
   }
   await Promise.all([...cells].map(([key, trails]) => writeFile(path.join(output, `cell-${key}.json.gz`), zipped(trails.map(slim)))));
-  for (const t of rows) { index(t); count(t); pageOf(t); }
+  for (const t of naRows) { index(t); count(t); pageOf(t); }
   for (const [from, to] of Object.entries(redirects)) setRecord(from, JSON.stringify(`r:${to}`));
 
   // ---- worldwide, one country file at a time ----
@@ -175,10 +250,9 @@ async function main() {
     if (sha(buf) !== info.sha256) throw new Error(`Trail checksum mismatch (${code})`);
     const data = JSON.parse(gunzipSync(buf).toString()) as { rows: CatalogTrail[]; redirects: Record<string, string> };
     const byCell = new Map<string, CatalogTrail[]>();
+    for (const t of data.rows) t.name = titleCaseName(t.name);
+    data.rows = await cleanup(data.rows);
     for (const t of data.rows) {
-      t.name = titleCaseName(t.name);
-      const b = boundsById.get(t.id);
-      if (b) t.bounds = b;
       for (const k of cellKeysOf(t)) (byCell.get(k) ?? byCell.set(k, []).get(k)!).push(t);
       index(t);
       count(t);
@@ -211,7 +285,7 @@ async function main() {
   await writeFile(path.join(output, "clusters.json.gz"), zipped(clusters));
 
   await writeFile(path.join(output, "manifest.json"), JSON.stringify({
-    ...manifest, world: undefined, total: rows.length + worldRows, cells: [...cells.keys()], worldCells, searchRegions, searchCountries: [...new Set(["US", "CA", ...countriesWithTrails])],
+    ...manifest, world: undefined, total: naRows.length + worldRows, cells: [...cells.keys()], worldCells, searchRegions, searchCountries: [...new Set(["US", "CA", ...countriesWithTrails])],
     rowShards: true, searchFiles: true,
     featureCells: (await readdir(path.join(source, "features")).catch(() => [] as string[])).map((f) => f.slice(2, -8)), directory: pointer.directory,
   }));
@@ -244,7 +318,8 @@ async function main() {
   }
   await writeFile(path.resolve("public/sitemap.xml"), `<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${names.map((n) => `<sitemap><loc>${SITE}/sitemaps/${n}</loc><lastmod>${today}</lastmod></sitemap>`).join("\n")}\n</sitemapindex>\n`);
   await writeFile(path.resolve("public/robots.txt"), `User-agent: *\nAllow: /\nDisallow: /admin\n\nSitemap: ${SITE}/sitemap.xml\n`);
-  console.log(`Prepared ${(rows.length + worldRows).toLocaleString("en-US")} trails (${worldRows.toLocaleString("en-US")} worldwide in ${countriesWithTrails.length} countries) in ${cells.size} + ${Object.values(worldCells).flat().length} cell files; ${names.length} sitemap files.`);
+  console.log(`Cleanup: ${tally.renamed.toLocaleString("en-US")} renamed (${tally.review.toLocaleString("en-US")} review flags moved out of names), ${tally.routeTypes.toLocaleString("en-US")} route types read from the line, ${tally.dropped.toLocaleString("en-US")} junk segments dropped, ${tally.merged.toLocaleString("en-US")} near-duplicates folded into a longer trail.`);
+  console.log(`Prepared ${(naRows.length + worldRows).toLocaleString("en-US")} trails (${worldRows.toLocaleString("en-US")} worldwide in ${countriesWithTrails.length} countries) in ${cells.size} + ${Object.values(worldCells).flat().length} cell files; ${names.length} sitemap files.`);
 }
 /** Lovable hosting rejects builds with more than 50,000 files; keep generated data well under that. */
 const MAX_FILES = Number(process.env.MAX_TRAIL_FILES ?? 40_000);

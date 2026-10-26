@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDistance, formatElevation } from "@/lib/units";
 import type { ElevationSample } from "@/lib/types";
 
 interface TrailElevationProfileProps {
@@ -63,9 +64,9 @@ export function TrailElevationProfile({
         <path d={pathD} fill="none" stroke="#059669" strokeWidth="2.5" />
       </svg>
       <div className="mt-2 flex justify-between text-xs text-stone-500">
-        <span>0 mi</span>
-        <span>{maxDist.toFixed(1)} mi</span>
-        <span>↑ {Math.round(maxAlt - minAlt)} ft</span>
+        <span>0</span>
+        <span>{formatDistance(maxDist)}</span>
+        <span>↑ {formatElevation(maxAlt - minAlt)}</span>
       </div>
     </div>
   );

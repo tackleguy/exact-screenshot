@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDistance, formatElevation } from "@/lib/units";
 import type { GpsPoint } from "@/lib/types";
 import { haversineMeters, metersToMiles } from "@/lib/gps";
 
@@ -78,7 +79,7 @@ export function ElevationChart({ points, className = "", height = 96 }: Elevatio
           <g key={y}>
             <line x1="0" y1={y} x2={w} y2={y} stroke="currentColor" strokeOpacity="0.3" />
             <text x="2" y={y - 2} fill="#78716c" fontSize="7">
-              {Math.round(alt)} ft
+              {formatElevation(alt)}
             </text>
           </g>
         ))}
@@ -97,10 +98,10 @@ export function ElevationChart({ points, className = "", height = 96 }: Elevatio
         />
       </svg>
       <div className="mt-1 flex justify-between text-[10px] text-stone-400">
-        <span>0 mi</span>
-        <span>{maxDist.toFixed(2)} mi</span>
+        <span>0</span>
+        <span>{formatDistance(maxDist)}</span>
         <span>
-          ↑ {Math.round(maxAlt - minAlt)} ft gain on chart
+          ↑ {formatElevation(maxAlt - minAlt)} gain on chart
         </span>
       </div>
     </div>

@@ -48,8 +48,10 @@ const TERRAIN_SOURCE: maplibregl.RasterDEMSourceSpecification = {
 };
 
 function buildRasterStyle(basemap: Exclude<MapBasemap, "map">): maplibregl.StyleSpecification {
+  // Separate DEM sources for 3D terrain and for hillshading (one shared source makes MapLibre warn).
   const sources: maplibregl.StyleSpecification["sources"] = {
-    terrain: TERRAIN_SOURCE,
+    "terrain-dem": TERRAIN_SOURCE,
+    "hillshade-dem": { ...TERRAIN_SOURCE },
     satellite: {
       type: "raster",
       tiles: [ESRI_SAT],
@@ -84,7 +86,7 @@ function buildRasterStyle(basemap: Exclude<MapBasemap, "map">): maplibregl.Style
   layers.push({
     id: "hillshade",
     type: "hillshade",
-    source: "terrain",
+    source: "hillshade-dem",
     layout: { visibility: "none" },
     paint: {
       "hillshade-exaggeration": 0.45,
@@ -100,12 +102,12 @@ function buildRasterStyle(basemap: Exclude<MapBasemap, "map">): maplibregl.Style
 function withTerrainSource(
   style: maplibregl.StyleSpecification,
 ): maplibregl.StyleSpecification {
-  if (style.sources?.terrain) return style;
+  if (style.sources?.["terrain-dem"]) return style;
   return {
     ...style,
     sources: {
       ...style.sources,
-      terrain: TERRAIN_SOURCE,
+      "terrain-dem": TERRAIN_SOURCE,
     },
   };
 }
@@ -436,8 +438,8 @@ export function MapView({
           map.setLayoutProperty("hillshade", "visibility", "visible");
         }
         try {
-          if (map.getSource("terrain")) {
-            map.setTerrain({ source: "terrain", exaggeration: 1.35 });
+          if (map.getSource("terrain-dem")) {
+            map.setTerrain({ source: "terrain-dem", exaggeration: map.getZoom() > 13 ? 1.3 : 1.5 });
           }
         } catch {
           /* terrain may still be loading */

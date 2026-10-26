@@ -1,10 +1,15 @@
 "use client";
 
+import { formatDistance, formatElevation } from "@/lib/units";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { Feature, FeatureCollection } from "geojson";
 import { createClient } from "@/lib/supabase/client";
 import { SkiAreaMap, useOpenSkiFeature } from "./SkiAreaMap";
+import { useRouter } from "next/navigation";
+import { skiAreaRows } from "@/web/trail-service";
+
+const slugify = (s: string) => s.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
 interface SkiAreaRow {
   id: string; slug: string; name: string; country_name: string; region: string; locality: string;
@@ -24,7 +29,7 @@ type Tab = "ski" | "hike" | "bike";
 const KIND: Record<Tab, string> = { ski: "ski-run", hike: "hiking", bike: "mountain-biking" };
 
 function lengthLabel(t: TrailItem) {
-  if (t.miles != null) return `${t.miles.toFixed(1)} mi`;
+  if (t.miles != null) return formatDistance(t.miles) ?? "";
   if (t.lengthKm != null) return `${t.lengthKm.toFixed(1)} km`;
   return "";
 }
@@ -37,22 +42,33 @@ export function SkiAreaDetailPage({ slug }: { slug: string }) {
   const [tab, setTab] = useState<Tab>("ski");
   const [expanded, setExpanded] = useState(false);
   const openFeature = useOpenSkiFeature();
+  const router = useRouter();
 
   useEffect(() => {
     const client = createClient();
-    if (!client) return;
     let active = true;
+    // The account database has the full resort pages; when it can't be read (signed out, or not set up), the
+    // site's own ski-area list opens the resort on the ski map instead of showing a database error.
+    const fallback = async () => {
+      const rows = await skiAreaRows(window.fetch.bind(window)).catch(() => []);
+      const hit = rows.find((r) => r[0] === slug) ?? rows.find((r) => slugify(r[1]) === slug);
+      if (!active) return;
+      if (hit) { router.replace(`/explore/ski?area=${hit[0]}`); return; }
+      setError("We couldn’t find this ski area.");
+      setLoadedSlug(slug);
+    };
+    if (!client) { void fallback(); return () => { active = false; }; }
     Promise.all([
       client.from("ski_areas").select("*").eq("slug", slug).maybeSingle(),
       client.from("ski_area_details").select("data").eq("slug", slug).maybeSingle(),
     ]).then(([a, d]) => {
       if (!active) return;
-      if (a.error || !a.data) setError(a.error?.message ?? "Ski area not found. You may need to sign in.");
-      else { setArea(a.data as SkiAreaRow); setDetail((d.data?.data as SkiAreaDetail | undefined) ?? null); }
+      if (a.error || !a.data) { void fallback(); return; }
+      setArea(a.data as SkiAreaRow); setDetail((d.data?.data as SkiAreaDetail | undefined) ?? null);
       setLoadedSlug(slug);
-    });
+    }).catch(() => { void fallback(); });
     return () => { active = false; };
-  }, [slug]);
+  }, [slug, router]);
   const loading = loadedSlug !== slug;
 
   const lists = useMemo(() => {
@@ -79,7 +95,7 @@ export function SkiAreaDetailPage({ slug }: { slug: string }) {
   if (area.lifts > 0) stats.push({ label: "Lifts", value: area.lifts.toLocaleString() });
   if (n("skiRuns")) stats.push({ label: "Ski runs", value: n("skiRuns").toLocaleString() });
   if (n("nordicRuns")) stats.push({ label: "Nordic trails", value: n("nordicRuns").toLocaleString() });
-  if (area.elevation_max_ft != null) stats.push({ label: "Elevation", value: `${area.elevation_min_ft != null ? `${area.elevation_min_ft.toLocaleString()}–` : ""}${area.elevation_max_ft.toLocaleString()} ft` });
+  if (area.elevation_max_ft != null) stats.push({ label: "Elevation", value: `${area.elevation_min_ft != null ? `${formatElevation(area.elevation_min_ft)}–` : ""}${formatElevation(area.elevation_max_ft)}` });
 
   const items = lists[tab];
   const visible = expanded ? items : items.slice(0, 25);

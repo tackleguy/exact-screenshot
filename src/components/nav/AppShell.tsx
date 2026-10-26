@@ -6,13 +6,14 @@ import { NavBar } from "./NavBar";
 import { BottomNav } from "./BottomNav";
 import { AccountSync } from "./AccountSync";
 import { AccessibilityAudit } from "@/components/dev/AccessibilityAudit";
+import { RecordingPill } from "@/components/gps/RecordingPill";
 
 export function AppShell({ children, notice }: { children: ReactNode; notice?: ReactNode }) {
   const pathname = usePathname();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const recording = pathname.startsWith("/record/live");
   const standalone = recording || pathname.startsWith("/login") || pathname.startsWith("/signup");
-  const fullMap = pathname === "/map" || pathname === "/explore/trails";
+  const fullMap = pathname === "/explore/trails";
 
   return (
     <div
@@ -32,6 +33,7 @@ export function AppShell({ children, notice }: { children: ReactNode; notice?: R
         {!standalone && !fullMap && notice}
         {process.env.NODE_ENV === "development" && <AccessibilityAudit />}
       </div>
+      <RecordingPill />
       {!standalone && <BottomNav />}
     </div>
   );

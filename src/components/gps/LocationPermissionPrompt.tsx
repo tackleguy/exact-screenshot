@@ -59,7 +59,7 @@ export function LocationPermissionPrompt({
         type="button"
         onClick={onRequest}
         disabled={loading}
-        className={`inline-flex items-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white shadow-lg hover:bg-sky-700 disabled:opacity-60 ${className}`}
+        className={`inline-flex items-center gap-2 rounded-full bg-sky-700 px-4 py-2 text-xs font-semibold text-white shadow-lg hover:bg-sky-800 disabled:opacity-60 ${className}`}
       >
         <span>📍</span>
         {loading ? "Getting location…" : "Enable location"}
@@ -86,7 +86,7 @@ export function LocationPermissionPrompt({
             type="button"
             onClick={onRequest}
             disabled={loading}
-            className="mt-3 rounded-xl bg-sky-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+            className="mt-3 rounded-xl bg-sky-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
           >
             {loading ? "Requesting location…" : "Allow location tracking"}
           </button>

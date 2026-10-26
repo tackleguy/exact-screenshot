@@ -99,20 +99,35 @@ function contours() {
 
 const vectorStyles = new Map<string, Promise<maplibreTypes.StyleSpecification>>();
 /** An OpenFreeMap vector style (liberty, bright, positron, dark), fetched once. */
+/**
+ * OpenFreeMap's highway-shield layers compare ["get", "ref_length"], which is null on roads without a number and
+ * makes MapLibre warn on every tile. Null counts as 0, and shields need a length above 0.
+ */
+export function fixShieldFilters(style: maplibreTypes.StyleSpecification): maplibreTypes.StyleSpecification {
+  const coalesce = (v: unknown): unknown =>
+    Array.isArray(v) ? (v.length === 2 && v[0] === "get" && v[1] === "ref_length" ? ["coalesce", ["get", "ref_length"], 0] : v.map(coalesce)) : v;
+  for (const layer of style.layers) {
+    const l = layer as { filter?: unknown };
+    if (!l.filter || !JSON.stringify(l.filter).includes("ref_length")) continue;
+    l.filter = ["all", [">", ["coalesce", ["get", "ref_length"], 0], 0], coalesce(l.filter)];
+  }
+  return style;
+}
+
 function openFreeMap(name: string) {
   let hit = vectorStyles.get(name);
   if (!hit) {
     hit = fetch(`${OPENFREEMAP}/${name}`).then((r) => {
       if (!r.ok) throw new Error(`Basemap style ${r.status}`);
       return r.json() as Promise<maplibreTypes.StyleSpecification>;
-    }).catch((error) => { vectorStyles.delete(name); throw error; });
+    }).then(fixShieldFilters).catch((error) => { vectorStyles.delete(name); throw error; });
     vectorStyles.set(name, hit);
   }
   return hit;
 }
 
 const hillshadeLayer = (exaggeration = 0.35, dark = false): maplibreTypes.LayerSpecification => ({
-  id: "hillshade", type: "hillshade", source: "terrain",
+  id: "hillshade", type: "hillshade", source: "hillshade-dem",
   paint: dark
     ? { "hillshade-exaggeration": exaggeration, "hillshade-shadow-color": "#000000", "hillshade-highlight-color": "#3a4a3a", "hillshade-accent-color": "#111a11" }
     : { "hillshade-exaggeration": exaggeration, "hillshade-shadow-color": "#4b5a49", "hillshade-highlight-color": "#ffffff", "hillshade-accent-color": "#6b7b67" },
@@ -129,10 +144,14 @@ function contourLayers(onImagery = false): maplibreTypes.LayerSpecification[] {
   ];
 }
 
-/** The DEM sources every style carries: terrain (hillshading and 3D) and generated contour tiles. */
-function demSources(): Record<string, maplibreTypes.SourceSpecification> {
+/**
+ * The DEM sources every style carries: one for 3D terrain, a separate one for hillshading (sharing one source
+ * between both makes MapLibre warn and render hillshading at the terrain's resolution), and generated contours.
+ */
+export function demSources(): Record<string, maplibreTypes.SourceSpecification> {
   return {
-    terrain: TERRAIN_SOURCE,
+    "terrain-dem": TERRAIN_SOURCE,
+    "hillshade-dem": { ...TERRAIN_SOURCE },
     contours: {
       type: "vector",
       tiles: [contours().contourProtocolUrl({ multiplier: 3.28084, thresholds: { 10: [200, 1000], 12: [100, 500], 13: [50, 250], 15: [20, 100] }, elevationKey: "ele", levelKey: "level", contourLayer: "contours" })],

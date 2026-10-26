@@ -1,7 +1,8 @@
 import { parseCatalogFilters, filterCatalog, normalize, distanceKm } from "@/lib/trail-catalog/search";
 import type { CatalogTrail, CatalogManifest } from "@/lib/trail-catalog/types";
 import { buildCatalogMap } from "@/lib/trail-catalog/map";
-import { resolveDifficulty } from "@/lib/trail-difficulty";
+import { trailDifficulty } from "@/lib/trail-difficulty";
+import { listScore } from "@/lib/trail-catalog/cleanup";
 import { chainLines } from "@/lib/geo/line";
 import { measureLines } from "@/lib/trail-catalog/quality";
 import { nearbyCatalogPhotos, wikiPhotos } from "@/lib/trail-catalog/photos";
@@ -572,11 +573,15 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
           t.latitude,
           t.miles,
           { easy: "e", moderate: "m", hard: "h", expert: "x" }[
-            resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty
+            trailDifficulty(t)
           ],
           t.park ?? t.forest ?? t.region,
           t.routeType ?? null,
           t.qualityScore ?? 0,
+          t.gainFt ?? null,
+          t.lossFt ?? null,
+          t.steepestGradePct ?? null,
+          Math.round(listScore(t)),
         ]);
 
         // `total` is every matching trail in view; `trails` is the best-ranked first page of it.
@@ -602,7 +607,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
                 id: t.id,
                 name: t.name,
                 d: { easy: "e", moderate: "m", hard: "h", expert: "x" }[
-                  resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty
+                  trailDifficulty(t)
                 ],
               },
               geometry: { type: "MultiLineString", coordinates: simplified },
@@ -622,17 +627,15 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
     if (!suffix[1]) return Response.json(d);
 
     if (suffix[1] === "nearby") {
+      // Up to 5 other trails within 35 km, nearest first, straight from the catalog cells (no per-trail page loads,
+      // which made long routes nearby take minutes). Directions use a trail's stored trailhead, else its start.
       const t = d.trail;
       const { rows } = await select(new URLSearchParams({ lat: String(t.latitude), lng: String(t.longitude), radiusKm: "35" }), fetcher);
-      const result = filterCatalog(rows.filter((r) => r.id !== t.id), { lat: t.latitude, lng: t.longitude, radiusKm: 35, limit: TRAIL_CARD_LIMIT, uniqueNames: true });
-      return Response.json({
-        trails: await Promise.all(
-          result.trails.map(async (r) => {
-            const full = await detail(r.id, fetcher);
-            return { ...r, trailhead: full?.trail.trailhead, distanceKm: distanceKm(t.latitude, t.longitude, r.latitude, r.longitude) };
-          }),
-        ),
-      });
+      const near = filterCatalog(rows.filter((r) => r.id !== t.id && r.kind === "segment"), { lat: t.latitude, lng: t.longitude, radiusKm: 35, limit: 48, uniqueNames: true }).trails
+        .map((r) => ({ ...r, distanceKm: distanceKm(t.latitude, t.longitude, r.latitude, r.longitude) }))
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .slice(0, 5);
+      return Response.json({ trails: near });
     }
 
     // Photos: only the licensed Commons image of the trail's matched Wikidata item. No nearby-image guessing.

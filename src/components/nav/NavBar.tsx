@@ -1,5 +1,6 @@
 "use client";
 
+import { setUnits, useUnits } from "@/lib/units";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -10,11 +11,18 @@ import { NavIcon } from "./NavIcon";
 import { syncLabel, useSyncStatus } from "@/lib/account/sync";
 
 const navLinks = [
-  { href: "/explore/trails", label: "Explore", icon: "explore" as const, hint: "G then E" },
-  { href: "/map", label: "Map", icon: "map" as const, hint: "G then M" },
+  { href: "/explore/trails/catalog", label: "Explore", icon: "explore" as const, hint: "G then E" },
+  { href: "/explore/trails", label: "Map", icon: "map" as const, hint: "G then M" },
   { href: "/plan", label: "My trips", icon: "trips" as const, hint: "G then T" },
   { href: "/gear", label: "Gear", icon: "gear" as const, hint: "G then G" },
 ];
+
+/** The map is /explore/trails exactly; every other /explore page (list, trail pages, ski) is Explore. */
+export function navActive(label: string, href: string, pathname: string) {
+  if (label === "Map") return pathname === "/explore/trails";
+  if (label === "Explore") return pathname.startsWith("/explore") && pathname !== "/explore/trails";
+  return pathname.startsWith(href);
+}
 
 const footerLinks = [
   {
@@ -109,8 +117,21 @@ function MoreTools({ collapsed }: { collapsed?: boolean }) {
         <div className="nav-search">
           <SearchBar />
         </div>
+        <UnitsToggle />
       </nav>
     </details>
+  );
+}
+
+/** Miles/feet or kilometres/metres for every distance and elevation on the site. */
+function UnitsToggle() {
+  const units = useUnits();
+  return (
+    <div className="nav-units" role="group" aria-label="Units">
+      <span>Units</span>
+      <button type="button" aria-pressed={units === "imperial"} onClick={() => setUnits("imperial")}>mi · ft</button>
+      <button type="button" aria-pressed={units === "metric"} onClick={() => setUnits("metric")}>km · m</button>
+    </div>
   );
 }
 
@@ -285,7 +306,7 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
           <nav className="fieldbook-destinations" aria-label="Main destinations">
             {navLinks.map((link) => {
               const active =
-                link.label === "Explore" ? pathname.startsWith("/explore") : pathname.startsWith(link.href);
+                navActive(link.label, link.href, pathname);
               return (
                 <Link
                   key={link.href}

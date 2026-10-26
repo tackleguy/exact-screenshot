@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { trailSacScale } from "@/lib/trail-catalog/types";
-import { DIFFICULTY_LABELS, resolveDifficulty } from "@/lib/trail-difficulty";
+import { DIFFICULTY_LABELS, trailDifficulty } from "@/lib/trail-difficulty";
 import { join, miles as fmtMiles, text } from "@/lib/display";
 
 /**
@@ -46,7 +46,7 @@ const ROUTE_WORD: Record<string, string> = { loop: "loop", "point-to-point": "po
 
 /** "Mist Trail — Yosemite National Park, California · 3.4 mi · Hard | Hyked" plus description and schema.org Place. */
 export function trailPageMeta(t: CatalogTrail): PageMeta {
-  const difficulty = DIFFICULTY_LABELS[resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty];
+  const difficulty = DIFFICULTY_LABELS[trailDifficulty(t)];
   const place = join([t.park ?? t.forest, t.region]);
   const length = fmtMiles(t.miles);
   const title = `${t.name}${place ? ` — ${place}` : ""}${length ? ` · ${length}` : ""} · ${difficulty} | Hyked`;
