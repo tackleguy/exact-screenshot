@@ -16,10 +16,12 @@ export const QUALITY_RULES = Object.fromEntries(Object.entries(defaults).filter(
  *   but left out of default search and map results so it is not presented as a full hike.
  */
 export type QualityStatus = "ok" | "short" | "review" | "fragment";
-export type RouteType = "loop" | "point-to-point" | "network";
+/** "network" is the older label for several unjoined pieces; it reads as "Trail segment". */
+export type RouteType = "loop" | "out-and-back" | "point-to-point" | "segment" | "network";
 
 export const QUALITY_FLAGS = {
   "placeholder-name": "Source name is a placeholder; shown as Unnamed trail",
+  "needs-review": "The source marked this trail for review",
   unnamed: "No trail name in the source",
   connector: "Name marks a connector, spur, access path or road",
   "network-name": "Agency-wide name shared by many separate pieces",
@@ -317,8 +319,10 @@ export function formatDistance(miles: number | null) {
  */
 export const ROUTE_TYPE_LABELS: Record<RouteType, string> = {
   loop: "Loop",
-  "point-to-point": "Out and back / point to point",
-  network: "Trail network",
+  "out-and-back": "Out & back",
+  "point-to-point": "Point to point",
+  segment: "Trail segment",
+  network: "Trail segment",
 };
 
 export const QUALITY_STATUS_LABELS: Record<QualityStatus, string> = {

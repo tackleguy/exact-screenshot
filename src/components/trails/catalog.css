@@ -37,6 +37,9 @@
 .catalog-row { display: grid; grid-template-columns: minmax(0,3fr) minmax(0,1.5fr) 115px 20px; align-items: center; gap: 24px; padding: 24px 12px; border-radius: 4px; transition: background 160ms ease-out; }
 .catalog-row:hover { background: var(--surface); }
 .catalog-row-name h2 { overflow-wrap: anywhere; }
+.catalog-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 2px; }
+.catalog-badges:empty { display: none; }
+.catalog-badges .catalog-badge { margin: 0; }
 .catalog-difficulty { display: inline-flex; align-items: center; gap: 5px; }
 .catalog-difficulty i { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgb(255 255 255 / 0.35); }
 .catalog-row p,.catalog-row small { color: var(--sage); font-size: .8rem; margin-top: 5px; display: block; }

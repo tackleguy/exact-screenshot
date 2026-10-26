@@ -33,6 +33,7 @@ import {
 import { snapPointToNearestLine } from "@/lib/geo/snap";
 import "./explorer.css";
 import { duration as displayDuration, feet, join as joinParts, miles as displayMiles } from "@/lib/display";
+import { ROUTE_TYPE_LABELS } from "@/lib/trail-catalog/quality";
 import { effortClimbFt, naismithHours } from "@/lib/trail-difficulty";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -56,8 +57,9 @@ const LENGTHS = [
 const ROUTE_TYPES = [
   { key: "", label: "Any route" },
   { key: "loop", label: "Loop" },
+  { key: "out-and-back", label: "Out & back" },
   { key: "point-to-point", label: "Point to point" },
-  { key: "network", label: "Trail network" },
+  { key: "segment", label: "Trail segment" },
 ] as const;
 const SUB_ACTIVITIES: Record<TrailSectionKey, CatalogActivity[]> = {
   foot: ["hike", "walk", "backpack", "run"],
@@ -85,7 +87,7 @@ function filterParams(f: Filters) {
 
 const fmtMiles = displayMiles;
 const fmtDuration = displayDuration;
-const ROUTE_LABEL: Record<string, string> = { loop: "Loop", "point-to-point": "Point to point", network: "Network" };
+const ROUTE_LABEL: Record<string, string> = ROUTE_TYPE_LABELS;
 
 function distanceKm(a: [number, number], b: [number, number]) {
   const r = Math.PI / 180, x = (b[0] - a[0]) * r * Math.cos(((a[1] + b[1]) / 2) * r), y = (b[1] - a[1]) * r;

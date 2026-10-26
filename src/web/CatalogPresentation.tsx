@@ -12,7 +12,7 @@ import "@/components/trails/catalog.css";
 
 /** Same colours as the map's difficulty legend (kept here so the list doesn't load the map code). */
 const DIFFICULTY_COLORS: Record<string, string> = { e: "#2f9e5b", m: "#2f7fd8", h: "#d8452f", x: "#1d1d1d" };
-const ROUTE_SHAPES = { loop: "Loop", "point-to-point": "One way", network: "Connected paths" } as const;
+const ROUTE_SHAPES: Record<string, string> = { loop: "Loop", "out-and-back": "Out & back", "point-to-point": "Point to point", segment: "Trail segment" };
 const LENGTHS = [["", "Any length"], ["-3", "Under 3 mi"], ["3-8", "3 – 8 mi"], ["8-15", "8 – 15 mi"], ["15-", "Over 15 mi"]] as const;
 
 export interface CatalogResult { trails: CatalogTrail[]; total: number; page: number; pages: number; limit: number; manifest: CatalogManifest; /** Name/place matches when more matched than were ranked and loaded. */ queryMatches?: number }
@@ -249,8 +249,8 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                   <li key={t.id}>
                     <Link href={`/explore/trails/${t.id}`} prefetch={false} className="catalog-row">
                       <div className="catalog-row-name">
-                        <h2>
-                          {t.name}
+                        <h2>{t.name}</h2>
+                        <span className="catalog-badges">
                           {t.peakCategory && (
                             <span className="catalog-badge" style={{ background: "#7c3aed", color: "#fff", fontWeight: "bold" }}>
                               {t.peakCategory === "14er" ? "14er" : t.peakCategory === "8000m" ? "8,000m" : "Seven Summits"}
@@ -263,7 +263,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                           {t.quality && t.quality !== "ok" && (
                             <span className={`catalog-badge quality-${t.quality}`}>{QUALITY_STATUS_LABELS[t.quality]}</span>
                           )}
-                        </h2>
+                        </span>
                         <p>
                           {t.region ?? countryName(t.country)} · {trailPlace(t)}
  · {(() => { const d = trailDifficulty(t); return <span className="catalog-difficulty"><i style={{ background: DIFFICULTY_COLORS[d === "expert" ? "x" : d[0]] }} aria-hidden="true" />{d}</span>; })()}

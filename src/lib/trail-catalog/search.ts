@@ -12,6 +12,7 @@ import { boundsOverlap, withinBounds } from "./map";
 import { isWinterActivityTrail } from "./winter";
 import { matchesCatalogActivity, parseCatalogActivity } from "./activity";
 import { dedupeSectionsByName } from "./through-hikes";
+import { listScore, realHike } from "./cleanup";
 import { trailSacScale } from "./types";
 
 /** Names that say "this is not a trail" (a driveway or parking lot mapped as a path); listed only with partial segments. */
@@ -98,7 +99,7 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     if (filters.maxMiles !== undefined && (r.miles === null || r.miles > filters.maxMiles)) return false;
     // Reported difficulty when the source gives one, otherwise the same estimate the trail page shows.
     if (difficulties && !difficulties.has(trailDifficulty(r))) return false;
-    if (filters.routeType && r.routeType !== filters.routeType) return false;
+    if (filters.routeType && r.routeType !== filters.routeType && !(filters.routeType === "segment" && r.routeType === "network")) return false;
     if (filters.dogFriendly && r.dogs !== true) return false;
     if (filters.verified && r.tier !== "verified") return false;
     if (
@@ -135,11 +136,12 @@ export function filterCatalog(rows: CatalogTrail[], filters: CatalogFilters, tex
     const rank = (t: CatalogTrail) => searchRank(lastMatch.get(t) ?? 0, t.qualityScore, lastPlace.get(t));
     matches.sort((a, b) => rank(b) - rank(a) || a.id.localeCompare(b.id));
   } else if (nearby) {
-    // Near you: distance, discounted for better-documented trails (40 score points halve the distance).
-    const key = (t: CatalogTrail) => distanceKm(filters.lat!, filters.lng!, t.latitude, t.longitude) / (1 + Math.max(0, t.qualityScore ?? 0) / 40);
-    matches.sort((a, b) => key(a) - key(b) || a.id.localeCompare(b.id));
+    // Near you, best-documented first: real hikes before stubs, then distance discounted for better-documented
+    // trails (40 list-score points halve the distance).
+    const key = (t: CatalogTrail) => distanceKm(filters.lat!, filters.lng!, t.latitude, t.longitude) / (1 + listScore(t) / 40);
+    matches.sort((a, b) => Number(realHike(b)) - Number(realHike(a)) || key(a) - key(b) || a.id.localeCompare(b.id));
   } else if (filters.targetMiles === undefined) {
-    matches.sort((a, b) => (b.qualityScore ?? 0) - (a.qualityScore ?? 0));
+    matches.sort((a, b) => Number(realHike(b)) - Number(realHike(a)) || listScore(b) - listScore(a));
   }
   if (filters.sort === "short" || filters.sort === "long") {
     const dir = filters.sort === "short" ? 1 : -1;
@@ -202,7 +204,7 @@ export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
     minMiles: number("minMiles", 0, 10000) ?? lengthPreset(params.get("length"))[0],
     maxMiles: number("maxMiles", 0, 10000) ?? lengthPreset(params.get("length"))[1],
     difficulty: params.get("difficulty")?.slice(0, 40) || undefined,
-    routeType: (["loop", "point-to-point", "network"] as const).find((t) => t === params.get("routeType")),
+    routeType: (["loop", "out-and-back", "point-to-point", "segment"] as const).find((t) => t === (params.get("routeType") === "network" ? "segment" : params.get("routeType"))),
     dogFriendly: params.get("dogFriendly") === "true",
     includeWinter: params.get("includeWinter") === "true" || activity === "ski" || activity === "sled",
     activity,
