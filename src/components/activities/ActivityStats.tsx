@@ -1,3 +1,4 @@
+import { formatElevation } from "@/lib/units";
 import { avgSpeedMph, formatDistance, formatDuration, formatPace } from "@/lib/gps";
 
 interface ActivityStatsProps {
@@ -23,7 +24,7 @@ export function ActivityStats({
       <div className={`flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-600 ${className}`}>
         <span>{formatDistance(distanceM)}</span>
         <span>{formatDuration(durationSec)}</span>
-        <span>{elevationGainFt.toLocaleString()} ft ↑</span>
+        <span>{formatElevation(elevationGainFt)} ↑</span>
         {distanceM > 100 && <span>{pace}</span>}
       </div>
     );
@@ -33,7 +34,7 @@ export function ActivityStats({
     <div className={`grid grid-cols-2 gap-4 sm:grid-cols-3 ${className}`}>
       <StatBlock label="Distance" value={formatDistance(distanceM)} />
       <StatBlock label="Moving time" value={formatDuration(durationSec)} />
-      <StatBlock label="Elev gain" value={`${elevationGainFt.toLocaleString()} ft`} />
+      <StatBlock label="Elev gain" value={formatElevation(elevationGainFt) ?? "—"} />
       <StatBlock label="Avg pace" value={pace} />
       <StatBlock label="Avg speed" value={`${avgMph.toFixed(1)} mph`} />
       <StatBlock

@@ -2,6 +2,7 @@ import { parseCatalogFilters, filterCatalog, normalize, distanceKm } from "@/lib
 import type { CatalogTrail, CatalogManifest } from "@/lib/trail-catalog/types";
 import { buildCatalogMap } from "@/lib/trail-catalog/map";
 import { trailDifficulty } from "@/lib/trail-difficulty";
+import { listScore } from "@/lib/trail-catalog/cleanup";
 import { chainLines } from "@/lib/geo/line";
 import { measureLines } from "@/lib/trail-catalog/quality";
 import { nearbyCatalogPhotos, wikiPhotos } from "@/lib/trail-catalog/photos";
@@ -577,6 +578,10 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
           t.park ?? t.forest ?? t.region,
           t.routeType ?? null,
           t.qualityScore ?? 0,
+          t.gainFt ?? null,
+          t.lossFt ?? null,
+          t.steepestGradePct ?? null,
+          Math.round(listScore(t)),
         ]);
 
         // `total` is every matching trail in view; `trails` is the best-ranked first page of it.

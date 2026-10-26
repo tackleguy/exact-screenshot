@@ -1,5 +1,6 @@
 "use client";
 
+import { formatElevation } from "@/lib/units";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -185,7 +186,7 @@ export function SkiAreasPage() {
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-mist">
                     {a.lifts > 0 && <span>{a.lifts} lifts</span>}
                     {runs > 0 && <span>{runs.toLocaleString()} runs</span>}
-                    {a.elevation_max_ft != null && <span>{a.elevation_max_ft.toLocaleString()} ft peak</span>}
+                    {a.elevation_max_ft != null && <span>{formatElevation(a.elevation_max_ft)} peak</span>}
                     {a.ski_types.map((t) => <span key={t} className="rounded-full border border-[var(--border)] px-2 py-0.5 capitalize">{t}</span>)}
                   </div>
                 </Link>

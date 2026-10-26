@@ -1,3 +1,4 @@
+import { formatDistance as formatUnits, getUnits } from "@/lib/units";
 import defaults from "../../../config/trail-quality.json";
 import type { CatalogTrail } from "./types";
 import { normalizeTrailName } from "./through-hikes";
@@ -307,10 +308,8 @@ export function findFragmentParents(candidates: FragmentCandidate[], rules: Qual
 /** Distance labels that never hide a short trail behind "<0.1". */
 export function formatDistance(miles: number | null) {
   if (miles === null || !Number.isFinite(miles)) return { primary: "Distance unknown", secondary: null as string | null };
-  const meters = miles * MILE_METERS;
-  const km = meters / 1000;
-  if (miles < 0.1) return { primary: `${Math.round(meters / 5) * 5} m`, secondary: `${miles.toFixed(2)} mi` };
-  return { primary: `${miles < 10 ? miles.toFixed(1) : Math.round(miles).toLocaleString("en-US")} mi`, secondary: km < 1 ? `${Math.round(meters / 10) * 10} m` : `${km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString("en-US")} km` };
+  const units = getUnits();
+  return { primary: formatUnits(miles, units) ?? "Distance unknown", secondary: formatUnits(miles, units === "imperial" ? "metric" : "imperial") };
 }
 
 /**

@@ -12,6 +12,7 @@ import { reviewDecisions } from "./reviews";
 import { cellsInBounds, isShardKey } from "./cells";
 import { simplifyLine } from "@/lib/geo/simplify";
 import { trailDifficulty } from "@/lib/trail-difficulty";
+import { listScore } from "./cleanup";
 import { withinBounds } from "./map";
 import { buildCatalogMap } from "./map";
 import { trailSacScale } from "./types";
@@ -214,7 +215,8 @@ async function matchingIds(filters: CatalogFilters) {
   return hit;
 }
 
-export type ExplorePointTrail = [id: string, name: string, longitude: number, latitude: number, miles: number | null, difficulty: string, place: string | null, routeType: string | null, qualityScore: number];
+/** A trail pin for the map: with its stored climb and list score, so cards show the same stats as the trail page. */
+export type ExplorePointTrail = [id: string, name: string, longitude: number, latitude: number, miles: number | null, difficulty: string, place: string | null, routeType: string | null, qualityScore: number, gainFt?: number | null, lossFt?: number | null, steepestGradePct?: number | null, listScore?: number];
 export type ExploreCluster = [longitude: number, latitude: number, count: number, west: number, south: number, east: number, north: number];
 export interface ExplorePoints { total: number; trails: ExplorePointTrail[]; clusters: ExploreCluster[] }
 
@@ -226,7 +228,7 @@ export async function exploreCatalogPoints(filters: CatalogFilters, maxTrails = 
     return {
       total: rows.length,
       clusters: [],
-      trails: rows.map((t) => [t.id, t.name, t.longitude, t.latitude, t.miles, difficultyCode(t), t.park ?? t.forest ?? t.region, t.routeType ?? null, t.qualityScore ?? 0]),
+      trails: rows.map((t) => [t.id, t.name, t.longitude, t.latitude, t.miles, difficultyCode(t), t.park ?? t.forest ?? t.region, t.routeType ?? null, t.qualityScore ?? 0, t.gainFt ?? null, t.lossFt ?? null, t.steepestGradePct ?? null, Math.round(listScore(t))]),
     };
   }
   const [west, south, east, north] = filters.bbox ?? [-180, -60, 180, 85];

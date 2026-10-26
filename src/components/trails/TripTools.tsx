@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDistance } from "@/lib/units";
 import { useEffect, useMemo, useState } from "react";
 import { useMyGear } from "@/lib/account/my-gear";
 import type { WaterReport } from "@/lib/trip/water";
@@ -72,7 +73,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
           {water.state === "error" && <p className="catalog-muted">{water.message}</p>}
           {water.state === "ready" && (
             <>
-              <p>{water.data.sources.length} source{water.data.sources.length === 1 ? "" : "s"} mapped · longest stretch without dependable water <strong>{water.data.longestDryMiles} mi</strong></p>
+              <p>{water.data.sources.length} source{water.data.sources.length === 1 ? "" : "s"} mapped · longest stretch without dependable water <strong>{formatDistance(water.data.longestDryMiles)}</strong></p>
               {water.data.sources.length > 0 && (
                 <ol className="catalog-trip-list">
                   {water.data.sources.slice(0, 40).map((s, i) => (
@@ -93,7 +94,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
         {towns.state === "ready" && (towns.data.towns.length ? (
           <ul className="catalog-trip-list">
             {towns.data.towns.map((t) => (
-              <li key={t.id}><strong>{join([t.name, t.state], ", ")}</strong> <small>{join([isNum(t.milesOffTrail) && `${t.milesOffTrail} mi off trail`, hasLine && isNum(t.trailMile) && `near mile ${t.trailMile}`], " ")}</small><br /><small>{services(t).map((k) => SERVICE_LABELS[k]).join(" · ") || "No services mapped"}</small></li>
+              <li key={t.id}><strong>{join([t.name, t.state], ", ")}</strong> <small>{join([isNum(t.milesOffTrail) && `${formatDistance(t.milesOffTrail)} off trail`, hasLine && isNum(t.trailMile) && `near mile ${t.trailMile}`], " ")}</small><br /><small>{services(t).map((k) => SERVICE_LABELS[k]).join(" · ") || "No services mapped"}</small></li>
             ))}
           </ul>
         ) : <p className="catalog-muted">No towns within 15 miles.</p>)}
@@ -117,7 +118,7 @@ export function TripTools({ trailId, hasLine, miles }: { trailId: string; hasLin
               <p>{plan.data.notes[0]} Start with {plan.data.startFoodDays} day{plan.data.startFoodDays === 1 ? "" : "s"} ({plan.data.startFoodLb} lb) of food.</p>
               {plan.data.stops.map((s) => (
                 <div key={`${s.town.id}-${s.arriveDay}`} className="catalog-trip-stop">
-                  <h4>Day {s.arriveDay}{s.date ? ` · ${s.date}` : ""} — {s.town.name}, {s.town.state} <small>(mile {s.trailMile}, {s.town.milesOffTrail} mi off trail)</small></h4>
+                  <h4>Day {s.arriveDay}{s.date ? ` · ${s.date}` : ""} — {s.town.name}, {s.town.state} <small>(mile {s.trailMile}, {formatDistance(s.town.milesOffTrail)} off trail)</small></h4>
                   <ul>{s.checklist.map((c) => <li key={c}>{c}</li>)}</ul>
                   {s.warnings.map((w) => <p key={w} className="catalog-trip-warn">{w}</p>)}
                 </div>

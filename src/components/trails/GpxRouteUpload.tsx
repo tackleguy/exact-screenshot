@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDistance, formatElevation } from "@/lib/units";
 import { useRef, useState } from "react";
 
 interface GpxRouteUploadProps {
@@ -113,16 +114,16 @@ export function GpxRouteUpload({ trailId, className = "" }: GpxRouteUploadProps)
           <dl className="mt-2 grid gap-1 sm:grid-cols-3">
             <div>
               <dt className="text-sage">Distance</dt>
-              <dd className="font-medium">{stats.distance_miles.toFixed(2)} mi</dd>
+              <dd className="font-medium">{formatDistance(stats.distance_miles)}</dd>
             </div>
             <div>
               <dt className="text-sage">Elevation gain</dt>
-              <dd className="font-medium">{Math.round(stats.elevation_gain_ft)} ft</dd>
+              <dd className="font-medium">{formatElevation(stats.elevation_gain_ft)}</dd>
             </div>
             {stats.elevation_loss_ft != null && (
               <div>
                 <dt className="text-sage">Elevation loss</dt>
-                <dd className="font-medium">{Math.round(stats.elevation_loss_ft)} ft</dd>
+                <dd className="font-medium">{formatElevation(stats.elevation_loss_ft)}</dd>
               </div>
             )}
           </dl>

@@ -1,3 +1,4 @@
+import { formatElevation } from "@/lib/units";
 import Link from "next/link";
 import type { Activity } from "@/lib/types";
 import { ACTIVITY_LABELS } from "@/lib/types";
@@ -27,7 +28,7 @@ export function ActivityListRow({ activity }: { activity: Activity }) {
         <p className="mt-1 text-xs tabular-nums text-sage">
           {formatDistance(Number(activity.distance_m))} ·{" "}
           {formatDuration(activity.duration_sec)} ·{" "}
-          {Number(activity.elevation_gain_ft).toLocaleString()} ft ↑
+          {formatElevation(Number(activity.elevation_gain_ft))} ↑
         </p>
       </div>
       <span className="shrink-0 text-mist transition group-hover:translate-x-0.5 group-hover:text-accent">

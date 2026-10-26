@@ -584,3 +584,11 @@ html { scroll-padding-block:20px 100px; }
 .data-sources-list span { color: var(--sage); line-height: 1.5; }
 .data-sources-list small, .data-sources-list small a { color: var(--sage); font-size: 13px; }
 .data-sources-note { font-size: 13px; }
+
+/* Units switch in the More menu. */
+.nav-units { display: flex; align-items: center; gap: 6px; padding: 10px 12px 4px; font-size: 13px; color: var(--mist); }
+.nav-units span { margin-right: auto; }
+.nav-units button { min-height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--cream); font: inherit; font-size: 12.5px; cursor: pointer; }
+.nav-units button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--forest, #0d120d); font-weight: 600; }
+/* Measurements line up in columns. */
+.trail-stats dd, .catalog-distance, .hx-stat, .trail-stat-value { font-variant-numeric: tabular-nums; }

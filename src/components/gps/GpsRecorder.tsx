@@ -1,5 +1,6 @@
 "use client";
 
+import { formatElevation } from "@/lib/units";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import clsx from "clsx";
@@ -183,7 +184,7 @@ export function GpsRecorder({
           <PrimaryStat label="Time" value={gps.formattedDuration} active={isActive} />
           <PrimaryStat
             label="Elev gain"
-            value={`${gps.elevationGainFt.toLocaleString()} ft`}
+            value={formatElevation(gps.elevationGainFt) ?? "—"}
             active={isActive}
           />
           <PrimaryStat

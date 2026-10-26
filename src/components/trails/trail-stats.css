@@ -1,0 +1,15 @@
+/* The one trail stats grid (map card and trail page). */
+.trail-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 0; margin: 0; border: 1px solid var(--border, #3d473a); border-radius: var(--radius-lg, 12px); background: var(--surface, #1e241e); overflow: hidden; }
+.trail-stats-grid > div { padding: 12px 14px; border-right: 1px solid var(--border, #3d473a); border-bottom: 1px solid var(--border, #3d473a); margin: 0 -1px -1px 0; }
+.trail-stats-grid dt { font-size: 12px; color: var(--mist, #adb7a7); margin: 0 0 3px; }
+.trail-stats-grid dd { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 650; color: var(--cream, #f5f0e6); font-variant-numeric: tabular-nums; }
+.trail-stats-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgb(255 255 255 / 0.35); }
+.trail-stats-grid--compact { grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); border-radius: 10px; }
+.trail-stats-grid--compact > div { padding: 8px 10px; }
+.trail-stats-grid--compact dt { font-size: 11px; }
+.trail-stats-grid--compact dd { font-size: 14px; }
+/* The map card sits on a light panel in the explorer. */
+.hx .trail-stats-grid { background: var(--hx-ink-2, #232a23); border-color: var(--hx-line, #3d473a); }
+.hx .trail-stats-grid > div { border-color: var(--hx-line, #3d473a); }
+.hx .trail-stats-grid dt { color: var(--hx-muted, #adb7a7); }
+.hx .trail-stats-grid dd { color: var(--hx-text, #f5f0e6); }

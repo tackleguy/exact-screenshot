@@ -180,8 +180,9 @@ test("fragment parents need the parent to be clearly longer", () => {
   assert.equal(parents.size, 0);
 });
 
-test("short distances show meters instead of <0.1 mi", () => {
-  assert.equal(formatDistance(100 / MILE_METERS).primary, "100 m");
+test("short distances show feet (imperial) instead of <0.1 mi, with the other unit second", () => {
+  assert.equal(formatDistance(100 / MILE_METERS).primary, "330 ft");
+  assert.equal(formatDistance(100 / MILE_METERS).secondary, "100 m");
   assert.equal(formatDistance(2).primary, "2.0 mi");
   assert.equal(formatDistance(2).secondary, "3.2 km");
 });

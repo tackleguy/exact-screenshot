@@ -1,5 +1,6 @@
 "use client";
 
+import { setUnits, useUnits } from "@/lib/units";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -109,8 +110,21 @@ function MoreTools({ collapsed }: { collapsed?: boolean }) {
         <div className="nav-search">
           <SearchBar />
         </div>
+        <UnitsToggle />
       </nav>
     </details>
+  );
+}
+
+/** Miles/feet or kilometres/metres for every distance and elevation on the site. */
+function UnitsToggle() {
+  const units = useUnits();
+  return (
+    <div className="nav-units" role="group" aria-label="Units">
+      <span>Units</span>
+      <button type="button" aria-pressed={units === "imperial"} onClick={() => setUnits("imperial")}>mi · ft</button>
+      <button type="button" aria-pressed={units === "metric"} onClick={() => setUnits("metric")}>km · m</button>
+    </div>
   );
 }
 

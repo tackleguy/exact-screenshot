@@ -1,3 +1,4 @@
+import { formatElevation } from "@/lib/units";
 import Link from "next/link";
 import { CatalogMapView } from "./CatalogMapView";
 import { TrailMapAndDirections } from "./TrailMapAndDirections";
@@ -51,7 +52,7 @@ export function CatalogTrailDetail({
       {t.peakCategory && (
         <p className="trail-notes">
           <span className="catalog-badge">{t.peakCategory === "14er" ? "14er · 14,000+ ft peak" : t.peakCategory === "8000m" ? "8,000 m peak" : "Seven Summits"}</span>
-          {t.summitElevationFt && <span className="catalog-badge">Summit {t.summitElevationFt.toLocaleString()} ft ({t.summitElevationM?.toLocaleString()} m)</span>}
+          {t.summitElevationFt && <span className="catalog-badge">Summit {formatElevation(t.summitElevationFt)}</span>}
         </p>
       )}
       {t.partOfRoute && (
@@ -104,7 +105,7 @@ export function CatalogTrailDetail({
       <h2 className="trail-heading">{hasLines ? "Map" : "Approximate location"}</h2>
       {hasLines && !isRoute ? (
         <TrailMapAndDirections name={t.name} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }}>
-          <TrailElevationSection trailId={t.id} />
+          <TrailElevationSection trailId={t.id} stored={t} />
         </TrailMapAndDirections>
       ) : (
         <>
@@ -115,7 +116,7 @@ export function CatalogTrailDetail({
               {hasLocation && <> <a href={googleMapsDirectionsUrl(t.latitude, t.longitude)} target="_blank" rel="noopener noreferrer">Directions in Google Maps</a></>}
             </p>
           )}
-          {hasLines && <TrailElevationSection trailId={t.id} />}
+          {hasLines && <TrailElevationSection trailId={t.id} stored={t} />}
         </>
       )}
       {hasLocation && (

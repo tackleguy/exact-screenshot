@@ -1,3 +1,4 @@
+import { formatDistance } from "@/lib/units";
 export interface CatalogTrail {
   id: string;
   name: string;
@@ -266,11 +267,9 @@ export function trailPlace(t: Pick<CatalogTrail, "park" | "forest" | "blmArea" |
   return (t.sourceType && agency[t.sourceType]) ?? sourceName(t.source);
 }
 
-/** Short trails show meters instead of a misleading "<0.1 mi". */
+/** A trail's length in the visitor's units (short trails in feet or metres, never "<0.1 mi"). */
 export function displayMiles(miles: number | null) {
-  if (miles === null) return "Distance unknown";
-  if (miles < 0.1) return `${Math.round((miles * 1609.344) / 5) * 5} m`;
-  return miles >= 100 ? `${Math.round(miles).toLocaleString("en-US")} mi` : `${miles.toFixed(1)} mi`;
+  return formatDistance(miles) ?? "Distance unknown";
 }
 
 /** OSM sac_scale for a trail, from its route relation or its joined ways. */

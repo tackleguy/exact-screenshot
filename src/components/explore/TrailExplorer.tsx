@@ -1,5 +1,6 @@
 "use client";
 
+import { formatElevation, formatMeters } from "@/lib/units";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "@/lib/maplibre";
@@ -32,9 +33,11 @@ import {
 } from "./explorer-map";
 import { snapPointToNearestLine } from "@/lib/geo/snap";
 import "./explorer.css";
-import { duration as displayDuration, feet, join as joinParts, miles as displayMiles } from "@/lib/display";
+import { duration as displayDuration, join as joinParts, miles as displayMiles } from "@/lib/display";
 import { ROUTE_TYPE_LABELS } from "@/lib/trail-catalog/quality";
-import { effortClimbFt, naismithHours } from "@/lib/trail-difficulty";
+import { effortClimbFt, trailDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
+import { TrailStats } from "@/components/trails/TrailStats";
+import type { RouteType } from "@/lib/trail-catalog/quality";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { installExtras, applySectionFilter } from "./map-extras";
@@ -595,17 +598,18 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
 
   const cards = useMemo(() => {
     if (!localTrailsVisible(zoom)) return [];
-    // Nearest first, discounted by the quality score (40 points halve the distance), so whole, well-sourced
-    // trails come before stubs and connectors that happen to be closer.
-    const list = (points?.trails ?? []).map((t) => ({ t, km: distanceKm(center, [t[2], t[3]]) / (1 + Math.max(0, t[8] ?? 0) / 40) }));
-    list.sort((a, b) => a.km - b.km);
+    // Best-documented first: real hikes (1 mi or more) before stubs, then nearest, discounted by the list score
+    // (40 points halve the distance), so whole, well-sourced trails come before connectors that happen to be closer.
+    const list = (points?.trails ?? []).map((t) => ({ t, real: (t[4] ?? 0) >= 1, km: distanceKm(center, [t[2], t[3]]) / (1 + Math.max(0, t[12] ?? t[8] ?? 0) / 40) }));
+    list.sort((a, b) => Number(b.real) - Number(a.real) || a.km - b.km);
     const out = list.slice(0, TRAIL_CARD_LIMIT).map((x) => x.t);
     if (selectedId && !out.some((t) => t[0] === selectedId)) {
       const hit = points?.trails.find((t) => t[0] === selectedId);
       if (hit) out.unshift(hit);
       else if (detail?.trail.id === selectedId) {
         const t = detail.trail;
-        out.unshift([t.id, t.name, t.longitude, t.latitude, t.miles, "m", t.park ?? t.forest ?? t.region, t.routeType ?? null, t.qualityScore ?? 0]);
+        const code = ({ easy: "e", moderate: "m", hard: "h", expert: "x" } as const)[trailDifficulty(t)];
+        out.unshift([t.id, t.name, t.longitude, t.latitude, t.miles, code, t.park ?? t.forest ?? t.region, t.routeType ?? null, t.qualityScore ?? 0, t.gainFt ?? null, t.lossFt ?? null, t.steepestGradePct ?? null]);
       }
     }
     return out.slice(0, TRAIL_CARD_LIMIT);
@@ -928,9 +932,9 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         {cards.length > 0 ? (
           <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, best-documented first">
             {cards.map((t) => {
-              const [id, name, , , miles, d, place, routeType] = t;
+              const [id, name, , , miles, d, place, routeType, , gainFt, lossFt, steepest] = t;
               const active = id === selectedId;
-              const hours = active && gain !== null ? naismithHours(miles, gain) : null;
+              const level = (({ e: "easy", m: "moderate", h: "hard", x: "expert" } as const)[d as "e"] ?? "moderate") as TrailDifficulty;
               return (
                 <article key={id} data-id={id} role="listitem" className={`hx-card${active ? " hx-card--active" : ""}`}>
                   <button type="button" className="hx-card-hit" onClick={() => setSelectedId(active ? null : id)} aria-pressed={active} aria-label={`${name}${active ? ", selected" : ""}`} />
@@ -947,17 +951,12 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                       </span>
                     )}
                   </div>
-                  <dl className="hx-stats">
-                    <div><dt>Difficulty</dt><dd><span className="hx-dot" style={{ background: DIFFICULTY_COLORS[d] }} />{DIFFICULTY_LABELS[d]}</dd></div>
-                    {fmtMiles(miles) && <div><dt>Length</dt><dd>{fmtMiles(miles)}</dd></div>}
-                    {active && feet(gain) && <div><dt>Gain</dt><dd>{feet(gain)}</dd></div>}
-                    {fmtDuration(hours) && <div><dt>Est. time</dt><dd>{fmtDuration(hours)}</dd></div>}
-                  </dl>
+                  <TrailStats compact trail={{ miles, gainFt: gainFt ?? (active ? gain : null), lossFt, steepestGradePct: steepest, routeType: (routeType as RouteType | null) ?? null, difficulty: level, multiDay: (miles ?? 0) >= 50 }} />
                   {active && (
                     <div className="hx-card-more">
                       {elevation && elevation !== "none" && elevation.profile.length > 2 ? <ElevationChart e={elevation} /> : elevation === null ? <div className="hx-elev hx-elev--loading" aria-label="Loading elevation" /> : null}
                       {drive && (
-                        <p className="hx-drive">Drive: <strong>{fmtDuration(drive.durationSeconds / 3600)}</strong> · {Math.round(drive.distanceMeters / 1609.344)} mi to {start?.kind === "trail-end" ? "the trail" : start?.name ?? "the trailhead"}</p>
+                        <p className="hx-drive">Drive: <strong>{fmtDuration(drive.durationSeconds / 3600)}</strong> · {formatMeters(drive.distanceMeters)} to {start?.kind === "trail-end" ? "the trail" : start?.name ?? "the trailhead"}</p>
                       )}
                       {driveState && <p className="hx-drive" role="status">{driveState}</p>}
                       <div className="hx-actions">
@@ -1054,8 +1053,8 @@ function ElevationChart({ e }: { e: Elevation }) {
         <path d={line} className="hx-elev-line" vectorEffect="non-scaling-stroke" />
       </svg>
       <figcaption>
-        <span>{e.minFt.toLocaleString("en-US")}–{e.maxFt.toLocaleString("en-US")} ft</span>
-        <span>{e.gainFt.toLocaleString("en-US")} ft up · {e.lossFt.toLocaleString("en-US")} ft down{e.partial ? " (partial)" : ""}</span>
+        <span>{formatElevation(e.minFt)}–{formatElevation(e.maxFt)}</span>
+        <span>{formatElevation(e.gainFt)} up · {formatElevation(e.lossFt)} down{e.partial ? " (partial)" : ""}</span>
       </figcaption>
     </figure>
   );

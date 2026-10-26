@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDistance, formatElevation } from "@/lib/units";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { Feature, FeatureCollection } from "geojson";
@@ -24,7 +25,7 @@ type Tab = "ski" | "hike" | "bike";
 const KIND: Record<Tab, string> = { ski: "ski-run", hike: "hiking", bike: "mountain-biking" };
 
 function lengthLabel(t: TrailItem) {
-  if (t.miles != null) return `${t.miles.toFixed(1)} mi`;
+  if (t.miles != null) return formatDistance(t.miles) ?? "";
   if (t.lengthKm != null) return `${t.lengthKm.toFixed(1)} km`;
   return "";
 }
@@ -79,7 +80,7 @@ export function SkiAreaDetailPage({ slug }: { slug: string }) {
   if (area.lifts > 0) stats.push({ label: "Lifts", value: area.lifts.toLocaleString() });
   if (n("skiRuns")) stats.push({ label: "Ski runs", value: n("skiRuns").toLocaleString() });
   if (n("nordicRuns")) stats.push({ label: "Nordic trails", value: n("nordicRuns").toLocaleString() });
-  if (area.elevation_max_ft != null) stats.push({ label: "Elevation", value: `${area.elevation_min_ft != null ? `${area.elevation_min_ft.toLocaleString()}–` : ""}${area.elevation_max_ft.toLocaleString()} ft` });
+  if (area.elevation_max_ft != null) stats.push({ label: "Elevation", value: `${area.elevation_min_ft != null ? `${formatElevation(area.elevation_min_ft)}–` : ""}${formatElevation(area.elevation_max_ft)}` });
 
   const items = lists[tab];
   const visible = expanded ? items : items.slice(0, 25);
