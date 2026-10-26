@@ -592,3 +592,13 @@ html { scroll-padding-block:20px 100px; }
 .nav-units button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--forest, #0d120d); font-weight: 600; }
 /* Measurements line up in columns. */
 .trail-stats dd, .catalog-distance, .hx-stat, .trail-stat-value { font-variant-numeric: tabular-nums; }
+
+/* GPS recorder: resume / background / off-trail banners and map pills. */
+.recorder-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-elevated); color: var(--cream); font-size: 14px; }
+.recorder-banner p { margin: 0; flex: 1 1 260px; }
+.recorder-banner div { display: flex; gap: 8px; }
+.recorder-banner--warn { border-color: #eab308; background: rgb(234 179 8 / 0.12); }
+.recorder-map-tools { display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 8px; }
+.recorder-pill { min-height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-elevated); color: var(--cream); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.recorder-pill[aria-pressed="true"] { border-color: var(--accent); }
+.recorder-pill--weak { display: inline-flex; align-items: center; margin-right: auto; border-color: #eab308; background: rgb(234 179 8 / 0.18); color: #fde68a; cursor: default; }
