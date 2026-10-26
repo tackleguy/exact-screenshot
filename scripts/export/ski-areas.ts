@@ -14,7 +14,7 @@ import type { CatalogTrail } from "../../src/lib/trail-catalog/types";
 import type { SkiRunCache } from "../../src/lib/trail-catalog/ski-runs";
 import { matchingCatalogRows } from "../../src/lib/trail-catalog/search";
 import { trailActivities } from "../../src/lib/trail-catalog/activity";
-import { resolveDifficulty } from "../../src/lib/trail-difficulty";
+import { trailDifficulty } from "../../src/lib/trail-difficulty";
 import { simplifyLine } from "../../src/lib/geo/simplify";
 import { tileFeaturesOrNull, tileOf, type TileFeature } from "../../src/lib/geo/tiles";
 import { gzipSync } from "node:zlib";
@@ -187,7 +187,7 @@ async function main() {
       id: f.row.id,
       name: f.row.name,
       miles: f.row.miles,
-      difficulty: resolveDifficulty({ reported: f.row.difficulty, miles: f.row.miles, name: f.row.name }).difficulty,
+      difficulty: trailDifficulty(f.row),
       routeType: f.row.routeType ?? null,
       onMountain: f.km === 0,
       kmFromSkiArea: round(f.km, 1),

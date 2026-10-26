@@ -1,3 +1,4 @@
+import { computeDifficulty } from "@/lib/trail-difficulty";
 import type { CatalogTrail } from "./types";
 
 export interface ThruHikeSection {
@@ -291,7 +292,7 @@ export function getDetailedThruHikeTrails(): {
       id: s.id,
       name: s.name,
       miles: s.miles,
-      difficulty: s.difficulty,
+      difficulty: computeDifficulty({ lengthMi: s.miles, gainFt: s.elevationGainFt }) ?? s.difficulty,
       elevationFt: s.elevationGainFt,
     }));
 
@@ -306,7 +307,9 @@ export function getDetailedThruHikeTrails(): {
       distanceBasis: "source",
       latitude: hike.startLat,
       longitude: hike.startLng,
-      difficulty: hike.difficulty,
+      difficulty: computeDifficulty({ lengthMi: hike.officialMiles, gainFt: hike.elevationGainFt }) ?? hike.difficulty,
+      reportedDifficulty: hike.difficulty,
+      gainFt: hike.elevationGainFt,
       dogs: null,
       source: "route-aggregate",
       sourceId: hike.id,
@@ -342,7 +345,9 @@ export function getDetailedThruHikeTrails(): {
         distanceBasis: "source",
         latitude: s.startLat,
         longitude: s.startLng,
-        difficulty: s.difficulty,
+        difficulty: computeDifficulty({ lengthMi: s.miles, gainFt: s.elevationGainFt }) ?? s.difficulty,
+        reportedDifficulty: s.difficulty,
+        gainFt: s.elevationGainFt,
         dogs: null,
         source: "guide",
         sourceId: s.id,

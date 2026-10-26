@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { CatalogManifest, CatalogTrail, CatalogMapResult } from "@/lib/trail-catalog/types";
 import { parseCatalogFilters } from "@/lib/trail-catalog/search";
 import { headlineCount, countryName, displayMiles, trailPlace, trailSacScale } from "@/lib/trail-catalog/types";
-import { resolveDifficulty } from "@/lib/trail-difficulty";
+import { trailDifficulty } from "@/lib/trail-difficulty";
 import { QUALITY_STATUS_LABELS } from "@/lib/trail-catalog/quality";
 import { CatalogMap } from "@/components/trails/CatalogMap";
 import { NavIcon } from "@/components/nav/NavIcon";
@@ -266,7 +266,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                         </h2>
                         <p>
                           {t.region ?? countryName(t.country)} · {trailPlace(t)}
- · {(() => { const d = resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty; return <span className="catalog-difficulty"><i style={{ background: DIFFICULTY_COLORS[d === "expert" ? "x" : d[0]] }} aria-hidden="true" />{d}</span>; })()}
+ · {(() => { const d = trailDifficulty(t); return <span className="catalog-difficulty"><i style={{ background: DIFFICULTY_COLORS[d === "expert" ? "x" : d[0]] }} aria-hidden="true" />{d}</span>; })()}
                           {t.sections && t.sections.length > 0 ? ` · ${t.sections.length} sections` : ""}
                           {t.summitElevationFt ? ` · Summit ${t.summitElevationFt.toLocaleString()} ft` : ""}
                         </p>

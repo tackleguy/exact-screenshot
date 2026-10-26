@@ -25,6 +25,7 @@ import { createHash } from "node:crypto";
 import { buildThroughHikeOverlay } from "../src/lib/trail-catalog/through-hikes";
 import { buildResortOverlay } from "../src/lib/trail-catalog/resorts";
 import { normalizeSeason, titleCaseName } from "../src/lib/trail-catalog/agencies";
+import { computeDifficulty, effortClimbFt } from "../src/lib/trail-difficulty";
 import { sectionOf, trailActivities } from "../src/lib/trail-catalog/activity";
 import { countryName, type CatalogTrail } from "../src/lib/trail-catalog/types";
 import { pinCell, regionSlug, rowShard, searchKey, SEARCH_STOPWORDS } from "../src/lib/trail-catalog/static-data";
@@ -91,7 +92,22 @@ async function main() {
   const routes = buildThroughHikeOverlay(sections);
   const resorts = buildResortOverlay(JSON.parse(await readFile(path.join(root, "resort-trails.json"), "utf8")).resorts, sections);
   const redirects: Record<string, string> = Object.fromEntries(sections.filter((t) => t.mergedInto).map((t) => [t.id, t.mergedInto!]));
+  // Measured elevation (pipeline/steps/elevation.ts): [gainFt, lossFt, minFt, maxFt, steepestGradePct] by trail id.
+  const elevation: Record<string, [number, number, number, number, number | null]> = await readFile(path.join(source, "elevation.json.gz")).then((b) => JSON.parse(gunzipSync(b).toString())).catch(() => ({}));
+  /** Stores the measured climb and the one difficulty rating (src/lib/trail-difficulty.ts) on a trail. */
+  const rate = (t: CatalogTrail) => {
+    const e = elevation[t.id];
+    if (e) {
+      const climb = effortClimbFt({ gainFt: e[0], lossFt: e[1] }, t.routeType);
+      t.gainFt = climb;
+      t.lossFt = climb === e[0] ? e[1] : e[0];
+      t.minElevFt = e[2]; t.maxElevFt = e[3]; t.steepestGradePct = e[4];
+    }
+    if (t.reportedDifficulty === undefined) t.reportedDifficulty = t.difficulty ?? null;
+    t.difficulty = computeDifficulty({ lengthMi: t.miles, gainFt: t.gainFt, steepestGradePct: t.steepestGradePct, maxElevFt: t.maxElevFt }) ?? t.difficulty;
+  };
   const rows = [...sections.filter(shown), ...routes, ...resorts];
+  for (const t of rows) rate(t);
 
   await rm(path.resolve("public/trail-data"), { recursive: true, force: true });
   const output = path.resolve("public/trail-data", pointer.directory);
@@ -177,6 +193,7 @@ async function main() {
     const byCell = new Map<string, CatalogTrail[]>();
     for (const t of data.rows) {
       t.name = titleCaseName(t.name);
+      rate(t);
       const b = boundsById.get(t.id);
       if (b) t.bounds = b;
       for (const k of cellKeysOf(t)) (byCell.get(k) ?? byCell.set(k, []).get(k)!).push(t);

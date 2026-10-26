@@ -9,7 +9,16 @@ export interface CatalogTrail {
   distanceBasis: "source" | "geometry";
   latitude: number;
   longitude: number;
+  /** Difficulty from computeDifficulty (src/lib/trail-difficulty.ts), stored by the data build. */
   difficulty: string | null;
+  /** The source's own difficulty wording, when it gave one (kept for reference; not used for the rating). */
+  reportedDifficulty?: string | null;
+  /** Measured along the line from elevation data by the data build: climb (larger direction for a line), descent, range, steepest 100 m grade. */
+  gainFt?: number | null;
+  lossFt?: number | null;
+  minElevFt?: number | null;
+  maxElevFt?: number | null;
+  steepestGradePct?: number | null;
   dogs: boolean | null;
   source: "usgs" | "parks-canada" | "ontario" | "nps" | "usfs" | "blm" | "resort" | "guide" | "route-aggregate" | "peak" | "osm";
   sourceId: string;

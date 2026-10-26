@@ -1,4 +1,4 @@
-import { resolveDifficulty } from "@/lib/trail-difficulty";
+import { trailDifficulty } from "@/lib/trail-difficulty";
 import { matchScore, placeMatch, searchEntry, searchRank, type SearchEntry } from "./fuzzy";
 
 const entries = new WeakMap<CatalogTrail, SearchEntry>();
@@ -97,7 +97,7 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     if (filters.minMiles !== undefined && (r.miles === null || r.miles < filters.minMiles)) return false;
     if (filters.maxMiles !== undefined && (r.miles === null || r.miles > filters.maxMiles)) return false;
     // Reported difficulty when the source gives one, otherwise the same estimate the trail page shows.
-    if (difficulties && !difficulties.has(resolveDifficulty({ reported: r.difficulty, miles: r.miles, sacScale: trailSacScale(r) }).difficulty)) return false;
+    if (difficulties && !difficulties.has(trailDifficulty(r))) return false;
     if (filters.routeType && r.routeType !== filters.routeType) return false;
     if (filters.dogFriendly && r.dogs !== true) return false;
     if (filters.verified && r.tier !== "verified") return false;

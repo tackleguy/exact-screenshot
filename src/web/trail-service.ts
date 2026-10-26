@@ -1,7 +1,7 @@
 import { parseCatalogFilters, filterCatalog, normalize, distanceKm } from "@/lib/trail-catalog/search";
 import type { CatalogTrail, CatalogManifest } from "@/lib/trail-catalog/types";
 import { buildCatalogMap } from "@/lib/trail-catalog/map";
-import { resolveDifficulty } from "@/lib/trail-difficulty";
+import { trailDifficulty } from "@/lib/trail-difficulty";
 import { chainLines } from "@/lib/geo/line";
 import { measureLines } from "@/lib/trail-catalog/quality";
 import { nearbyCatalogPhotos, wikiPhotos } from "@/lib/trail-catalog/photos";
@@ -572,7 +572,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
           t.latitude,
           t.miles,
           { easy: "e", moderate: "m", hard: "h", expert: "x" }[
-            resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty
+            trailDifficulty(t)
           ],
           t.park ?? t.forest ?? t.region,
           t.routeType ?? null,
@@ -602,7 +602,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
                 id: t.id,
                 name: t.name,
                 d: { easy: "e", moderate: "m", hard: "h", expert: "x" }[
-                  resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) }).difficulty
+                  trailDifficulty(t)
                 ],
               },
               geometry: { type: "MultiLineString", coordinates: simplified },

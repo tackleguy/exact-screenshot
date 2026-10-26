@@ -7,7 +7,7 @@ import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { countryName } from "@/lib/trail-catalog/types";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { ROUTE_TYPE_LABELS } from "@/lib/trail-catalog/quality";
-import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, effortClimbFt, naismithHours, resolveDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
+import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, effortClimbFt, naismithHours, type TrailDifficulty } from "@/lib/trail-difficulty";
 import { duration as displayDuration, feet, join, miles as displayMiles, text } from "@/lib/display";
 import { SOURCE_TYPE_LABELS } from "@/lib/trail-catalog/agencies";
 import { trailSacScale } from "@/lib/trail-catalog/types";
@@ -35,13 +35,14 @@ export function CatalogTrailHero({ trail: t, difficulty, distance, hasLines }: {
   useEffect(() => {
     let live = true;
     fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/photos`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (live && d?.photos?.[0]) setPhoto(d.photos[0]); }).catch(() => undefined);
-    // Measured climb (DEM) for difficulty and Naismith time; the profile itself is drawn further down.
-    if (hasLines) fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/elevation`).then((r) => (r.ok ? r.json() : null)).then((e) => { if (live && Number.isFinite(e?.gainFt)) setGainFor({ id: t.id, gainFt: effortClimbFt(e, t.routeType) ?? e.gainFt }); }).catch(() => undefined);
+    // Trails the data build measured carry their climb; others measure it here (for the time estimate only — the
+    // difficulty always comes from the stored measures, so it matches the list, the map and the page title).
+    if (hasLines && !Number.isFinite(t.gainFt)) fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/elevation`).then((r) => (r.ok ? r.json() : null)).then((e) => { if (live && Number.isFinite(e?.gainFt)) setGainFor({ id: t.id, gainFt: effortClimbFt(e, t.routeType) ?? e.gainFt }); }).catch(() => undefined);
     return () => { live = false; };
-  }, [t.id, hasLines]);
-  const gainFt = gainFor?.id === t.id ? gainFor.gainFt : null;
+  }, [t.id, t.gainFt, hasLines]);
+  const gainFt = Number.isFinite(t.gainFt) ? (t.gainFt as number) : gainFor?.id === t.id ? gainFor.gainFt : null;
   const head = t.trailhead ?? { latitude: t.latitude, longitude: t.longitude };
-  const level = (gainFt !== null ? resolveDifficulty({ reported: t.difficulty, miles: t.miles, gainFt, sacScale: trailSacScale(t) }).difficulty : difficulty) as TrailDifficulty;
+  const level = difficulty as TrailDifficulty;
   // Naismith's rule, only for trails under 50 mi that aren't summits, expeditions or through-hikes.
   const expedition = Boolean(t.peakCategory) || t.kind === "route" || Boolean(t.partOfRoute) || /\b(summit|expedition)\b/i.test(t.name);
   const hours = expedition ? null : naismithHours(t.miles, gainFt);
@@ -64,7 +65,7 @@ export function CatalogTrailHero({ trail: t, difficulty, distance, hasLines }: {
         {time && <div><dt>Est. time</dt><dd title="Naismith's rule: 3 mph plus 1 hour per 2,000 ft of climb">{time}</dd></div>}
         {feet(gainFt) && <div><dt>{t.routeType === "loop" ? "Elevation gain" : "Climb"}</dt><dd title={t.routeType === "loop" ? undefined : "The larger of the climb in either direction along the trail"}>{feet(gainFt)}</dd></div>}
         {(t.routeType || t.kind === "route") && <div><dt>Route type</dt><dd>{t.routeType ? ROUTE_TYPE_LABELS[t.routeType] : "Long-distance"}</dd></div>}
-        <div><dt>Difficulty</dt><dd title={DIFFICULTY_FORMULA}>{DIFFICULTY_LABELS[level] ?? level}<small className="trail-stat-note">How it’s rated: distance{gainFt !== null ? ", climb" : ""}{trailSacScale(t) ? " and terrain" : ""}</small></dd></div>
+        <div><dt>Difficulty</dt><dd title={DIFFICULTY_FORMULA}>{DIFFICULTY_LABELS[level] ?? level}<small className="trail-stat-note">How it’s rated: distance{Number.isFinite(t.gainFt) ? " and climb" : ""}</small></dd></div>
         {(t.sectionCount ?? 0) > 1 && <div><dt>Sections</dt><dd>{t.sectionCount!.toLocaleString("en-US")} joined</dd></div>}
       </dl>
       <div className="trail-actions">

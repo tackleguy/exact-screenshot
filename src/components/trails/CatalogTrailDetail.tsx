@@ -11,7 +11,7 @@ import type { CatalogManifest, CatalogTrail } from "@/lib/trail-catalog/types";
 import { countryName, sourceName } from "@/lib/trail-catalog/types";
 import { CONFIDENCE_LABELS, SOURCE_TYPE_LABELS, TRAIL_TYPE_LABELS } from "@/lib/trail-catalog/agencies";
 import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, formatDistance } from "@/lib/trail-catalog/quality";
-import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, resolveDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
+import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, trailDifficulty } from "@/lib/trail-difficulty";
 import { CatalogTrailHero } from "./CatalogTrailHero";
 import "./catalog.css";
 import { trailSacScale } from "@/lib/trail-catalog/types";
@@ -40,14 +40,14 @@ export function CatalogTrailDetail({
     ...(isRoute ? { kind: "route" } : {}),
     ...(t.region && (t.country === "US" || t.country === "CA") ? { region: t.region } : {}),
   });
-  const difficulty = resolveDifficulty({ reported: t.difficulty, miles: t.miles, sacScale: trailSacScale(t) });
+  const difficulty = trailDifficulty(t);
 
   return (
     <article className="catalog-shell catalog-detail">
       <Link className="catalog-link" href={`/explore/trails?${browse}`}>
         ← Browse {isRoute ? "through-hikes" : (t.region ?? countryName(t.country))}
       </Link>
-      <CatalogTrailHero trail={t} difficulty={difficulty.difficulty} distance={distance.primary} hasLines={hasLines} />
+      <CatalogTrailHero trail={t} difficulty={difficulty} distance={distance.primary} hasLines={hasLines} />
       {t.peakCategory && (
         <p className="trail-notes">
           <span className="catalog-badge">{t.peakCategory === "14er" ? "14er · 14,000+ ft peak" : t.peakCategory === "8000m" ? "8,000 m peak" : "Seven Summits"}</span>
@@ -149,7 +149,7 @@ export function CatalogTrailDetail({
           </div>
           <div>
             <dt>Difficulty</dt>
-            <dd>{DIFFICULTY_LABELS[difficulty.difficulty as TrailDifficulty] ?? difficulty.difficulty} <small className="catalog-muted" title={DIFFICULTY_FORMULA}>{difficulty.label}</small></dd>
+            <dd>{DIFFICULTY_LABELS[difficulty]} <small className="catalog-muted" title={DIFFICULTY_FORMULA}>from length{Number.isFinite(t.gainFt) ? " and measured climb" : ""}</small></dd>
           </div>
           <div>
             <dt>Dogs</dt>
