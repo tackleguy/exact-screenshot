@@ -5,6 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import "./trail-social.css";
 
+/**
+ * Set when the database has no reviews table yet (its migration not applied): stop asking for the rest of the
+ * visit instead of failing on every card and page.
+ */
+let reviewsMissing = false;
+const noteMissing = (status: number) => { if (status === 404) reviewsMissing = true; };
+
 interface Review { id: string; user_id: string; rating: number; body: string | null; hiked_on: string | null; created_at: string }
 
 /** Average rating and count for a trail, shared by the hero's stars and the reviews section. */
@@ -13,8 +20,9 @@ export function useTrailRating(trailId: string) {
   const reload = useCallback(() => {
     const client = createClient();
     if (!client) return;
+    if (reviewsMissing) { void Promise.resolve().then(() => setState({ id: trailId, reviews: [], available: false })); return; }
     void client.from("catalog_trail_reviews").select("id,user_id,rating,body,hiked_on,created_at").eq("catalog_trail_id", trailId).order("created_at", { ascending: false }).limit(50)
-      .then(({ data, error }) => setState({ id: trailId, reviews: (data ?? []) as Review[], available: !error }));
+      .then(({ data, error, status }) => { noteMissing(status); setState({ id: trailId, reviews: (data ?? []) as Review[], available: !error }); });
   }, [trailId]);
   useEffect(() => { reload(); }, [reload]);
   const reviews = state?.id === trailId ? state.reviews : [];
@@ -30,9 +38,10 @@ export function useRatings(ids: string[]) {
   useEffect(() => {
     const client = createClient();
     const list = key ? key.split("|") : [];
-    if (!client || !list.length) return;
+    if (!client || !list.length || reviewsMissing) return;
     let live = true;
-    void client.from("catalog_trail_reviews").select("catalog_trail_id,rating").in("catalog_trail_id", list.slice(0, 200)).then(({ data }) => {
+    void client.from("catalog_trail_reviews").select("catalog_trail_id,rating").in("catalog_trail_id", list.slice(0, 200)).then(({ data, status }) => {
+      noteMissing(status);
       const sums = new Map<string, { total: number; count: number }>();
       for (const r of (data ?? []) as { catalog_trail_id: string; rating: number }[]) {
         const s = sums.get(r.catalog_trail_id) ?? { total: 0, count: 0 };

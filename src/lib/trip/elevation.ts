@@ -34,7 +34,11 @@ export async function elevationProfile(trailLines: LngLat[][], samples = 300): P
   const route = new Route(trailLines);
   if (!route.points.length) return null;
   const points = route.sample(25, samples);
-  const meters = await elevations(points.map((s) => s.p));
+  // Sparse samples (long trails) don't need street-level terrain tiles: coarser tiles cover many samples each, so
+  // a 2,650-mile trail needs dozens of downloads instead of hundreds.
+  const spacing = route.meters / Math.max(1, points.length - 1);
+  const zoom = spacing > 5000 ? 9 : spacing > 1500 ? 11 : 13;
+  const meters = await elevations(points.map((s) => s.p), zoom);
   const valid = meters.filter(Number.isFinite);
   if (!valid.length) return null;
   const { gain, loss } = climb(meters);

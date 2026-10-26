@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ElevationProfile } from "@/lib/trip/elevation";
 import { steepestGrade } from "@/lib/trip/grade";
-import { formatElevation, formatGrade, useUnits } from "@/lib/units";
+import { formatElevation, formatGrade, formatMeters, useUnits } from "@/lib/units";
 import { emitTrailHover, onTrailHover } from "@/lib/trail-hover";
 import { DIFFICULTY_COLORS } from "@/lib/trail-difficulty";
 
@@ -17,7 +17,7 @@ type Load = { state: "loading" } | { state: "error"; message: string } | { state
 const SHADE: Record<string, string> = { ...DIFFICULTY_COLORS, expert: "var(--foreground)" };
 
 const W = 800, H = 220, PAD_L = 52, PAD_R = 12, PAD_T = 12, PAD_B = 28;
-const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+const fmt = (n: number) => (Math.round(n) || 0).toLocaleString("en-US"); // never "-0"
 
 /** Rounded axis steps (1, 2, 2.5 or 5 × 10ⁿ) giving about `count` ticks over `span`. */
 function step(span: number, count: number) {
@@ -43,7 +43,7 @@ export function TrailElevationSection({ trailId, stored, difficulty }: { trailId
   return (
     <section className="trail-elevation" aria-labelledby="trail-elevation-heading">
       <h2 id="trail-elevation-heading">Elevation profile</h2>
-      {load.state === "loading" && <div className="trail-elevation-loading" role="status" aria-label="Measuring elevation along the trail" />}
+      {load.state === "loading" && <div className="trail-elevation-loading" role="status"><span>Measuring elevation along the trail… long trails can take up to a minute.</span></div>}
       {load.state === "error" && <p className="catalog-muted">{load.message}</p>}
       {load.state === "ready" && load.data.profile.length > 1 && <Chart e={load.data} stored={stored} trailId={trailId} shade={SHADE[difficulty ?? ""] ?? "var(--accent)"} />}
       {load.state === "ready" && load.data.profile.length <= 1 && <p className="catalog-muted">Elevation isn’t available for this trail’s line.</p>}
@@ -83,7 +83,11 @@ function Chart({ e: raw, stored, trailId, shade }: { e: ElevationProfile; stored
     const spacing = (along[along.length - 1] ?? 0) / Math.max(1, along.length - 1);
     return spacing <= 50 ? steepestGrade(along, meters) : null;
   }, [raw, stored]);
-  const descentFt = Number.isFinite(stored?.lossFt) ? (stored!.lossFt as number) : raw.lossFt;
+  // Long trails are sampled sparsely (a few hundred points), which misses most ups and downs: their profile shows
+  // the shape, but no descent figure unless the data build measured one.
+  const spacingM = ((raw.profile[raw.profile.length - 1]?.[0] ?? 0) * 1609.344) / Math.max(1, raw.profile.length - 1);
+  const coarse = spacingM > 400;
+  const descentFt = Number.isFinite(stored?.lossFt) ? (stored!.lossFt as number) : coarse ? null : raw.lossFt;
 
   const pick = (clientX: number) => {
     const box = ref.current?.getBoundingClientRect();
@@ -105,7 +109,7 @@ function Chart({ e: raw, stored, trailId, shade }: { e: ElevationProfile; stored
   return (
     <>
       <dl className="trail-elevation-stats">
-        <div><dt>Descent</dt><dd>{formatElevation(descentFt)}</dd></div>
+        {descentFt !== null && <div><dt>Descent</dt><dd>{formatElevation(descentFt)}</dd></div>}
         {formatGrade(steepest) && <div><dt>Steepest grade</dt><dd title="Steepest 100 m stretch after smoothing the elevation samples">{formatGrade(steepest)}</dd></div>}
       </dl>
       <figure className="trail-elevation-chart">
@@ -155,7 +159,7 @@ function Chart({ e: raw, stored, trailId, shade }: { e: ElevationProfile; stored
         </svg>
         <figcaption className="catalog-muted">
           {at ? <strong className="trail-elevation-readout">{at[0].toFixed(1)} {distUnit} · {fmt(at[1])} {elevUnit}</strong> : "Hover or drag across the chart to read the elevation at any point."}{" "}
-          {e.partial ? "Part of the elevation data couldn’t be loaded, so these totals cover only part of the trail." : "Estimated from sampled ground elevation along the mapped line, in the direction the trail is mapped."}
+          {coarse ? `Simplified for a long trail: one sample every ${formatMeters(spacingM)}. ` : ""}{e.partial ? "Part of the elevation data couldn’t be loaded, so these totals cover only part of the trail." : "Estimated from sampled ground elevation along the mapped line, in the direction the trail is mapped."}
         </figcaption>
       </figure>
     </>

@@ -256,7 +256,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
               <ul className="catalog-list">
                 {trails.map((t) => (
                   <li key={t.id} className="catalog-list-item">
-                    <Link href={`/explore/trails/${t.id}`} prefetch={false} className="catalog-row">
+                    <Link href={`/explore/trails/${encodeURIComponent(t.id)}`} prefetch={false} className="catalog-row">
                       {/* eslint-disable-next-line @next/next/no-img-element -- remote static map picture */}
                       <img className="catalog-row-thumb" src={trailThumbnail(t)} alt="" loading="lazy" width={80} height={60} />
                       <div className="catalog-row-name">

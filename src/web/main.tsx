@@ -45,7 +45,7 @@ import "@/app/globals.css";
 import "./web.css";
 const mountainUrl = typeof mountainNight === "string" ? mountainNight : mountainNight.src;
 
-function Status({ title, children }: { title: string; children?: ReactNode }) { return <section className="fieldbook-page"><h1>{title}</h1><p role="status">{children}</p></section>; }
+function Status({ title, children }: { title: string; children?: ReactNode }) { return <section className="fieldbook-page"><h1>{title}</h1><div role="status" className="fieldbook-status">{children}</div></section>; }
 function RequireAccount({ children }: { children: ReactNode }) {
   const { user, loading } = useAccount(); const location = useLocation();
   if (loading) return <Status title="Loading your account…" />;

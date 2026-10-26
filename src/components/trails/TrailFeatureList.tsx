@@ -23,7 +23,9 @@ export function TrailFeatureList({ trailId, hasLine }: { trailId: string; hasLin
   }, [url]);
   const features = state && state.url === url ? state.features : [];
   // Parking lots and bridges are useful on the map but crowd a mile-by-mile list.
-  const listed = features.filter((f) => f.type !== "parking" && f.type !== "bridge");
+  // A feature on two of a trail's joined lines can come back twice at the same mile; list it once.
+  const seen = new Set<string>();
+  const listed = features.filter((f) => f.type !== "parking" && f.type !== "bridge" && !seen.has(`${f.id}-${f.mile}`) && seen.add(`${f.id}-${f.mile}`));
   if (!listed.length) return null;
   const counts = listed.reduce<Record<FeatureGroup, number>>((acc, f) => { acc[groupOf(f.type)]++; return acc; }, { water: 0, camping: 0, other: 0 });
   const shown = filter === "all" ? listed : listed.filter((f) => groupOf(f.type) === filter);

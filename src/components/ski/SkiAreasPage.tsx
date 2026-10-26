@@ -166,10 +166,10 @@ export function SkiAreasPage() {
       <h1>Ski areas &amp; winter resorts</h1>
       <p className="text-mist">{builtIn ? `${count.toLocaleString()} ski areas worldwide. Tap one for its runs, lifts and directions.` : `${count.toLocaleString()} ski areas with mapped runs and nearby summer trails.`}</p>
       <div className="mt-4 flex flex-col flex-wrap gap-2 md:flex-row">
-        <input type="search" value={query} onChange={(e) => reset(setQuery)(e.target.value)} placeholder="Search ski areas (e.g. Vail, Chamonix)…" className={`flex-1 ${sel} placeholder:text-mist`} />
-        <select value={country} onChange={(e) => { setCountry(e.target.value); setRegion(""); setPage(0); }} className={sel}><option value="">All countries</option>{countries.map((c) => <option key={c}>{c}</option>)}</select>
-        <select value={region} onChange={(e) => reset(setRegion)(e.target.value)} className={sel}><option value="">All regions</option>{regions.map((r) => <option key={r}>{r}</option>)}</select>
-        <select value={type} onChange={(e) => reset(setType)(e.target.value)} className={sel}><option value="">Downhill &amp; Nordic</option><option value="downhill">Downhill</option><option value="nordic">Nordic</option></select>
+        <input type="search" aria-label="Search ski areas" value={query} onChange={(e) => reset(setQuery)(e.target.value)} placeholder="Search ski areas (e.g. Vail, Chamonix)…" className={`flex-1 ${sel} placeholder:text-mist`} />
+        <select aria-label="Country" value={country} onChange={(e) => { setCountry(e.target.value); setRegion(""); setPage(0); }} className={sel}><option value="">All countries</option>{countries.map((c) => <option key={c}>{c}</option>)}</select>
+        <select aria-label="Region" value={region} onChange={(e) => reset(setRegion)(e.target.value)} className={sel}><option value="">All regions</option>{regions.map((r) => <option key={r}>{r}</option>)}</select>
+        <select aria-label="Ski type" value={type} onChange={(e) => reset(setType)(e.target.value)} className={sel}><option value="">Downhill &amp; Nordic</option><option value="downhill">Downhill</option><option value="nordic">Nordic</option></select>
         {!builtIn && <label className="flex items-center gap-2 text-sm text-mist"><input type="checkbox" checked={hiking} onChange={(e) => reset(setHiking)(e.target.checked)} />Has hiking</label>}
         {!builtIn && <label className="flex items-center gap-2 text-sm text-mist"><input type="checkbox" checked={biking} onChange={(e) => reset(setBiking)(e.target.checked)} />Has mountain biking</label>}
       </div>
@@ -178,12 +178,12 @@ export function SkiAreasPage() {
       {loading && <p role="status">Loading ski areas…</p>}
       {!loading && !error && (
         <>
-          <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {shown.map((a) => {
               const runs = runTotal(a);
               return (
-                <Link key={a.id} href={a.href ?? `/ski-areas/${a.slug}`} className="rounded-[var(--radius-lg)] border border-[var(--border)] bg-surface-elevated p-4 transition-colors hover:border-accent/40">
-                  <h2 className="font-display text-base font-semibold text-cream">{a.name}</h2>
+                <Link key={a.id} href={a.href ?? `/ski-areas/${a.slug}`} className="min-w-0 rounded-[var(--radius-lg)] border border-[var(--border)] bg-surface-elevated p-4 transition-colors hover:border-accent/40">
+                  <h2 className="break-words font-display text-base font-semibold text-cream">{a.name}</h2>
                   <p className="mt-1 text-xs text-mist">{[a.locality, a.region, a.country_name].filter(Boolean).join(", ")}</p>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs text-mist">
                     {a.lifts > 0 && <span>{a.lifts} lifts</span>}

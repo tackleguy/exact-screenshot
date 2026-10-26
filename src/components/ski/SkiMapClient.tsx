@@ -135,7 +135,7 @@ export function SkiMapClient() {
         <p className="mt-1 text-xs text-mist">
           {inView ? `${inView.total.toLocaleString("en-US")} ski ${inView.total === 1 ? "area" : "areas"} in view. ` : ""}Tap one for runs and lifts, search a resort, or{" "}
           <Link
-            href="/explore/trails?activity=ski&includeWinter=true"
+            href="/explore/trails/catalog?activity=ski&includeWinter=true"
             className="font-semibold text-accent"
           >
             browse catalog ski trails
@@ -182,7 +182,7 @@ export function SkiMapClient() {
 
       <div className="relative min-h-0 flex-1">
         {(location.needsPrompt || location.permission === "denied") && (
-          <div className="absolute inset-x-0 top-2 z-20 px-3">
+          <div className="absolute inset-x-0 bottom-10 z-20 px-3">
             <LocationPermissionPrompt
               permission={location.permission}
               loading={location.loading}

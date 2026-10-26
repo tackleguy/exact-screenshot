@@ -114,7 +114,7 @@ export function CatalogTrailHero({ trail: t, difficulty, hasLines }: { trail: Ca
 function recordType(t: CatalogTrail) {
   const uses = (t.uses ?? []).join(" ");
   if (t.winterUse || t.osm?.route === "ski" || t.osm?.route === "piste") return "ski";
-  if (t.osm?.route === "bicycle" || t.osm?.route === "mtb" || (/bike/i.test(uses) && !/hiking/i.test(uses))) return "bike";
+  if (t.osm?.route === "bicycle" || t.osm?.route === "mtb" || (t.trailType !== "hiking" && /bike|bicycl/i.test(uses) && !/hik|foot|walk|pedestrian/i.test(uses))) return "bike";
   if (t.osm?.route === "running") return "run";
   return "hike";
 }

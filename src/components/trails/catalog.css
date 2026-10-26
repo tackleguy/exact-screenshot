@@ -286,7 +286,7 @@
 .trail-elevation-dot { fill: var(--accent); stroke: var(--background); stroke-width: 2; }
 .trail-elevation-readout { color: var(--foreground); }
 .trail-elevation-chart figcaption { margin-top: 8px; font-size: .85rem; }
-.trail-elevation-loading { height: 200px; border-radius: var(--radius-lg); background: linear-gradient(90deg, var(--surface-elevated), var(--surface-muted), var(--surface-elevated)); background-size: 200% 100%; animation: trail-elev-shimmer 1.2s ease-in-out infinite; }
+.trail-elevation-loading { display: flex; align-items: center; justify-content: center; padding: 0 1rem; text-align: center; color: var(--sage); font-size: 0.9rem; height: 200px; border-radius: var(--radius-lg); background: linear-gradient(90deg, var(--surface-elevated), var(--surface-muted), var(--surface-elevated)); background-size: 200% 100%; animation: trail-elev-shimmer 1.2s ease-in-out infinite; }
 @keyframes trail-elev-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
 @media (prefers-reduced-motion: reduce) { .trail-elevation-loading { animation: none; } }
 @media (max-width: 640px) { .trail-elevation { padding: 16px; margin-inline: -8px; } }
@@ -364,3 +364,6 @@
 .catalog-row-thumb { width: 80px; height: 60px; border-radius: 8px; object-fit: cover; background: var(--surface-muted); }
 .catalog-row-heart { top: 50% !important; right: 4px !important; transform: translateY(-50%); }
 @media (max-width: 560px) { .catalog-list .catalog-row { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; } .catalog-list .catalog-row-name { grid-column: auto; } .catalog-row-thumb { width: 64px; height: 52px; } .catalog-list .catalog-row > svg { display: none; } }
+/* Photo credit: one short line on a dark backing so it never wraps into the badges or vanishes on bright imagery. */
+.trail-hero-credit { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100% - 1.5rem) !important; padding: 2px 8px; border-radius: 6px; background: rgb(0 0 0 / 0.45); opacity: 1 !important; }
+.trail-hero-text { padding-top: 2.4rem; }

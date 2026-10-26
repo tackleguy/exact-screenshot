@@ -1003,7 +1003,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                   <TrailStats compact trail={{ miles, gainFt: gainFt ?? (active ? gain : null), lossFt, steepestGradePct: steepest, routeType: (routeType as RouteType | null) ?? null, difficulty: level, multiDay: (miles ?? 0) >= 50 }} />
                   {active && (
                     <div className="hx-card-more">
-                      {elevation && elevation !== "none" && elevation.profile.length > 2 ? <ElevationChart e={elevation} /> : elevation === null ? <div className="hx-elev hx-elev--loading" aria-label="Loading elevation" /> : null}
+                      {elevation && elevation !== "none" && elevation.profile.length > 2 ? <ElevationChart e={elevation} gainFt={gainFt} lossFt={lossFt} /> : elevation === null ? <div className="hx-elev hx-elev--loading" aria-label="Loading elevation" /> : null}
                       {drive && (
                         <p className="hx-drive">Drive: <strong>{fmtDuration(drive.durationSeconds / 3600)}</strong> · {formatMeters(drive.distanceMeters)} to {start?.kind === "trail-end" ? "the trail" : start?.name ?? "the trailhead"}</p>
                       )}
@@ -1089,7 +1089,8 @@ function TrailShape({ id, lines, color }: { id: string; lines?: [number, number]
   );
 }
 
-function ElevationChart({ e }: { e: Elevation }) {
+/** The card's small profile; its climb and descent are the trail's stored measures, matching the stats above. */
+function ElevationChart({ e, gainFt, lossFt }: { e: Elevation; gainFt?: number | null; lossFt?: number | null }) {
   const W = 320, H = 64;
   const maxMile = e.profile[e.profile.length - 1][0] || 1;
   const range = Math.max(40, e.maxFt - e.minFt);
@@ -1103,7 +1104,7 @@ function ElevationChart({ e }: { e: Elevation }) {
       </svg>
       <figcaption>
         <span>{formatElevation(e.minFt)}–{formatElevation(e.maxFt)}</span>
-        <span>{formatElevation(e.gainFt)} up · {formatElevation(e.lossFt)} down{e.partial ? " (partial)" : ""}</span>
+        <span>{formatElevation(Number.isFinite(gainFt) ? gainFt : e.gainFt)} up · {formatElevation(Number.isFinite(lossFt) ? lossFt : e.lossFt)} down{e.partial ? " (partial)" : ""}</span>
       </figcaption>
     </figure>
   );

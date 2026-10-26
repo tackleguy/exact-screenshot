@@ -44,13 +44,14 @@ export function CatalogTrailDetail({
   const browse = new URLSearchParams({
     ...(t.country === "US" || t.country === "CA" ? { country: t.country } : { country: "intl" }),
     ...(isRoute ? { kind: "route" } : {}),
-    ...(t.region && (t.country === "US" || t.country === "CA") ? { region: t.region } : {}),
+    // Through-hikes span several states ("California · Oregon · Washington"), which isn't one region to filter by.
+    ...(t.region && !isRoute && !t.region.includes("·") && (t.country === "US" || t.country === "CA") ? { region: t.region } : {}),
   });
   const difficulty = trailDifficulty(t);
 
   return (
     <article className="catalog-shell catalog-detail">
-      <Link className="catalog-link" href={`/explore/trails?${browse}`}>
+      <Link className="catalog-link" href={`/explore/trails/catalog?${browse}`}>
         ← Browse {isRoute ? "through-hikes" : (t.region ?? countryName(t.country))}
       </Link>
       <CatalogTrailHero trail={t} difficulty={difficulty} distance={distance.primary} hasLines={hasLines} />
