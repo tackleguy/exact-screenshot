@@ -277,7 +277,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                         </span>
                         <p>
                           {t.region ?? countryName(t.country)} · {trailPlace(t)}
- · {(() => { const d = trailDifficulty(t); return <span className="catalog-difficulty"><i style={{ background: DIFFICULTY_COLORS[d === "expert" ? "x" : d[0]] }} aria-hidden="true" />{d}</span>; })()}
+ · {(() => { const d = trailDifficulty(t); return <span className="catalog-difficulty"><i style={{ background: DIFFICULTY_COLORS[d === "expert" ? "x" : d[0]] }} aria-hidden="true" />{d[0].toUpperCase() + d.slice(1)}</span>; })()}
                           {t.sections && t.sections.length > 0 ? ` · ${t.sections.length} sections` : ""}
                           {t.summitElevationFt ? ` · Summit ${t.summitElevationFt.toLocaleString()} ft` : ""}
                         </p>

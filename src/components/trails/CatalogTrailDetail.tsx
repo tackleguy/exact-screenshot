@@ -18,6 +18,7 @@ import { TrailHighlights } from "./TrailHighlights";
 import { TrailReviews } from "./TrailReviews";
 import { estimatedTime } from "./TrailStats";
 import { describeTrail } from "@/lib/trail-catalog/describe";
+import { cleanTrailName } from "@/lib/trail-catalog/cleanup";
 import "./catalog.css";
 import { trailSacScale } from "@/lib/trail-catalog/types";
 
@@ -251,7 +252,7 @@ export function CatalogTrailDetail({
                   <a href={ref.url} target="_blank" rel="noopener noreferrer">
                     {SOURCE_TYPE_LABELS[ref.type]}
                     {ref.officialTrailId ? ` trail #${ref.officialTrailId}` : ""}
-                    {pieces > 1 ? ` (${pieces} sections)` : ref.name !== t.name ? ` (“${ref.name}”)` : ""}
+                    {pieces > 1 ? ` (${pieces} sections)` : ref.name && cleanTrailName(ref.name).name !== t.name ? ` (“${cleanTrailName(ref.name).name}”)` : ""}
                   </a>
                 </span>
               );
