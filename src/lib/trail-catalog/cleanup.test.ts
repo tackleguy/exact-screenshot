@@ -10,6 +10,12 @@ test("names lose source ids and glued review flags; PCT is spelled out; all-caps
   assert.equal(cleanTrailName("sentier du mont").name, "Sentier du Mont");
   assert.equal(cleanTrailName("McKenzie Pass").name, "McKenzie Pass");
   assert.equal(cleanTrailName("Highway 1 (CA)").name, "Highway 1 (CA)");
+  assert.equal(cleanTrailName("Bull Creek Trail (85)").name, "Bull Creek Trail");
+  assert.equal(cleanTrailName("Hude (57) - Hude (84)").name, "Hude");
+  assert.equal(cleanTrailName("Diepholz (42) - Vechta (79)").name, "Diepholz - Vechta");
+  assert.equal(cleanTrailName("(46) Freudenberg - (58) Freudenberg").name, "Freudenberg");
+  assert.equal(cleanTrailName("(15) - (38)").name, "Trail 15–38");
+  assert.equal(cleanTrailName("233 Trailhead: (936) 344-6205").name, "233 Trailhead");
 });
 
 test("junk segments: driveway/road/parking/sidewalk names, and stubs under 0.15 mi unless part of a route or a loop", () => {

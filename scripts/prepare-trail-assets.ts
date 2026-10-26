@@ -192,6 +192,9 @@ async function main() {
     for (const t of list) {
       const { name, needsReview } = cleanTrailName(t.name);
       if (name !== t.name) { t.name = name; tally.renamed++; }
+      // Section lists and "part of" links carry copies of other trails' names.
+      if (t.sections) for (const sec of t.sections) sec.name = cleanTrailName(sec.name).name;
+      if (t.partOfRoute) t.partOfRoute = { ...t.partOfRoute, name: cleanTrailName(t.partOfRoute.name).name };
       if (needsReview) { t.quality = "review"; t.flags = [...new Set([...(t.flags ?? []), "needs-review" as const])]; tally.review++; }
       const type = t.kind === "segment" ? routeTypeById.get(t.id) : undefined;
       if (type && type !== t.routeType) { t.routeType = type; tally.routeTypes++; }

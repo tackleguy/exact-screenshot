@@ -10,6 +10,10 @@ type LngLat = [number, number];
 
 /** Trailing source ids: "Napoleon Canyon (32092)", "Lake Trail (T-1043)". */
 const SOURCE_ID = /\s*\((?:[A-Z]{0,4}[- ]?)?\d{3,}[A-Z]?\)\s*$/i;
+/** Any "(digits)" in a name: junction numbers of walking networks ("Hude (57) - Hude (84)") and source ids. */
+const NUMBER_TAG = /\s*\(\d+\)/g;
+/** A phone number pasted into a name ("233 Trailhead: (936) 344-6205"). */
+const PHONE = /[\s:]*\(?\b\d{3}\)?[ .-]?\d{3}[ .-]\d{4}\b/g;
 /** Review wording a source glued onto the name ("StanislausNeeds review"). */
 const REVIEW_SUFFIX = /\s*[-–(]?\s*needs?\s*review\)?\s*$/i;
 /** Long-distance trail initials that sources write in mixed case. */
@@ -25,7 +29,14 @@ export function cleanTrailName(raw: string): { name: string; needsReview: boolea
   let name = raw.replace(/\s+/g, " ").trim();
   let needsReview = false;
   if (REVIEW_SUFFIX.test(name)) { name = name.replace(REVIEW_SUFFIX, "").trim(); needsReview = true; }
-  name = name.replace(SOURCE_ID, "").trim();
+  name = name.replace(SOURCE_ID, "").replace(PHONE, "").trim();
+  if (/\(\d+\)/.test(name)) {
+    const numbers = name.match(/\d+/g) ?? [];
+    const stripped = name.replace(NUMBER_TAG, "").replace(/^[\s:–-]+|[\s:–-]+$/g, "").replace(/\s{2,}/g, " ");
+    // "Hude (57) - Hude (84)" becomes "Hude"; a name that was only numbers ("(15) - (38)") becomes "Trail 15–38".
+    const sides = stripped.split(/\s+[-–]\s+/);
+    name = !/\p{L}/u.test(stripped) ? `Trail ${numbers.join("–")}` : sides.length === 2 && sides[0].toLowerCase() === sides[1].toLowerCase() ? sides[0] : stripped;
+  }
   const letters = name.replace(/[^\p{L}]/gu, "");
   // Only all-caps or all-lowercase names are re-cased; "McKenzie Pass" or "Sentier du Mont" are kept as written.
   if (letters.length > 3 && (letters === letters.toUpperCase() || letters === letters.toLowerCase()) && /[A-Za-z]/.test(letters)) name = titleCase(name);
