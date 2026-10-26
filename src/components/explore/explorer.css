@@ -256,3 +256,5 @@
 .hx-layer--light .hx-layer-swatch { background-color: #f4f4f2; background-image: linear-gradient(115deg, transparent 44%, #ffffff 44% 52%, transparent 52%), linear-gradient(20deg, transparent 60%, #dcdcd8 60% 64%, transparent 64%); }
 .hx-layer--dark .hx-layer-swatch { background-color: #22262b; background-image: linear-gradient(115deg, transparent 44%, #3b4148 44% 52%, transparent 52%), linear-gradient(20deg, transparent 60%, #4a5058 60% 64%, transparent 64%); }
 .hx-sub--all { width: 100%; justify-content: center; font-weight: 600; }
+/* A pressed toolbar button (3D, Maps open) is highlighted so its state is visible on the dark toolbar. */
+.hx-stack .hx-ctl[aria-pressed="true"], .hx-stack .hx-ctl[aria-expanded="true"] { background: var(--hx-hi); color: var(--hx-ink); }

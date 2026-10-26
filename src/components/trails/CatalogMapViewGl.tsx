@@ -6,13 +6,15 @@ import * as maplibregl from "@/lib/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useRouter } from "next/navigation";
 import type { CatalogTrail } from "@/lib/trail-catalog/types";
-import { BASEMAPS, explorerStyle, setSky, type Basemap } from "@/components/explore/explorer-map";
+import { BASEMAPS, explorerStyle, type Basemap } from "@/components/explore/explorer-map";
+import { cameraUpTrail, flyThrough, PITCH_3D, setThreeD, trailLine3d } from "@/components/explore/three-d";
 import "@/components/explore/explorer.css";
 
 const NO_TRAILS: CatalogTrail[] = [];
 const NO_LINES: [number, number][][] = [];
 const NO_PINS: MapPin[] = [];
 const TRAIL_COLOR = "#2f9e5b";
+const TRAIL_IDS = { line: "trail-line", casing: "trail-casing" };
 
 export interface MapPin {
   latitude: number;
@@ -50,6 +52,9 @@ export function CatalogMapView({
   route,
   pins = NO_PINS,
   name,
+  trailId,
+  live = null,
+  start3d = false,
 }: {
   trails?: CatalogTrail[];
   lines?: [number, number][][];
@@ -58,6 +63,12 @@ export function CatalogMapView({
   pins?: MapPin[];
   /** Trail name, drawn along the line. */
   name?: string;
+  /** The catalog trail shown, so 3D can look up toward its highest point (from its elevation profile). */
+  trailId?: string;
+  /** The visitor's live position while recording, drawn as a dot and followed. */
+  live?: [number, number] | null;
+  /** Open in 3D (the recorder's 3D view). */
+  start3d?: boolean;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibreTypes.Map | null>(null);
@@ -65,7 +76,12 @@ export function CatalogMapView({
   const [failed, setFailed] = useState(false);
   const [basemap, setBasemap] = useState<Basemap>(readBasemap);
   const [picker, setPicker] = useState(false);
-  const [is3d, setIs3d] = useState(false);
+  const [is3d, setIs3d] = useState(start3d);
+  const [flying, setFlying] = useState(false);
+  const stopFlight = useRef<(() => void) | null>(null);
+  const liveMarker = useRef<maplibreTypes.Marker | null>(null);
+  // 3D switches to satellite imagery; the chosen style comes back (and stays remembered) when 3D is turned off.
+  const before3d = useRef<Basemap | null>(null);
   const [ready, setReady] = useState(false);
   const router = useRouter();
   const data = useRef({ lines, route, name });
@@ -165,14 +181,14 @@ export function CatalogMapView({
   const first = useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
-    try { localStorage.setItem("hyked:basemap", basemap); } catch { /* storage unavailable */ }
+    if (!before3d.current) try { localStorage.setItem("hyked:basemap", basemap); } catch { /* storage unavailable */ }
     const map = mapRef.current;
     if (!map) return;
     let live = true;
     void explorerStyle(basemap).then((style) => {
       if (!live) return;
       map.setStyle(style, { diff: false });
-      map.once("style.load", () => { if (is3d) { map.setTerrain({ source: "terrain", exaggeration: 1.4 }); setSky(map, true); } });
+      map.once("style.load", () => { if (is3d) { setThreeD(map, true); trailLine3d(map, true, TRAIL_IDS); } });
     });
     return () => { live = false; };
   }, [basemap]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -180,15 +196,55 @@ export function CatalogMapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    if (is3d) { map.setTerrain({ source: "terrain", exaggeration: 1.4 }); setSky(map, true); map.easeTo({ pitch: 60, duration: 600 }); }
-    else { map.setTerrain(null); setSky(map, false); map.easeTo({ pitch: 0, bearing: 0, duration: 600 }); }
-  }, [is3d, ready]);
+    setThreeD(map, is3d);
+    trailLine3d(map, is3d, TRAIL_IDS);
+    if (!is3d) { stopFlight.current?.(); return; }
+    const ls = data.current.lines;
+    if (!ls.length || live) { map.easeTo({ pitch: PITCH_3D, duration: 900 }); return; }
+    cameraUpTrail(map, ls, null, 40);
+    // Then aim toward the highest point once the elevation profile is known (cached by the trail service).
+    if (trailId) fetch(`/api/trail-catalog/${encodeURIComponent(trailId)}/elevation`).then((r) => (r.ok ? r.json() : null)).then((e: { profile?: [number, number][] } | null) => {
+      if (e?.profile?.length && mapRef.current === map && map.getPitch() > 30 && !stopFlight.current) cameraUpTrail(map, ls, e.profile, 40);
+    }).catch(() => undefined);
+    // The trail's lines are read when 3D turns on; later line updates don't re-aim the camera.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [is3d, ready, trailId]);
+
+  // Live position while recording: a dot that the camera follows.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    if (!live) { liveMarker.current?.remove(); liveMarker.current = null; return; }
+    if (!liveMarker.current) {
+      const el = document.createElement("span");
+      el.className = "catalog-map-live";
+      el.setAttribute("aria-label", "Your position");
+      liveMarker.current = new maplibregl.Marker({ element: el }).setLngLat(live).addTo(map);
+    } else liveMarker.current.setLngLat(live);
+    map.easeTo({ center: live, duration: 800 });
+  }, [live, ready]);
+
+  /** 3D on switches to satellite imagery; off brings the chosen style back. */
+  const toggle3d = () => {
+    if (!is3d && basemap !== "satellite" && basemap !== "hybrid") { before3d.current = basemap; setBasemap("satellite"); }
+    if (is3d && before3d.current) { const back = before3d.current; before3d.current = null; setBasemap(back); }
+    setIs3d(!is3d);
+  };
+
+  const fly = () => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (flying) { stopFlight.current?.(); return; }
+    setFlying(true);
+    stopFlight.current = flyThrough(map, data.current.lines, () => { setFlying(false); stopFlight.current = null; });
+  };
 
   return (
     <div className="catalog-map-gl">
       <div ref={container} className="catalog-map-canvas" role="region" aria-label="Trail map" />
       <div className="catalog-map-tools">
-        <button type="button" className="catalog-map-tool" aria-pressed={is3d} onClick={() => setIs3d((v) => !v)}>3D</button>
+        <button type="button" className="catalog-map-tool" aria-pressed={is3d} onClick={toggle3d}>3D</button>
+        {is3d && !live && lines.length > 0 && <button type="button" className="catalog-map-tool" aria-pressed={flying} onClick={fly}>{flying ? "Stop" : "Fly-through"}</button>}
         <button type="button" className="catalog-map-tool" aria-expanded={picker} onClick={() => setPicker((v) => !v)}>Map style</button>
         {picker && (
           <div className="hx-pop hx-pop--right hx-layers catalog-map-picker">

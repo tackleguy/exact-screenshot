@@ -25,7 +25,6 @@ import {
   EMPTY,
   explorerStyle,
   installOverlay,
-  setSky,
   setFeatureLabelGroups,
   setLayerGroupVisibility,
   type Basemap,
@@ -41,6 +40,7 @@ import type { RouteType } from "@/lib/trail-catalog/quality";
 import { useRouter } from "next/navigation";
 import { skiAreaRows } from "@/web/trail-service";
 import { immediateStart, locate as locateVisitor, saveLastView } from "@/lib/start-location";
+import { cameraUpTrail, PITCH_3D, setThreeD, trailLine3d } from "./three-d";
 import { createClient } from "@/lib/supabase/client";
 import { installExtras, applySectionFilter } from "./map-extras";
 import { useOpenSkiFeature } from "@/components/ski/SkiAreaMap";
@@ -181,6 +181,9 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const [driveStateFor, setDriveStateFor] = useState<{ id: string; value: string } | null>(null);
   const detail = detailFor?.id === selectedId ? detailFor.value : null;
   const elevation = elevationFor?.id === selectedId ? elevationFor.value : null;
+  const detailRef = useRef<Detail | null>(null);
+  const elevationRef = useRef<Elevation | "none" | null>(null);
+  useEffect(() => { detailRef.current = detail; elevationRef.current = elevation; }, [detail, elevation]);
   const weather = weatherFor?.id === selectedId ? weatherFor.value : null;
   const drive = driveFor?.id === selectedId ? driveFor.value : null;
   const driveState = driveStateFor?.id === selectedId ? driveStateFor.value : null;
@@ -539,27 +542,44 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       if (!live) return;
       map.setStyle(style, { diff: false });
       map.once("style.load", () => {
-        if (is3dRef.current) { map.setTerrain({ source: "terrain", exaggeration: 1.4 }); setSky(map, true); }
+        if (is3dRef.current) { setThreeD(map, true); trailLine3d(map, true); }
         syncSelectedPin();
       });
     });
     return () => { live = false; };
   }, [basemap, syncSelectedPin]);
 
+  // 3D: satellite imagery by default (the map style comes back when 3D is turned off), terrain, sky, no label
+  // clutter, a thicker trail line, and a camera looking up the selected trail with all of it in view.
+  const basemapBefore3d = useRef<Basemap | null>(null);
   useEffect(() => {
     is3dRef.current = is3d;
     const map = mapRef.current;
     if (!map || !ready) return;
+    setThreeD(map, is3d);
+    trailLine3d(map, is3d);
     if (is3d) {
-      map.setTerrain({ source: "terrain", exaggeration: 1.4 });
-      setSky(map, true);
-      map.easeTo({ pitch: 62, bearing: map.getBearing() || -20, zoom: Math.max(map.getZoom(), 11.5), duration: 900 });
-    } else {
-      map.setTerrain(null);
-      setSky(map, false);
-      map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
+      const lines = detailRef.current?.lines;
+      const profile = elevationRef.current && elevationRef.current !== "none" ? elevationRef.current.profile : null;
+      if (lines?.length) cameraUpTrail(map, lines as [number, number][][], profile);
+      else map.easeTo({ pitch: PITCH_3D, zoom: Math.max(map.getZoom(), 11.5), duration: 900 });
     }
   }, [is3d, ready]);
+
+  /** 3D on switches to satellite imagery; off brings the chosen style back. */
+  const toggle3d = () => {
+    if (!is3d && basemap !== "satellite" && basemap !== "hybrid") { basemapBefore3d.current = basemap; setBasemap("satellite"); }
+    if (is3d && basemapBefore3d.current) { setBasemap(basemapBefore3d.current); basemapBefore3d.current = null; }
+    setIs3d(!is3d);
+  };
+
+  // A trail picked while in 3D: look up it, with all of it in view.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map && is3d && detail?.lines.length) cameraUpTrail(map, detail.lines, elevation && elevation !== "none" ? elevation.profile : null);
+    // Only a newly loaded trail (or its profile) re-aims the camera; toggling 3D aims it above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail, elevation]);
 
   useEffect(() => {
     filtersRef.current = filters;
@@ -755,7 +775,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         <button type="button" className="hx-ctl" aria-label="Full screen" title="Full screen" onClick={toggleFullscreen}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" /></svg>
         </button>
-        <button type="button" className="hx-ctl hx-ctl--text" aria-pressed={is3d} aria-label={is3d ? "Show flat map" : "Show 3D terrain"} onClick={() => setIs3d((v) => !v)}>3D</button>
+        <button type="button" className="hx-ctl hx-ctl--text" aria-pressed={is3d} aria-label={is3d ? "Show flat map" : "Show 3D terrain"} onClick={toggle3d}>3D</button>
         <button type="button" className="hx-ctl" aria-label="Build a route" title="Build a route" aria-pressed={routeOpen} onClick={() => { setRouteOpen((v) => !v); setSearchOpen(false); setSelectedId(null); }}>
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.2" /><circle cx="18" cy="5" r="2.2" /><path d="M8 18.5h7.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H16" /></svg>
         </button>

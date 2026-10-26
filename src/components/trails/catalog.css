@@ -339,3 +339,6 @@
 .catalog-collections { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); font-size: .9rem; }
 .catalog-collections a { color: var(--accent); text-decoration: underline; }
 .catalog-source-line { margin-top: 40px; color: var(--sage); font-size: .85rem; }
+
+/* The recorder's live position on the 3D map. */
+.catalog-map-live { width: 18px; height: 18px; border-radius: 50%; background: #2f7fd8; border: 3px solid #fff; box-shadow: 0 0 0 6px rgb(47 127 216 / 0.3); }
