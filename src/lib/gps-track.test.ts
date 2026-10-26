@@ -57,3 +57,30 @@ test("off-trail alert after more than 50 m off the line for more than 30 s", () 
   for (let k = 12; k <= 16; k++) r.push(east(k, 0, k * 10_000));
   assert.equal(r.offTrail, false);
 });
+
+test("a GPS gap on the trail is filled along the trail's line; off the trail it is joined directly", () => {
+  // An L-shaped trail: 500 m north, then 500 m east.
+  const corner = north(50, 10);
+  const line: [number, number][] = [
+    ...Array.from({ length: 51 }, (_, i) => [-119, north(i, 10)] as [number, number]),
+    ...Array.from({ length: 50 }, (_, i) => [-119 + ((i + 1) * 10) / 88_000, corner] as [number, number]),
+  ];
+  const r = new TrackRecorder("hike", { route: new Route([line]), profile: [[0, 4000], [1, 4000]] });
+  for (let i = 0; i <= 3; i++) r.push(fix(i)); // 30 m up the trail
+  // The page sleeps for 15 minutes; GPS comes back 200 m east of the corner.
+  const back: Fix = { lat: corner, lng: -119 + 200 / 88_000, altitudeM: null, accuracyM: 6, time: 30_000 + 15 * 60_000 };
+  assert.equal(r.push(back), "accepted");
+  assert.equal(r.gaps.length, 1);
+  assert.equal(r.gaps[0].bridged, "trail");
+  // 470 m north to the corner + 200 m east ≈ 670 m along the trail, not the 520 m straight line.
+  assert.ok(Math.abs(r.gaps[0].meters - 670) < 15, `${r.gaps[0].meters}`);
+  // ≈ 700 m walked in all (smoothing trims a little off the sharp corner), well above the 550 m a straight join gives.
+  assert.ok(r.totalDistanceM > 650 && r.totalDistanceM < 720, `${r.totalDistanceM}`);
+  assert.ok(r.accepted.some((f) => f.filled));
+
+  const off = new TrackRecorder("hike", { route: new Route([line]), profile: [[0, 4000], [1, 4000]] });
+  off.push(fix(0));
+  off.push({ lat: north(0, 10), lng: -119 - 400 / 88_000, altitudeM: null, accuracyM: 6, time: 10 * 60_000 }); // 400 m west, off the trail
+  assert.equal(off.gaps[0].bridged, "direct");
+  assert.ok(!off.accepted.some((f) => f.filled));
+});

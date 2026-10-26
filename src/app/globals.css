@@ -610,3 +610,13 @@ html { scroll-padding-block:20px 100px; }
 .recorder-pill { min-height: 32px; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-elevated); color: var(--cream); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .recorder-pill[aria-pressed="true"] { border-color: var(--accent); }
 .recorder-pill--weak { display: inline-flex; align-items: center; margin-right: auto; border-color: #eab308; background: rgb(234 179 8 / 0.18); color: #fde68a; cursor: default; }
+
+/* Recording pill: on every other page while a GPS recording runs, leading back to the recorder. */
+.recording-pill { position: fixed; z-index: 70; top: 14px; left: 50%; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 999px; background: #10291f; color: #f4f1e8; border: 1px solid rgb(255 255 255 / 0.18); box-shadow: 0 6px 20px rgb(0 0 0 / 0.35); text-decoration: none; font-size: 14px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.recording-pill i { width: 10px; height: 10px; border-radius: 50%; background: #e0475b; animation: recording-pulse 1.4s ease-in-out infinite; }
+.recording-pill--paused i { background: #f2b632; animation: none; }
+.recording-pill--acquiring i { background: #2f7fd8; }
+.recording-pill small { padding: 2px 8px; border-radius: 999px; background: rgb(255 255 255 / 0.14); font-size: 12px; }
+@keyframes recording-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .recording-pill i { animation: none; } }
+@media (max-width: 767px) { .recording-pill { top: auto; bottom: calc(84px + env(safe-area-inset-bottom)); } }

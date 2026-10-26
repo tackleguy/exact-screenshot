@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDuration as formatHours, formatElevation, formatMeters } from "@/lib/units";
+import { formatElevation, formatMeters } from "@/lib/units";
 import dynamic from "next/dynamic";
 import { trailProfile, type TrailProfile } from "@/lib/gps-track";
 import { useRouter } from "next/navigation";
@@ -14,7 +14,7 @@ import { SpeedometerGauge } from "@/components/gps/SpeedometerGauge";
 import { LocationPermissionPrompt } from "@/components/gps/LocationPermissionPrompt";
 import { useLocationPermission } from "@/components/gps/useLocationPermission";
 import { useGpsTrack } from "@/components/gps/useGpsTrack";
-import { formatPace } from "@/lib/gps";
+import { formatDuration as formatClock, formatPace } from "@/lib/gps";
 
 // The 3D view reuses the trail map (MapLibre), loaded only when asked for.
 const Map3d = dynamic(() => import("@/components/trails/CatalogMapViewGl").then((m) => m.CatalogMapView), { ssr: false });
@@ -77,12 +77,12 @@ export function GpsRecorder({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           activity_type: activityType,
-          title,
+          title: gps.recordingTitle || title,
           distance_m: gps.distanceM,
           duration_sec: gps.durationSec,
           elevation_gain_ft: gps.elevationGainFt,
           route_geojson: gps.routeGeoJSON,
-          trail_id: trailId ?? null,
+          trail_id: gps.recordingTrailId ?? trailId ?? null,
           ski_area_id: skiAreaId ?? null,
           ski_area_name: skiAreaName ?? null,
           started_at: new Date(startedAt).toISOString(),
@@ -154,7 +154,7 @@ export function GpsRecorder({
       {/* Header */}
       <div className="mb-6 text-center">
         <p className="section-label">{ACTIVITY_LABELS[activityType]}</p>
-        <h1 className="mt-1 truncate font-display text-2xl font-semibold text-cream">{title}</h1>
+        <h1 className="mt-1 truncate font-display text-2xl font-semibold text-cream">{(isActive && gps.recordingTitle) || title}</h1>
         {(trailId || skiAreaName) && (
           <p className="mt-1 truncate text-xs text-accent">
             {skiAreaName ? `⛷ ${skiAreaName}` : trail ? `Following ${trail.name}` : "Linked to trail"}
@@ -173,8 +173,17 @@ export function GpsRecorder({
       )}
       {gps.backgrounded && isActive && (
         <div className="recorder-banner recorder-banner--warn" role="alert">
-          <p>Your browser pauses GPS when this page is in the background, so parts of the track may be missing. Keep the screen on with Hyked open — or Add to Home Screen for a steadier recording.</p>
+          <p>Phones pause GPS for websites while another app is open or the screen is locked. Looking at other Hyked pages is fine — recording carries on. When you come back, any gap is filled along the trail you’re following.</p>
           <div><button type="button" className="btn-ghost" onClick={gps.dismissBackgrounded}>OK</button></div>
+        </div>
+      )}
+      {gps.gap && isActive && (
+        <div className="recorder-banner" role="status">
+          <p>
+            GPS was paused for {Math.max(1, Math.round((gps.gap.toTime - gps.gap.fromTime) / 60_000))} min while Hyked wasn’t open.{" "}
+            {gps.gap.bridged === "trail" ? `Filled in ${formatMeters(gps.gap.meters)} along the trail.` : `Joined the two points directly (${formatMeters(gps.gap.meters)}), so the distance may be a little short.`}
+          </p>
+          <div><button type="button" className="btn-ghost" onClick={gps.dismissGap}>OK</button></div>
         </div>
       )}
       {gps.offTrail && gps.state === "recording" && (
@@ -220,7 +229,7 @@ export function GpsRecorder({
       <div className="mt-4 surface-card p-4">
         <div className="grid grid-cols-3 gap-3 text-center sm:grid-cols-4">
           <PrimaryStat label="Distance" value={gps.formattedDistance} active={isActive} />
-          <PrimaryStat label="Moving time" value={formatHours(gps.movingSec / 3600) ?? "0 min"} active={isActive} />
+          <PrimaryStat label="Moving time" value={formatClock(gps.movingSec)} active={isActive} />
           <PrimaryStat label="Elapsed" value={gps.formattedDuration} active={isActive} />
           <PrimaryStat label="Pace" value={formatPace(gps.distanceM, gps.movingSec || gps.durationSec)} active={isActive} />
           <PrimaryStat label="Elev gain" value={formatElevation(gps.elevationGainFt) ?? "—"} active={isActive} />
