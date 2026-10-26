@@ -1,6 +1,8 @@
 "use client";
 
 import { TrailStats } from "./TrailStats";
+import { SaveHeart } from "./SaveHeart";
+import { Stars, useTrailRating } from "./TrailReviews";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { CatalogPhoto } from "@/lib/trail-catalog/photos";
@@ -29,16 +31,33 @@ function satelliteImage(t: CatalogTrail) {
 
 /** AllTrails-style header: photo, name, difficulty chip, key stats and primary actions. */
 export function CatalogTrailHero({ trail: t, difficulty, hasLines }: { trail: CatalogTrail; difficulty: string; distance?: string; hasLines: boolean }) {
-  const [photo, setPhoto] = useState<CatalogPhoto | null>(null);
+  const [photos, setPhotos] = useState<{ id: string; list: CatalogPhoto[] } | null>(null);
+  const { average, count } = useTrailRating(t.id);
+  const [shared, setShared] = useState<string | null>(null);
   const [gainFor, setGainFor] = useState<{ id: string; gainFt: number } | null>(null);
   useEffect(() => {
     let live = true;
-    fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/photos`).then((r) => (r.ok ? r.json() : null)).then((d) => { if (live && d?.photos?.[0]) setPhoto(d.photos[0]); }).catch(() => undefined);
+    // Hero strip: the trail's own licensed photos, filled up to three with geotagged photos taken nearby.
+    const base = `/api/trail-catalog/${encodeURIComponent(t.id)}/photos`;
+    const get = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null)).then((d: { photos?: CatalogPhoto[] } | null) => d?.photos ?? []).catch(() => [] as CatalogPhoto[]);
+    void get(base).then(async (own) => {
+      const list = own.length >= 3 ? own : [...own, ...(await get(`${base}?nearby=1`)).filter((p) => !own.some((o) => o.id === p.id))];
+      if (live) setPhotos({ id: t.id, list: list.slice(0, 3) });
+    });
     // Trails the data build measured carry their climb; others measure it here (for the time estimate only — the
     // difficulty always comes from the stored measures, so it matches the list, the map and the page title).
     if (hasLines && !Number.isFinite(t.gainFt)) fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/elevation`).then((r) => (r.ok ? r.json() : null)).then((e) => { if (live && Number.isFinite(e?.gainFt)) setGainFor({ id: t.id, gainFt: effortClimbFt(e, t.routeType) ?? e.gainFt }); }).catch(() => undefined);
     return () => { live = false; };
   }, [t.id, t.gainFt, t.routeType, hasLines]);
+  const strip = photos?.id === t.id ? photos.list : [];
+  const share = async () => {
+    const url = window.location.href;
+    try {
+      if (navigator.share) { await navigator.share({ title: t.name, url }); return; }
+      await navigator.clipboard.writeText(url);
+      setShared("Link copied");
+    } catch { setShared(null); }
+  };
   const gainFt = Number.isFinite(t.gainFt) ? (t.gainFt as number) : gainFor?.id === t.id ? gainFor.gainFt : null;
   const head = t.trailhead ?? { latitude: t.latitude, longitude: t.longitude };
   const level = difficulty as TrailDifficulty;
@@ -47,34 +66,47 @@ export function CatalogTrailHero({ trail: t, difficulty, hasLines }: { trail: Ca
   const badge = confidenceBadge(t);
   const planPrompt = join([`A trip on ${t.name}`, t.park ?? t.forest ?? t.region, displayMiles(t.miles)], ", ");
   return (
+    <>
     <header className="trail-hero">
-      <div className={`trail-hero-photo${photo ? "" : " trail-hero-photo--satellite"}`} style={{ backgroundImage: `url("${photo ? photo.url : satelliteImage(t)}")` }}>
+      <div className={`trail-hero-photo${strip.length ? " trail-hero-photo--strip" : " trail-hero-photo--satellite"}`} style={strip.length ? undefined : { backgroundImage: `url("${satelliteImage(t)}")` }}>
+        {strip.length > 0 && (
+          <div className={`trail-hero-strip trail-hero-strip--${strip.length}`}>
+            {strip.map((p) => <img key={p.id} src={p.url} alt={p.title || `Near ${t.name}`} loading="eager" />)}
+          </div>
+        )}
         <div className="trail-hero-text">
           <span className={`trail-chip ${CHIP[level] ?? ""}`}>{DIFFICULTY_LABELS[level] ?? level}</span>
           {badge && <span className={`trail-confidence trail-confidence--${badge.tier}`} title={badge.detail}>{badge.label}</span>}
           <h1>{t.name}</h1>
           <p>{join([t.park ?? t.forest, t.region, countryName(t.country)])}</p>
+          <p className="trail-hero-rating"><Stars value={average} /> <span>{count ? `${average!.toFixed(1)} (${count})` : "No ratings yet"}</span></p>
         </div>
-        {photo ? <a className="trail-hero-credit" href={photo.sourceUrl} target="_blank" rel="noopener noreferrer">Photo: {photo.artist} · {photo.license}</a> : <span className="trail-hero-credit">Imagery: Esri, Maxar, Earthstar Geographics</span>}
+        {strip.length ? (
+          <span className="trail-hero-credit">{strip.map((p, i) => <a key={p.id} href={p.sourceUrl} target="_blank" rel="noopener noreferrer">{i ? " · " : "Photos: "}{p.artist} ({p.license})</a>)}</span>
+        ) : <span className="trail-hero-credit">Imagery: Esri, Maxar, Earthstar Geographics</span>}
       </div>
       <TrailStats detail trail={{ miles: t.miles, gainFt, lossFt: t.lossFt, steepestGradePct: t.steepestGradePct, minElevFt: t.minElevFt, maxElevFt: t.maxElevFt, routeType: t.routeType, difficulty: level, multiDay: expedition }} />
-      <div className="trail-actions">
+    </header>
+      {/* Sticky action bar, outside the header so it stays in reach all the way down the page. */}
+      <div className="trail-actions trail-actions--sticky">
         <Link className="catalog-button trail-start" href={`/record/live?${new URLSearchParams({ trail_id: t.id, name: t.name, type: recordType(t) })}`}>
           <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
           Start trail
         </Link>
         <a className="catalog-button secondary" href={googleMapsDirectionsUrl(head.latitude, head.longitude)} target="_blank" rel="noopener noreferrer">Directions</a>
-        <Link className="catalog-button secondary" href={`/explore/trails?trail=${encodeURIComponent(t.id)}&lat=${t.latitude}&lng=${t.longitude}&z=13`}>View on map</Link>
+        <SaveHeart trailId={t.id} name={t.name} label className="catalog-button secondary" />
+        <button type="button" className="catalog-button secondary" onClick={share}>{shared ?? "Share"}</button>
         <details className="trail-actions-more">
           <summary className="catalog-button secondary">More</summary>
           <div>
+            <Link href={`/explore/trails?trail=${encodeURIComponent(t.id)}&lat=${t.latitude}&lng=${t.longitude}&z=13`}>View on map</Link>
             {hasLines && <a href={`/api/trail-catalog/${encodeURIComponent(t.id)}/gpx`} download>Download GPX</a>}
             <Link href={`/plan?${new URLSearchParams({ prompt: planPrompt ?? t.name, ...(t.region ? { region: t.region } : {}) })}`}>Plan a trip</Link>
             {hasLines && <Link href={`/explore/trails?${new URLSearchParams({ routeFrom: `${head.latitude.toFixed(5)},${head.longitude.toFixed(5)}`, routeFromName: t.trailhead?.name ?? t.name, lat: String(head.latitude), lng: String(head.longitude), z: "13" })}`}>Build a route from here</Link>}
           </div>
         </details>
       </div>
-    </header>
+    </>
   );
 }
 

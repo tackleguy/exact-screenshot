@@ -9,6 +9,12 @@ import { NavIcon } from "@/components/nav/NavIcon";
 import { SectionIcon } from "@/components/explore/SectionIcon";
 import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf } from "@/lib/trail-catalog/activity";
 import "@/components/trails/catalog.css";
+import { SaveHeart } from "@/components/trails/SaveHeart";
+import { CardRating, useRatings } from "@/components/trails/TrailReviews";
+import { trailThumbnail } from "@/lib/trail-catalog/thumbnail";
+import { useKnownPosition } from "@/lib/start-location";
+import { metersBetween } from "@/lib/geo/line";
+import { formatMeters } from "@/lib/units";
 
 /** Same colours as the map's difficulty legend (kept here so the list doesn't load the map code). */
 const DIFFICULTY_COLORS: Record<string, string> = { e: "#2f9e5b", m: "#2f7fd8", h: "#d8452f", x: "#1d1d1d" };
@@ -20,6 +26,8 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
   const filters = parseCatalogFilters(params);
   const preview = filters.limit === undefined && (!filters.page || filters.page === 1);
   const { trails, total, page, pages, limit, manifest } = result;
+  const ratings = useRatings(trails.map((t) => t.id));
+  const here = useKnownPosition();
   const activity = filters.activity ?? "hike";
   const filterSummary = [
     filters.bbox && "Map area",
@@ -247,8 +255,10 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
             <>
               <ul className="catalog-list">
                 {trails.map((t) => (
-                  <li key={t.id}>
+                  <li key={t.id} className="catalog-list-item">
                     <Link href={`/explore/trails/${t.id}`} prefetch={false} className="catalog-row">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- remote static map picture */}
+                      <img className="catalog-row-thumb" src={trailThumbnail(t)} alt="" loading="lazy" width={80} height={60} />
                       <div className="catalog-row-name">
                         <h2>{t.name}</h2>
                         <span className="catalog-badges">
@@ -271,12 +281,14 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                           {t.sections && t.sections.length > 0 ? ` · ${t.sections.length} sections` : ""}
                           {t.summitElevationFt ? ` · Summit ${t.summitElevationFt.toLocaleString()} ft` : ""}
                         </p>
+                        <p className="card-meta"><CardRating rating={ratings.get(t.id)} />{here && <small>{formatMeters(metersBetween(here, [t.longitude, t.latitude]))} away</small>}</p>
                       </div>
                       <span className="catalog-distance">
                         {displayMiles(t.miles)}
                       </span>
                       <NavIcon name="chevron" />
                     </Link>
+                    <SaveHeart trailId={t.id} name={t.name} className="save-heart--card catalog-row-heart" />
                   </li>
                 ))}
               </ul>

@@ -4,11 +4,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ElevationProfile } from "@/lib/trip/elevation";
 import { steepestGrade } from "@/lib/trip/grade";
 import { formatElevation, formatGrade, useUnits } from "@/lib/units";
+import { emitTrailHover, onTrailHover } from "@/lib/trail-hover";
+import { DIFFICULTY_COLORS } from "@/lib/trail-difficulty";
 
 /** Measures the data build stored for the trail (shown instead of the chart's own sample when present). */
 export interface StoredElevation { lossFt?: number | null; steepestGradePct?: number | null }
 
 type Load = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; data: ElevationProfile };
+
+/** Chart shading follows the trail's difficulty colour (the same colours as the difficulty chips). */
+// Expert's near-black would vanish on the dark theme, so the chart draws it in the text colour.
+const SHADE: Record<string, string> = { ...DIFFICULTY_COLORS, expert: "var(--foreground)" };
 
 const W = 800, H = 220, PAD_L = 52, PAD_R = 12, PAD_T = 12, PAD_B = 28;
 const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
@@ -24,7 +30,7 @@ function step(span: number, count: number) {
  * Elevation profile of a trail with a mapped line: climb, descent, high and low points and an interactive chart
  * (hover or drag to read the elevation at any mile). Sampled from AWS Terrain Tiles along the line.
  */
-export function TrailElevationSection({ trailId, stored }: { trailId: string; stored?: StoredElevation }) {
+export function TrailElevationSection({ trailId, stored, difficulty }: { trailId: string; stored?: StoredElevation; difficulty?: string }) {
   const [load, setLoad] = useState<Load>({ state: "loading" });
   useEffect(() => {
     const controller = new AbortController();
@@ -39,15 +45,22 @@ export function TrailElevationSection({ trailId, stored }: { trailId: string; st
       <h2 id="trail-elevation-heading">Elevation profile</h2>
       {load.state === "loading" && <div className="trail-elevation-loading" role="status" aria-label="Measuring elevation along the trail" />}
       {load.state === "error" && <p className="catalog-muted">{load.message}</p>}
-      {load.state === "ready" && load.data.profile.length > 1 && <Chart e={load.data} stored={stored} />}
+      {load.state === "ready" && load.data.profile.length > 1 && <Chart e={load.data} stored={stored} trailId={trailId} shade={SHADE[difficulty ?? ""] ?? "var(--accent)"} />}
       {load.state === "ready" && load.data.profile.length <= 1 && <p className="catalog-muted">Elevation isn’t available for this trail’s line.</p>}
     </section>
   );
 }
 
-function Chart({ e: raw, stored }: { e: ElevationProfile; stored?: StoredElevation }) {
+function Chart({ e: raw, stored, trailId, shade }: { e: ElevationProfile; stored?: StoredElevation; trailId: string; shade: string }) {
   const ref = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<number | null>(null);
+  const nearest = (mi: number) => {
+    let best = 0;
+    for (let i = 1; i < raw.profile.length; i++) if (Math.abs(raw.profile[i][0] - mi) < Math.abs(raw.profile[best][0] - mi)) best = i;
+    return best;
+  };
+  // Hovering the trail on the map moves the chart's cursor to the same mile.
+  useEffect(() => onTrailHover((h) => { if (h.trailId === trailId && h.from === "map") setHover(h.mile === null ? null : nearest(h.mile)); }));
   // The chart is drawn in the visitor's units: miles and feet, or kilometres and metres.
   const metric = useUnits() === "metric";
   const e = useMemo(() => (metric ? { ...raw, profile: raw.profile.map(([mi, ft]) => [mi * 1.609344, ft * 0.3048] as [number, number]), minFt: raw.minFt * 0.3048, maxFt: raw.maxFt * 0.3048, gainFt: raw.gainFt * 0.3048 } : raw), [raw, metric]);
@@ -75,12 +88,19 @@ function Chart({ e: raw, stored }: { e: ElevationProfile; stored?: StoredElevati
   const pick = (clientX: number) => {
     const box = ref.current?.getBoundingClientRect();
     if (!box) return;
-    const mi = ((clientX - box.left) / box.width * W - PAD_L) / (W - PAD_L - PAD_R) * maxMile;
-    let best = 0;
-    for (let i = 1; i < e.profile.length; i++) if (Math.abs(e.profile[i][0] - mi) < Math.abs(e.profile[best][0] - mi)) best = i;
+    const frac = Math.max(0, Math.min(1, ((clientX - box.left) / box.width * W - PAD_L) / (W - PAD_L - PAD_R)));
+    const best = nearest(frac * (raw.profile[raw.profile.length - 1][0] || 1));
     setHover(best);
+    emitTrailHover({ trailId, mile: raw.profile[best][0], from: "chart" });
   };
+  const leave = () => { setHover(null); emitTrailHover({ trailId, mile: null, from: "chart" }); };
   const at = hover !== null ? e.profile[hover] : null;
+  // Grade at the cursor over about 100 m either side, for the tooltip.
+  const gradeAt = (i: number) => {
+    const p = raw.profile, a = p[Math.max(0, i - 2)], b = p[Math.min(p.length - 1, i + 2)];
+    const run = (b[0] - a[0]) * 5280;
+    return run > 0 ? Math.round(((b[1] - a[1]) / run) * 100) : null;
+  };
 
   return (
     <>
@@ -96,12 +116,12 @@ function Chart({ e: raw, stored }: { e: ElevationProfile; stored?: StoredElevati
           aria-label={`Elevation from ${fmt(e.minFt)} to ${fmt(e.maxFt)} ${elevUnit} over ${maxMile.toFixed(1)} ${distUnit}`}
           onPointerMove={(ev) => pick(ev.clientX)}
           onPointerDown={(ev) => pick(ev.clientX)}
-          onPointerLeave={() => setHover(null)}
+          onPointerLeave={leave}
         >
           <defs>
             <linearGradient id="trail-elev-fill" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.04" />
+              <stop offset="0%" stopColor={shade} stopOpacity="0.5" />
+              <stop offset="100%" stopColor={shade} stopOpacity="0.05" />
             </linearGradient>
           </defs>
           {yTicks.map((v) => (
@@ -114,11 +134,22 @@ function Chart({ e: raw, stored }: { e: ElevationProfile; stored?: StoredElevati
             <text key={`x${v}`} x={x(v)} y={H - 8} textAnchor="middle" className="trail-elevation-tick">{v === 0 ? "0" : `${+v.toFixed(2)} ${distUnit}`}</text>
           ))}
           <path d={`${line}L${x(maxMile)},${H - PAD_B}L${PAD_L},${H - PAD_B}Z`} fill="url(#trail-elev-fill)" />
-          <path d={line} className="trail-elevation-line" />
+          <path d={line} className="trail-elevation-line" style={{ stroke: shade }} />
           {at && (
             <g>
               <line x1={x(at[0])} x2={x(at[0])} y1={PAD_T} y2={H - PAD_B} className="trail-elevation-cursor" />
               <circle cx={x(at[0])} cy={y(at[1])} r={5} className="trail-elevation-dot" />
+              {(() => {
+                const g = gradeAt(hover!), left = x(at[0]) > W - 170, tx = left ? x(at[0]) - 158 : x(at[0]) + 10;
+                return (
+                  <g className="trail-elevation-tooltip" transform={`translate(${tx},${PAD_T + 4})`}>
+                    <rect width="148" height={g === null ? 40 : 58} rx="6" />
+                    <text x="10" y="17">{at[0].toFixed(2)} {distUnit}</text>
+                    <text x="10" y="34">{fmt(at[1])} {elevUnit}</text>
+                    {g !== null && <text x="10" y="51">{g > 0 ? "+" : ""}{g}% grade</text>}
+                  </g>
+                );
+              })()}
             </g>
           )}
         </svg>

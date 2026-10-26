@@ -53,6 +53,18 @@ export class Route {
     return best;
   }
 
+  /** The location `meters` along the route (clamped to its ends). */
+  pointAt(meters: number): LngLat | null {
+    if (!this.points.length) return null;
+    let lo = 0, hi = this.along.length - 1;
+    if (meters <= 0) return this.points[0];
+    if (meters >= this.meters) return this.points[hi];
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (this.along[mid] < meters) lo = mid; else hi = mid; }
+    const span = this.along[hi] - this.along[lo], t = span ? (meters - this.along[lo]) / span : 0;
+    const a = this.points[lo], b = this.points[hi];
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  }
+
   /** Points every `spacing` meters along the route (at most `max`), with their distance along. */
   sample(spacing: number, max = 600): { p: LngLat; alongMeters: number }[] {
     const step = Math.max(spacing, this.meters / max, 1);

@@ -6,6 +6,7 @@
  *   4. a hiking region guessed from the browser's time zone (America/Los_Angeles → Southern California),
  * never the empty middle of the United States.
  */
+import { useSyncExternalStore } from "react";
 export interface StartView { center: [number, number]; zoom: number; label: string; source: "url" | "last" | "location" | "timezone" }
 
 const LAST_VIEW_KEY = "hyked:last-view";
@@ -91,11 +92,30 @@ export function locate(timeoutMs = 3000): Promise<[number, number] | null> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(null), timeoutMs);
     navigator.geolocation.getCurrentPosition(
-      (p) => { clearTimeout(timer); resolve([p.coords.longitude, p.coords.latitude]); },
+      (p) => { clearTimeout(timer); rememberPosition([p.coords.longitude, p.coords.latitude]); resolve([p.coords.longitude, p.coords.latitude]); },
       () => { clearTimeout(timer); resolve(null); },
       { timeout: timeoutMs, maximumAge: 600_000, enableHighAccuracy: false },
     );
   });
+}
+
+// The last position the browser gave (this tab only), so cards can say how far away each trail is.
+const POSITION = "hyked:position";
+export function rememberPosition(at: [number, number]) {
+  try { sessionStorage.setItem(POSITION, JSON.stringify(at)); } catch { /* storage unavailable */ }
+  window.dispatchEvent(new Event(POSITION));
+}
+let lastRaw: string | null = null, lastAt: [number, number] | null = null;
+/** The visitor's last known position this session ([lng, lat]), or null when they haven't shared it. */
+export function knownPosition(): [number, number] | null {
+  let raw: string | null = null;
+  try { raw = sessionStorage.getItem(POSITION); } catch { /* storage unavailable */ }
+  if (raw !== lastRaw) { lastRaw = raw; try { lastAt = raw ? (JSON.parse(raw) as [number, number]) : null; } catch { lastAt = null; } }
+  return lastAt;
+}
+/** knownPosition() as React state, updated whenever the browser gives a new position. */
+export function useKnownPosition() {
+  return useSyncExternalStore((cb) => { window.addEventListener(POSITION, cb); return () => window.removeEventListener(POSITION, cb); }, knownPosition, () => null);
 }
 
 /** The view to open at once (URL, last view or time-zone region); a located visitor is moved there afterwards. */

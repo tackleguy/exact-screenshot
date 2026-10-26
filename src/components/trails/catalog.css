@@ -342,3 +342,25 @@
 
 /* The recorder's live position on the 3D map. */
 .catalog-map-live { width: 18px; height: 18px; border-radius: 50%; background: #2f7fd8; border: 3px solid #fff; box-shadow: 0 0 0 6px rgb(47 127 216 / 0.3); }
+
+/* Trail page: photo strip, rating, sticky actions, highlights, reviews */
+.trail-hero-photo--strip { background: #1d2a22; }
+.trail-hero-strip { position: absolute; inset: 0; display: grid; gap: 3px; }
+.trail-hero-strip--2 { grid-template-columns: 2fr 1fr; }
+.trail-hero-strip--3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; }
+.trail-hero-strip--3 > img:first-child { grid-row: 1 / span 2; }
+.trail-hero-strip > img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@media (max-width: 640px) { .trail-hero-strip--2, .trail-hero-strip--3 { grid-template-columns: 1fr; grid-template-rows: 1fr; } .trail-hero-strip > img:not(:first-child) { display: none; } }
+.trail-hero-rating { display: flex; align-items: center; gap: 0.4rem; margin-top: 0.35rem !important; font-size: 0.9rem; }
+.trail-actions--sticky { position: sticky; top: calc(var(--nav-height, 56px) + 6px); z-index: 6; padding: 8px; margin: 0 -8px; border-radius: var(--radius-lg, 16px); background: color-mix(in srgb, var(--background) 88%, transparent); backdrop-filter: blur(8px); }
+.trail-highlights { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 0 0 1rem; }
+.trail-highlights li { padding: 5px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-muted); font-size: 0.85rem; }
+.trail-elevation-tooltip rect { fill: var(--surface-elevated); stroke: var(--border-strong); }
+.trail-elevation-tooltip text { fill: var(--foreground); font-size: 13px; font-variant-numeric: tabular-nums; }
+.catalog-map-hover { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 4px solid #1d1d1d; box-shadow: 0 1px 4px rgb(0 0 0 / 0.4); pointer-events: none; }
+/* List cards: static map thumbnail, then name and facts, distance, chevron; the save heart sits over the corner. */
+.catalog-list-item { position: relative; }
+.catalog-list .catalog-row { grid-template-columns: 80px minmax(0, 1fr) 96px 20px; padding-right: 44px; }
+.catalog-row-thumb { width: 80px; height: 60px; border-radius: 8px; object-fit: cover; background: var(--surface-muted); }
+.catalog-row-heart { top: 50% !important; right: 4px !important; transform: translateY(-50%); }
+@media (max-width: 560px) { .catalog-list .catalog-row { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; } .catalog-list .catalog-row-name { grid-column: auto; } .catalog-row-thumb { width: 64px; height: 52px; } .catalog-list .catalog-row > svg { display: none; } }

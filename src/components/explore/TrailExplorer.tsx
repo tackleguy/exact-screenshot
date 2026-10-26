@@ -36,10 +36,13 @@ import { duration as displayDuration, join as joinParts, miles as displayMiles }
 import { ROUTE_TYPE_LABELS } from "@/lib/trail-catalog/quality";
 import { effortClimbFt, trailDifficulty, type TrailDifficulty } from "@/lib/trail-difficulty";
 import { TrailStats } from "@/components/trails/TrailStats";
+import { SaveHeart } from "@/components/trails/SaveHeart";
+import { CardRating, useRatings } from "@/components/trails/TrailReviews";
+import { metersBetween } from "@/lib/geo/line";
 import type { RouteType } from "@/lib/trail-catalog/quality";
 import { useRouter } from "next/navigation";
 import { skiAreaRows } from "@/web/trail-service";
-import { immediateStart, locate as locateVisitor, saveLastView } from "@/lib/start-location";
+import { immediateStart, locate as locateVisitor, rememberPosition, saveLastView, useKnownPosition } from "@/lib/start-location";
 import { cameraUpTrail, PITCH_3D, setThreeD, trailLine3d } from "./three-d";
 import { createClient } from "@/lib/supabase/client";
 import { installExtras, applySectionFilter } from "./map-extras";
@@ -106,6 +109,11 @@ export interface ExplorerStart {
   zoom: number | null;
   /** Opens the route builder with this start (the trail page's "Build a route from here"). */
   routeFrom?: { point: [number, number]; name: string } | null;
+}
+
+/** "2.4 mi away" / "3.9 km away" from the visitor's last known position. */
+function formatAway(meters: number) {
+  return `${formatMeters(meters)} away`;
 }
 
 export function TrailExplorer({ start: initial, workspace = false }: { start: ExplorerStart; workspace?: boolean }) {
@@ -359,6 +367,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       // Blue dot for the visitor's position; our "Show my location" button triggers it.
       const geolocate = new maplibregl.GeolocateControl({ positionOptions: { enableHighAccuracy: true, timeout: 12_000 }, trackUserLocation: false, showUserLocation: true, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 12 } });
       map.addControl(geolocate, "bottom-right");
+      geolocate.on("geolocate", (p) => rememberPosition([p.coords.longitude, p.coords.latitude]));
       geolocate.on("error", () => setLoadError("Location is off for this site. Allow it in your browser to see trails near you."));
       geolocateRef.current = geolocate;
       map.on("style.load", () => { installOverlay(map, sourcesRef.current); installExtras(map, extrasRef.current); applySectionFilter(map, sectionRef.current); applyLayers(map, layersRef.current); });
@@ -649,6 +658,8 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     }
     return out.slice(0, TRAIL_CARD_LIMIT);
   }, [points, center, selectedId, detail, zoom]);
+  const ratings = useRatings(cards.map((t) => t[0]));
+  const here = useKnownPosition();
 
   useEffect(() => {
     if (!selectedId) return;
@@ -967,7 +978,8 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         {cards.length > 0 ? (
           <div className="hx-rail" ref={railRef} role="list" aria-label="Trails in view, best-documented first">
             {cards.map((t) => {
-              const [id, name, , , miles, d, place, routeType, , gainFt, lossFt, steepest] = t;
+              const [id, name, lng, lat, miles, d, place, routeType, , gainFt, lossFt, steepest] = t;
+              const away = here ? formatAway(metersBetween(here, [lng, lat])) : null;
               const active = id === selectedId;
               const level = (({ e: "easy", m: "moderate", h: "hard", x: "expert" } as const)[d as "e"] ?? "moderate") as TrailDifficulty;
               return (
@@ -978,7 +990,9 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                     <div className="hx-card-title">
                       <h3>{name}</h3>
                       <p>{joinParts([place, routeType && ROUTE_LABEL[routeType]]) ?? "Location not recorded"}</p>
+                      <p className="card-meta"><CardRating rating={ratings.get(id)} />{away && <small>{away}</small>}</p>
                     </div>
+                    <SaveHeart trailId={id} name={name} className="save-heart--card" />
                     {active && weather && (weather.temperatureF ?? weather.lowF) !== undefined && (
                       <span className="hx-weather" title={weather.shortForecast}>
                         <strong>{Math.round(weather.temperatureF ?? weather.lowF ?? 0)}°F</strong>

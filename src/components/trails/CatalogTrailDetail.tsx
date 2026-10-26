@@ -14,6 +14,10 @@ import { CONFIDENCE_LABELS, SOURCE_TYPE_LABELS, TRAIL_TYPE_LABELS } from "@/lib/
 import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, formatDistance } from "@/lib/trail-catalog/quality";
 import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, trailDifficulty } from "@/lib/trail-difficulty";
 import { CatalogTrailHero } from "./CatalogTrailHero";
+import { TrailHighlights } from "./TrailHighlights";
+import { TrailReviews } from "./TrailReviews";
+import { estimatedTime } from "./TrailStats";
+import { describeTrail } from "@/lib/trail-catalog/describe";
 import "./catalog.css";
 import { trailSacScale } from "@/lib/trail-catalog/types";
 
@@ -81,12 +85,12 @@ export function CatalogTrailDetail({
           {parent && <> <Link className="catalog-link" href={`/explore/trails/${encodeURIComponent(parent.id)}`}>View {parent.name} ({formatDistance(parent.miles).primary})</Link></>}
         </p>
       )}
-      {(t.wiki?.extract || t.osm?.description || isRoute || (t.source === "resort" && t.note)) && (
-        <section className="catalog-about" aria-label="About this trail">
-          <p>{t.wiki?.extract ?? t.osm?.description ?? (t.source === "resort" ? t.note : t.note ?? "A through-hike guide. Confirm distance, permits and current conditions with the trail association or land manager.")}</p>
-          {t.wiki?.extract && <p className="catalog-muted">From <a href={t.wiki.url} target="_blank" rel="noopener noreferrer">Wikipedia</a> (CC BY-SA 4.0).</p>}
-        </section>
-      )}
+      <TrailHighlights trail={t} hasLine={hasLines} />
+      <section className="catalog-about" aria-label="About this trail">
+        {/* The official or Wikipedia text when there is one; otherwise a summary written from the measured facts. */}
+        <p>{t.wiki?.extract ?? t.osm?.description ?? (t.source === "resort" && t.note ? t.note : isRoute ? (t.note ?? "A through-hike guide. Confirm distance, permits and current conditions with the trail association or land manager.") : describeTrail(t, { difficulty, time: estimatedTime({ miles: t.miles, gainFt: t.gainFt ?? null, lossFt: t.lossFt, steepestGradePct: t.steepestGradePct, routeType: t.routeType, difficulty, multiDay: Boolean(t.peakCategory) }) }))}</p>
+        {t.wiki?.extract && <p className="catalog-muted">From <a href={t.wiki.url} target="_blank" rel="noopener noreferrer">Wikipedia</a> (CC BY-SA 4.0).</p>}
+      </section>
       {t.sections && t.sections.length > 0 && (
         <section className="trail-sections" aria-labelledby="trail-sections-heading">
           <h2 id="trail-sections-heading">Sections <small>{t.sections.length}</small></h2>
@@ -104,19 +108,19 @@ export function CatalogTrailDetail({
       )}
       <h2 className="trail-heading">{hasLines ? "Map" : "Approximate location"}</h2>
       {hasLines && !isRoute ? (
-        <TrailMapAndDirections name={t.name} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }}>
-          <TrailElevationSection trailId={t.id} stored={t} />
+        <TrailMapAndDirections name={t.name} trailId={t.id} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }}>
+          <TrailElevationSection trailId={t.id} stored={t} difficulty={difficulty} />
         </TrailMapAndDirections>
       ) : (
         <>
-          <CatalogMapView lines={hasLines ? lines : undefined} trails={hasLines ? undefined : [t]} name={t.name} />
+          <CatalogMapView lines={hasLines ? lines : undefined} trails={hasLines ? undefined : [t]} name={t.name} trailId={hasLines ? t.id : undefined} />
           {!hasLines && (
             <p className="catalog-muted">
               {t.source === "resort" ? "Pin marks the resort base area; the resort doesn’t publish this trail’s route." : "Pin marks an approximate trailhead or corridor midpoint, not a GPS track."}
               {hasLocation && <> <a href={googleMapsDirectionsUrl(t.latitude, t.longitude)} target="_blank" rel="noopener noreferrer">Directions in Google Maps</a></>}
             </p>
           )}
-          {hasLines && <TrailElevationSection trailId={t.id} stored={t} />}
+          {hasLines && <TrailElevationSection trailId={t.id} stored={t} difficulty={difficulty} />}
         </>
       )}
       {hasLocation && (
@@ -141,6 +145,7 @@ export function CatalogTrailDetail({
           <CatalogPhotos trailId={t.id} />
         </details>
       )}
+      <TrailReviews trailId={t.id} name={t.name} />
       <details className="trail-more">
         <summary><span>About this data</span><small>Sources, checks and licences</small></summary>
         <dl className="catalog-source-details">

@@ -28,6 +28,8 @@ export const DIFFICULTY_FORMULA =
   "Effort = miles + feet of climb ÷ 500. Easy under 4, Moderate 4–8, Hard 8–14, Expert over 14. A trail that climbs more than 800 ft per mile or tops out above 10,000 ft is rated one level harder (up to Hard), and one that climbs more than 2,000 ft is never Easy. Climb is measured along the mapped line from elevation data.";
 
 export const DIFFICULTY_LABELS: Record<TrailDifficulty, string> = { easy: "Easy", moderate: "Moderate", hard: "Hard", expert: "Expert" };
+/** The difficulty colours used by chips, dots and the elevation chart. */
+export const DIFFICULTY_COLORS: Record<TrailDifficulty, string> = { easy: "#2f9e5b", moderate: "#2f7fd8", hard: "#d8452f", expert: "#1d1d1d" };
 
 export interface DifficultyMeasures {
   lengthMi?: number | null;

@@ -9,6 +9,8 @@ import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { BASEMAPS, explorerStyle, type Basemap } from "@/components/explore/explorer-map";
 import { cameraUpTrail, flyThrough, PITCH_3D, setThreeD, trailLine3d } from "@/components/explore/three-d";
 import "@/components/explore/explorer.css";
+import { chainLines, MILE_METERS, Route } from "@/lib/geo/line";
+import { emitTrailHover, onTrailHover } from "@/lib/trail-hover";
 
 const NO_TRAILS: CatalogTrail[] = [];
 const NO_LINES: [number, number][][] = [];
@@ -223,6 +225,30 @@ export function CatalogMapView({
     } else liveMarker.current.setLngLat(live);
     map.easeTo({ center: live, duration: 800 });
   }, [live, ready]);
+
+  // The elevation chart and the map point at the same place: chart hover moves a dot along the line, and
+  // hovering the line moves the chart's cursor. Miles run along the chained line, as the chart measures them.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !trailId || !lines.length) return;
+    const route = new Route(chainLines(lines));
+    const el = document.createElement("span");
+    el.className = "catalog-map-hover";
+    const dot = new maplibregl.Marker({ element: el });
+    const off = onTrailHover((h) => {
+      if (h.trailId !== trailId || h.from !== "chart") return;
+      const at = h.mile === null ? null : route.pointAt(h.mile * MILE_METERS);
+      if (at) dot.setLngLat(at).addTo(map); else dot.remove();
+    });
+    const move = (ev: maplibreTypes.MapLayerMouseEvent) => {
+      const { alongMeters, offMeters } = route.locate([ev.lngLat.lng, ev.lngLat.lat]);
+      if (offMeters < 200) emitTrailHover({ trailId, mile: alongMeters / MILE_METERS, from: "map" });
+    };
+    const leave = () => emitTrailHover({ trailId, mile: null, from: "map" });
+    map.on("mousemove", TRAIL_IDS.line, move);
+    map.on("mouseleave", TRAIL_IDS.line, leave);
+    return () => { off(); dot.remove(); map.off("mousemove", TRAIL_IDS.line, move); map.off("mouseleave", TRAIL_IDS.line, leave); };
+  }, [ready, trailId, lines]);
 
   /** 3D on switches to satellite imagery; off brings the chosen style back. */
   const toggle3d = () => {

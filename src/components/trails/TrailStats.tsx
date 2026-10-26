@@ -1,6 +1,6 @@
 "use client";
 
-import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, type TrailDifficulty } from "@/lib/trail-difficulty";
+import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, type TrailDifficulty, DIFFICULTY_COLORS } from "@/lib/trail-difficulty";
 import { ROUTE_TYPE_LABELS, type RouteType } from "@/lib/trail-catalog/quality";
 import { formatDistance, formatDuration, formatDurationRange, formatElevation, hikingHours, splitDescent, useUnits } from "@/lib/units";
 import "./trail-stats.css";
@@ -18,7 +18,7 @@ export interface TrailStatsInput {
   multiDay?: boolean;
 }
 
-const DOT: Record<TrailDifficulty, string> = { easy: "#2f9e5b", moderate: "#2f7fd8", hard: "#d8452f", expert: "#1d1d1d" };
+const DOT = DIFFICULTY_COLORS;
 
 /** Hiking time from a trail's stored measures; a range for Hard and Expert trails ("3–4 h"). */
 export function estimatedTime(t: TrailStatsInput): string | null {

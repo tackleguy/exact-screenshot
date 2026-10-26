@@ -30,7 +30,7 @@ function duration(seconds: number) {
 }
 
 /** The trail map, then `children` (the elevation profile), then directions folded away until opened. */
-export function TrailMapAndDirections({ name, lines, trailhead, landManager, children }: { name: string; miles?: number | null; lines: Lines; trailhead?: AccessPoint; landManager?: { name: string | null; url: string | null }; children?: ReactNode }) {
+export function TrailMapAndDirections({ name, trailId, lines, trailhead, landManager, children }: { name: string; trailId?: string; miles?: number | null; lines: Lines; trailhead?: AccessPoint; landManager?: { name: string | null; url: string | null }; children?: ReactNode }) {
   const [startIndex, setStartIndex] = useState(0);
   const [origin, setOrigin] = useState<Origin | null>(null);
   const [route, setRoute] = useState<Route | null>(null);
@@ -106,7 +106,7 @@ export function TrailMapAndDirections({ name, lines, trailhead, landManager, chi
 
   return (
     <>
-      <CatalogMapView lines={lines} route={route?.line} pins={pins} name={name} />
+      <CatalogMapView lines={lines} route={route?.line} pins={pins} name={name} trailId={trailId} />
       {children}
       <details className="trail-more catalog-directions">
         <summary><span>Getting there</span><small>Trailhead, parking and driving directions</small></summary>
