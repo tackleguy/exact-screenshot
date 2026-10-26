@@ -3,17 +3,38 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
+import { formatDistance } from "@/lib/units";
+
+type Near = CatalogTrail & { distanceKm: number };
+const TIMEOUT_MS = 5000;
+
+/** Up to 5 trails near this one, nearest first; gives up after 5 seconds rather than spinning forever. */
 export function NearbyTrails({ trailId }: { trailId: string }) {
-  const [data, setData] = useState<{ id: string; trails: (CatalogTrail & { distanceKm: number })[] } | null>(null);
-  const [errorFor, setErrorFor] = useState<string | null>(null);
-  const error = errorFor === trailId;
+  const [state, setState] = useState<{ id: string; trails: Near[] } | null>(null);
   useEffect(() => {
     const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     fetch(`/api/trail-catalog/${encodeURIComponent(trailId)}/nearby`, { signal: controller.signal })
-      .then(async r => { if (!r.ok) throw new Error("Nearby trails unavailable"); return r.json(); })
-      .then(result => { if (!controller.signal.aborted) setData({ id: trailId, trails: result.trails ?? [] }); })
-      .catch(() => { if (!controller.signal.aborted) setErrorFor(trailId); });
-    return () => controller.abort();
+      .then(async (r) => (r.ok ? ((await r.json()) as { trails?: Near[] }).trails ?? [] : []))
+      .catch(() => [] as Near[])
+      .then((trails) => setState({ id: trailId, trails }))
+      .finally(() => clearTimeout(timer));
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [trailId]);
-  return <div className="hx-nearby"><h4>Nearby trails</h4>{error ? <p>Nearby trails couldn’t load.</p> : data?.id !== trailId ? <p role="status">Finding nearby trails…</p> : data.trails.length === 0 ? <p>No other mapped trails within 25 km.</p> : <ul>{data.trails.slice(0, 3).map(t => <li key={t.id}><Link href={`/map?trail=${encodeURIComponent(t.id)}&lat=${t.latitude}&lng=${t.longitude}&z=12`}><strong>{t.name}</strong><small>{t.distanceKm.toFixed(1)} km away</small></Link><a href={googleMapsDirectionsUrl(t.trailhead?.latitude ?? t.latitude, t.trailhead?.longitude ?? t.longitude)} target="_blank" rel="noopener noreferrer" aria-label={`Directions to ${t.name}`} title="Directions to the mapped access point">↗</a></li>)}</ul>}</div>;
+  const trails = state?.id === trailId ? state.trails : null;
+  return (
+    <div className="hx-nearby">
+      <h4>Nearby trails</h4>
+      {trails === null ? <p role="status">Finding nearby trails…</p> : trails.length === 0 ? <p>No nearby trails found.</p> : (
+        <ul>
+          {trails.slice(0, 5).map((t) => (
+            <li key={t.id}>
+              <Link href={`/explore/trails?trail=${encodeURIComponent(t.id)}&lat=${t.latitude}&lng=${t.longitude}&z=12`}><strong>{t.name}</strong><small>{formatDistance(t.distanceKm / 1.609344)} away</small></Link>
+              <a href={googleMapsDirectionsUrl(t.trailhead?.latitude ?? t.latitude, t.trailhead?.longitude ?? t.longitude)} target="_blank" rel="noopener noreferrer" aria-label={`Directions to ${t.name}`} title="Directions to the mapped access point">↗</a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }

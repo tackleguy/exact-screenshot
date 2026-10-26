@@ -36,7 +36,7 @@ export function OsmTrailRedirect({ id }: { id: string }) {
   return (
     <section className="fieldbook-page" role="status">
       <h1>{target === null ? "This path isn’t a listed trail" : "Finding this trail…"}</h1>
-      {target === null && <p>It may be an unnamed path or a piece of a longer trail. <Link className="btn-ghost" href="/map">Open the trail map</Link></p>}
+      {target === null && <p>It may be an unnamed path or a piece of a longer trail. <Link className="btn-ghost" href="/explore/trails">Open the trail map</Link></p>}
     </section>
   );
 }

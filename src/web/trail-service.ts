@@ -627,17 +627,15 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
     if (!suffix[1]) return Response.json(d);
 
     if (suffix[1] === "nearby") {
+      // Up to 5 other trails within 35 km, nearest first, straight from the catalog cells (no per-trail page loads,
+      // which made long routes nearby take minutes). Directions use a trail's stored trailhead, else its start.
       const t = d.trail;
       const { rows } = await select(new URLSearchParams({ lat: String(t.latitude), lng: String(t.longitude), radiusKm: "35" }), fetcher);
-      const result = filterCatalog(rows.filter((r) => r.id !== t.id), { lat: t.latitude, lng: t.longitude, radiusKm: 35, limit: TRAIL_CARD_LIMIT, uniqueNames: true });
-      return Response.json({
-        trails: await Promise.all(
-          result.trails.map(async (r) => {
-            const full = await detail(r.id, fetcher);
-            return { ...r, trailhead: full?.trail.trailhead, distanceKm: distanceKm(t.latitude, t.longitude, r.latitude, r.longitude) };
-          }),
-        ),
-      });
+      const near = filterCatalog(rows.filter((r) => r.id !== t.id && r.kind === "segment"), { lat: t.latitude, lng: t.longitude, radiusKm: 35, limit: 48, uniqueNames: true }).trails
+        .map((r) => ({ ...r, distanceKm: distanceKm(t.latitude, t.longitude, r.latitude, r.longitude) }))
+        .sort((a, b) => a.distanceKm - b.distanceKm)
+        .slice(0, 5);
+      return Response.json({ trails: near });
     }
 
     // Photos: only the licensed Commons image of the trail's matched Wikidata item. No nearby-image guessing.

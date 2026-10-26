@@ -21,6 +21,20 @@ export interface MapPin {
   kind: "start" | "origin" | "option";
 }
 
+/** [west, south, east, north] around everything the map will show, or null when there's nothing yet. */
+function initialBounds(lines: [number, number][][], route: [number, number][] | undefined, pins: MapPin[], trails: CatalogTrail[]): [number, number, number, number] | null {
+  let w = 180, s = 90, e = -180, n = -90;
+  const add = (x: number, y: number) => { if (x < w) w = x; if (x > e) e = x; if (y < s) s = y; if (y > n) n = y; };
+  for (const l of lines) for (const [x, y] of l) add(x, y);
+  for (const [x, y] of route ?? []) add(x, y);
+  for (const p of pins) if (p.kind !== "option") add(p.longitude, p.latitude);
+  for (const t of trails) add(t.longitude, t.latitude);
+  if (w > e) return null;
+  // A single point gets a small box (about 1 km) so it opens at street level.
+  if (e - w < 0.002 && n - s < 0.002) return [w - 0.005, s - 0.005, e + 0.005, n + 0.005];
+  return [w, s, e, n];
+}
+
 const readBasemap = (): Basemap => {
   try { const saved = localStorage.getItem("hyked:basemap"); return BASEMAPS.some((b) => b.key === saved) ? (saved as Basemap) : "topo"; } catch { return "topo"; }
 };
@@ -81,7 +95,9 @@ export function CatalogMapView({
       if (disposed || !container.current) return;
       let map: maplibreTypes.Map;
       try {
-        map = new maplibregl.Map({ container: container.current, style, center: [-98, 45], zoom: 3, maxPitch: 80, attributionControl: false, cooperativeGestures: true });
+        // Open framed on the trail (40 px padding) so the first paint never shows a continent-wide view.
+        const first = initialBounds(data.current.lines, data.current.route, pins, trails);
+        map = new maplibregl.Map({ container: container.current, style, ...(first ? { bounds: first, fitBoundsOptions: { padding: 40, maxZoom: 15 } } : { center: [-98, 45], zoom: 3 }), maxPitch: 80, attributionControl: false, cooperativeGestures: true });
       } catch {
         setFailed(true);
         return;

@@ -61,7 +61,8 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
 
   // One count for the whole page: "Showing the first 24 of 1,284 trails near you" when the list is capped.
   const first = (page - 1) * limit + 1, last = Math.min(page * limit, total);
-  const where = `${params.has("lat") && !params.get("q") ? " near you" : ""}${params.get("region") ? ` in ${params.get("region")}` : ""}`;
+  // "near you" only when the real location is known; a time-zone guess names its region instead.
+  const where = `${params.has("lat") && !params.get("q") ? (params.get("place") ? ` in ${params.get("place")}` : " near you") : ""}${params.get("region") ? ` in ${params.get("region")}` : ""}`;
   const resultSummary = !total
     ? "No matching trails"
     : result.queryMatches

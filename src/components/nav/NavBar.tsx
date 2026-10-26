@@ -11,11 +11,18 @@ import { NavIcon } from "./NavIcon";
 import { syncLabel, useSyncStatus } from "@/lib/account/sync";
 
 const navLinks = [
-  { href: "/explore/trails", label: "Explore", icon: "explore" as const, hint: "G then E" },
-  { href: "/map", label: "Map", icon: "map" as const, hint: "G then M" },
+  { href: "/explore/trails/catalog", label: "Explore", icon: "explore" as const, hint: "G then E" },
+  { href: "/explore/trails", label: "Map", icon: "map" as const, hint: "G then M" },
   { href: "/plan", label: "My trips", icon: "trips" as const, hint: "G then T" },
   { href: "/gear", label: "Gear", icon: "gear" as const, hint: "G then G" },
 ];
+
+/** The map is /explore/trails exactly; every other /explore page (list, trail pages, ski) is Explore. */
+export function navActive(label: string, href: string, pathname: string) {
+  if (label === "Map") return pathname === "/explore/trails";
+  if (label === "Explore") return pathname.startsWith("/explore") && pathname !== "/explore/trails";
+  return pathname.startsWith(href);
+}
 
 const footerLinks = [
   {
@@ -299,7 +306,7 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
           <nav className="fieldbook-destinations" aria-label="Main destinations">
             {navLinks.map((link) => {
               const active =
-                link.label === "Explore" ? pathname.startsWith("/explore") : pathname.startsWith(link.href);
+                navActive(link.label, link.href, pathname);
               return (
                 <Link
                   key={link.href}

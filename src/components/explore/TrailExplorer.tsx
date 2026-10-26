@@ -39,6 +39,8 @@ import { effortClimbFt, trailDifficulty, type TrailDifficulty } from "@/lib/trai
 import { TrailStats } from "@/components/trails/TrailStats";
 import type { RouteType } from "@/lib/trail-catalog/quality";
 import { useRouter } from "next/navigation";
+import { skiAreaRows } from "@/web/trail-service";
+import { immediateStart, locate as locateVisitor, saveLastView } from "@/lib/start-location";
 import { createClient } from "@/lib/supabase/client";
 import { installExtras, applySectionFilter } from "./map-extras";
 import { useOpenSkiFeature } from "@/components/ski/SkiAreaMap";
@@ -159,15 +161,17 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const [points, setPoints] = useState<PointsResponse | null>(null);
   const [loading, setLoading] = useState(false);
   // The map never sits blank: a skeleton covers it until the style and the first trails have loaded.
-  const [firstLoad, setFirstLoad] = useState(true);
+  const [, setFirstLoad] = useState(true);
   const [verifiedInView, setVerifiedInView] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const geolocateRef = useRef<maplibregl.GeolocateControl | null>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [center, setCenter] = useState<[number, number]>(initial.center ?? [-98.6, 39.8]);
-  const [zoom, setZoom] = useState(initial.zoom ?? 3.6);
+  // URL → last view → (location, below) → time-zone region; the map opens at once, never on the middle of the U.S.
+  const [startView] = useState(() => immediateStart({ center: initial.center, zoom: initial.zoom }));
+  const [center, setCenter] = useState<[number, number]>(startView.center);
+  const [zoom, setZoom] = useState(startView.zoom);
   const [selectedId, setSelectedId] = useState<string | null>(initial.trail);
   // Per-trail results are kept with the id they belong to, so a new selection never shows stale data.
   const [detailFor, setDetailFor] = useState<{ id: string; value: Detail } | null>(null);
@@ -201,7 +205,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const refreshSki = useCallback(async () => {
     const map = mapRef.current; const client = createClient();
     const setLines = (fc: GeoJSON.FeatureCollection) => { extrasRef.current.skiLines = fc; (map?.getSource("hy-ski-lines") as maplibregl.GeoJSONSource | undefined)?.setData(fc); };
-    if (!map || !client || map.getZoom() < 12) { setLines(EMPTY); return; }
+    if (!map || !client || map.getZoom() < 12 || !skiAreas.current.length) { setLines(EMPTY); return; }
     const b = map.getBounds();
     const inView = skiAreas.current.filter((a) => b.contains([a.lng, a.lat])).slice(0, 8);
     const need = inView.filter((a) => !skiCache.current.has(a.slug)).map((a) => a.slug);
@@ -339,12 +343,14 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   useEffect(() => {
     if (!containerRef.current) return;
     let disposed = false;
-    const startCenter = initial.center ?? [-98.6, 39.8];
-    const startZoom = initial.zoom ?? 3.6;
+    const startCenter = startView.center;
+    const startZoom = startView.zoom;
     void explorerStyle(basemapRef.current).then((style) => {
       if (disposed || !containerRef.current) return;
       const map = new maplibregl.Map({ container: containerRef.current, style, center: startCenter, zoom: startZoom, maxPitch: 80, attributionControl: false, hash: false });
-      mapRef.current = map; (window as unknown as { __map: unknown }).__map = map; // DEBUG-TEMP
+      mapRef.current = map;
+      // Without a place in the URL or a last view, move to the visitor's location if the browser gives it quickly.
+      if (startView.source === "timezone") void locateVisitor(3000).then((at) => { if (at && !disposed && !initial.trail) map.jumpTo({ center: at, zoom: 11 }); });
       map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: "Trails © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors (ODbL), NPS, USFS, BLM, USGS, Parks Canada · <a href=\"/about/data\">Data sources</a>" }), "bottom-right");
       map.addControl(new maplibregl.ScaleControl({ unit: "imperial", maxWidth: 90 }), "bottom-left");
       // Blue dot for the visitor's position; our "Show my location" button triggers it.
@@ -367,6 +373,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       let timer: ReturnType<typeof setTimeout> | undefined;
       map.on("moveend", () => {
         const c = map.getCenter();
+        saveLastView(c.lng, c.lat, map.getZoom());
         setCenter([c.lng, c.lat]);
         setZoom(map.getZoom());
         const params = new URLSearchParams(window.location.search);
@@ -401,7 +408,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         if (map.queryRenderedFeatures(e.point, { layers: ["hy-pin", "hy-lines", "hy-thru-hikes"] }).length) return;
         const f = e.features?.[0]; if (f) openSkiRef.current(f);
       });
-      map.on("click", "hy-ski-pin", (e) => { const s = e.features?.[0]?.properties?.slug; if (s) routerRef.current.push(`/ski-areas/${s}`); });
+      map.on("click", "hy-ski-pin", (e) => { const href = e.features?.[0]?.properties?.href; if (href) routerRef.current.push(href); });
 
       // Precision Map-Snapping on click: snap to closest vector segment if clicked near a trail
       map.on("click", (e) => {
@@ -481,19 +488,27 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refresh]);
 
-  // Pins for every ski area (requires sign-in to read).
+  // Pins for every ski area. Signed-in visitors read the account database's ski areas (with run maps); everyone
+  // else gets the site's own OpenSkiMap list — the database table refuses signed-out reads, so it isn't asked.
   useEffect(() => {
-    const client = createClient(); if (!client) return;
+    const client = createClient();
     let live = true;
     void (async () => {
-      const rows: { slug: string; name: string; latitude: number; longitude: number }[] = [];
-      for (let i = 0; i < 7; i++) {
-        const { data } = await client.from("ski_areas").select("slug,name,latitude,longitude").range(i * 1000, i * 1000 + 999);
-        if (!data?.length) break; rows.push(...data); if (data.length < 1000) break;
+      const rows: { slug: string | null; name: string; latitude: number; longitude: number; href: string }[] = [];
+      const signedIn = client ? Boolean((await client.auth.getSession()).data.session) : false;
+      for (let i = 0; client && signedIn && i < 7; i++) {
+        const { data, error } = await client.from("ski_areas").select("slug,name,latitude,longitude").range(i * 1000, i * 1000 + 999);
+        if (error || !data?.length) break;
+        rows.push(...data.map((r) => ({ ...r, href: `/ski-areas/${r.slug}` })));
+        if (data.length < 1000) break;
+      }
+      if (!rows.length) {
+        const builtIn = await skiAreaRows(window.fetch.bind(window)).catch(() => []);
+        rows.push(...builtIn.map((r) => ({ slug: null, name: r[1], latitude: r[3], longitude: r[2], href: `/explore/ski?area=${r[0]}` })));
       }
       if (!live) return;
-      skiAreas.current = rows.map((r) => ({ slug: r.slug, lng: r.longitude, lat: r.latitude }));
-      const fc: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: { slug: r.slug, name: r.name }, geometry: { type: "Point", coordinates: [r.longitude, r.latitude] } })) };
+      skiAreas.current = rows.flatMap((r) => (r.slug ? [{ slug: r.slug, lng: r.longitude, lat: r.latitude }] : []));
+      const fc: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: rows.map((r) => ({ type: "Feature", properties: { href: r.href, name: r.name }, geometry: { type: "Point", coordinates: [r.longitude, r.latitude] } })) };
       extrasRef.current.skiPins = fc;
       (mapRef.current?.getSource("hy-ski-pins") as maplibregl.GeoJSONSource | undefined)?.setData(fc);
       void refreshSki();
@@ -713,7 +728,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       <header className="hx-workspace-header"><div><h1>{workspace ? "Explore trails" : "Trail map"}</h1><p>Find a route. Make it your next adventure.</p></div><nav aria-label="Trail workspace"><Link className="hx-btn" href="/explore/trails/catalog">Browse list</Link><Link className="hx-btn hx-btn--primary" href="/plan">Plan a trip</Link></nav></header>
       <div className="hx-map">
         <div ref={containerRef} className="hx-map-canvas" role="region" aria-label="Trail map" />
-        {(firstLoad || !ready) && (
+        {!ready && (
           <div className="hx-loading" role="status">
             <div className="hx-loading-sheen" aria-hidden="true" />
             <p>Loading the map and trails…</p>

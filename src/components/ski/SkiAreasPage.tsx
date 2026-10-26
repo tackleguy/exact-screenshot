@@ -71,7 +71,9 @@ export function SkiAreasPage() {
   useEffect(() => {
     const client = createClient();
     void (async () => {
-      const check = client ? await client.from("ski_areas").select("id", { count: "exact", head: true }) : null;
+      // The account database's ski areas can only be read signed in; signed out, don't ask (it answers 401).
+      const signedIn = client ? Boolean((await client.auth.getSession()).data.session) : false;
+      const check = client && signedIn ? await client.from("ski_areas").select("id", { count: "exact", head: true }) : null;
       if (check && !check.error && (check.count ?? 0) > 0) { setBuiltIn(null); return; }
       setBuiltIn(await builtInAreas().catch(() => []));
     })();
