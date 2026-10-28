@@ -84,3 +84,24 @@ test("a GPS gap on the trail is filled along the trail's line; off the trail it 
   assert.equal(off.gaps[0].bridged, "direct");
   assert.ok(!off.accepted.some((f) => f.filled));
 });
+
+test("the Kalman filter lands closer to the true path than raw fixes, and snaps onto a followed trail", () => {
+  // Walking due north at 1.4 m/s; each fix is off by up to ±8 m east-west (seeded, repeatable noise).
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+  const fixes: Fix[] = Array.from({ length: 120 }, (_, i) => ({ lat: north(i, 1.4), lng: -119 + (rand() * 8) / 88_000, altitudeM: null, accuracyM: 8, time: i * 1000 }));
+  const offLine = (lng: number) => Math.abs(lng + 119) * 88_000;
+  const free = new TrackRecorder("hike", null);
+  for (const f of fixes) free.push(f);
+  const rawError = fixes.reduce((t, f) => t + offLine(f.lng), 0) / fixes.length;
+  const kept = free.points.slice(10);
+  const filteredError = kept.reduce((t, p) => t + offLine(p.lng), 0) / kept.length;
+  assert.ok(filteredError < rawError / 2, `filtered ${filteredError.toFixed(2)} m vs raw ${rawError.toFixed(2)} m`);
+  assert.ok(filteredError < 5, `${filteredError}`);
+  // The same walk following a mapped trail along that line: points sit on the line.
+  const line: [number, number][] = Array.from({ length: 30 }, (_, i) => [-119, north(i, 10)]);
+  const onTrail = new TrackRecorder("hike", { route: new Route([line]), profile: [[0, 4000], [1, 4000]] });
+  for (const f of fixes) onTrail.push(f);
+  // (The first fix has no history to filter with, so it is snapped only when within its own error.)
+  assert.ok(onTrail.points.slice(1).every((p) => offLine(p.lng) < 0.01));
+});

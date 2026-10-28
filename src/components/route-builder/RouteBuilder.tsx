@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "@/lib/maplibre";
 import { buildRoute, RouteError, type BuiltRoute, type LngLat } from "@/lib/routing";
+import { buildJourney, JourneyError, MAX_POINTS, type Journey, type TravelMode, type TravelPreference } from "@/lib/routing/journey";
+import { formatMeters } from "@/lib/units";
 import { FEATURE_LABELS, featureGroup, featureName, type HikeFeature } from "@/lib/routing/features";
 import { splitDays } from "@/lib/routing/days";
 import { downloadGpx, routeGpx } from "@/lib/routing/gpx";
@@ -44,8 +46,8 @@ export interface RouteBuilderProps {
   /** Hike features loaded for the current view (named ones are searchable as start/end). */
   viewFeatures: HikeFeature[];
   onClose: () => void;
-  /** Draws (or, with [], clears) the route line on the map. */
-  onRoute: (coords: LngLat[]) => void;
+  /** Draws (or, with [], clears) the route line on the map; a journey passes its parts with how each is travelled. */
+  onRoute: (coords: LngLat[], parts?: { mode: TravelMode; coordinates: LngLat[] }[]) => void;
   /** True while the next map tap sets a route point, so the map doesn't also select a trail. */
   onPickingChange: (picking: boolean) => void;
 }
@@ -55,6 +57,10 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
   const [end, setEnd] = useState<Stop | null>(null);
   const [via, setVia] = useState<Stop[]>([]);
   const [connectors, setConnectors] = useState(false);
+  // "anywhere": any distance, walking, driving or flying between the points; "trails": mapped trails only.
+  const [scope, setScope] = useState<"anywhere" | "trails">("anywhere");
+  const [travel, setTravel] = useState<TravelPreference>("fastest");
+  const [journey, setJourney] = useState<Journey | null>(null);
   const [picking, setPicking] = useState<Slot | null>(initialFrom ? "end" : "start");
   const [route, setRoute] = useState<BuiltRoute | null>(null);
   const [busy, setBusy] = useState(false);
@@ -64,24 +70,48 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
   const [saved, setSaved] = useState<PersonalTrail | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  function run(next: { start: Stop | null; via: Stop[]; end: Stop | null; connectors: boolean }) {
+  type Plan = { start: Stop | null; via: Stop[]; end: Stop | null; connectors: boolean; scope: "anywhere" | "trails"; travel: TravelPreference };
+  function fit(coords: LngLat[]) {
+    const bounds = new maplibregl.LngLatBounds();
+    for (const p of coords) bounds.extend(p);
+    const narrow = window.innerWidth < 768;
+    map?.fitBounds(bounds, { padding: narrow ? { top: 80, bottom: 300, left: 30, right: 30 } : { top: 90, bottom: 80, left: 440, right: 60 }, maxZoom: 15, duration: 700 });
+  }
+  function run(next: Plan) {
     abortRef.current?.abort();
     setSaved(null);
-    if (!next.start || !next.end) { setRoute(null); setError(""); setBusy(false); onRoute([]); return; }
+    if (!next.start || !next.end) { setRoute(null); setJourney(null); setError(""); setBusy(false); onRoute([]); return; }
     const controller = new AbortController();
     abortRef.current = controller;
     setBusy(true);
     setError("");
+    if (next.scope === "anywhere") {
+      setRoute(null);
+      buildJourney([next.start.point, ...next.via.map((v) => v.point), next.end.point], next.travel, { signal: controller.signal })
+        .then((j) => {
+          if (controller.signal.aborted) return;
+          setJourney(j);
+          onRoute(j.coordinates, j.parts.map((p) => ({ mode: p.mode, coordinates: p.coordinates })));
+          noteGuestProgress();
+          fit(j.coordinates);
+        })
+        .catch((e: unknown) => {
+          if (controller.signal.aborted) return;
+          setJourney(null);
+          onRoute([]);
+          setError(e instanceof JourneyError ? e.message : "The route couldn’t be planned. Try again.");
+        })
+        .finally(() => { if (!controller.signal.aborted) setBusy(false); });
+      return;
+    }
+    setJourney(null);
     buildRoute([next.start.point, ...next.via.map((v) => v.point), next.end.point], { connectors: next.connectors, signal: controller.signal })
       .then((r) => {
         if (controller.signal.aborted) return;
         setRoute(r);
         onRoute(r.coordinates);
         noteGuestProgress();
-        const bounds = new maplibregl.LngLatBounds();
-        for (const p of r.coordinates) bounds.extend(p);
-        const narrow = window.innerWidth < 768;
-        map?.fitBounds(bounds, { padding: narrow ? { top: 80, bottom: 300, left: 30, right: 30 } : { top: 90, bottom: 80, left: 440, right: 60 }, maxZoom: 15, duration: 700 });
+        fit(r.coordinates);
       })
       .catch((e: unknown) => {
         if (controller.signal.aborted) return;
@@ -91,19 +121,21 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
       })
       .finally(() => { if (!controller.signal.aborted) setBusy(false); });
   }
-  function apply(patch: Partial<{ start: Stop | null; via: Stop[]; end: Stop | null; connectors: boolean }>) {
-    const next = { start, via, end, connectors, ...patch };
+  function apply(patch: Partial<Plan>) {
+    const next: Plan = { start, via, end, connectors, scope, travel, ...patch };
     if ("start" in patch) setStart(next.start);
     if ("end" in patch) setEnd(next.end);
     if ("via" in patch) setVia(next.via);
     if ("connectors" in patch) setConnectors(next.connectors);
+    if ("scope" in patch) setScope(next.scope);
+    if ("travel" in patch) setTravel(next.travel);
     run(next);
   }
   function setSlot(slot: Slot, stop: Stop) {
     setPicking(slot === "start" && !end ? "end" : null);
     if (slot === "start") apply({ start: stop });
     else if (slot === "end") apply({ end: stop });
-    else apply({ via: [...via, stop] });
+    else if (via.length < MAX_POINTS - 2) apply({ via: [...via, stop] });
   }
 
   // Map handlers see the latest state through these refs, refreshed after each render.
@@ -153,7 +185,7 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
       });
       markers.push(marker);
     });
-    if (route && start && end) {
+    if (route && start && end && via.length < MAX_POINTS - 2) {
       const legStarts = [0, ...route.legEndsMile.slice(0, -1)];
       route.legEndsMile.forEach((legEnd, i) => {
         const el = document.createElement("div");
@@ -163,6 +195,7 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
         marker.on("dragend", () => {
           const { lng, lat } = marker.getLngLat();
           const s = stateRef.current;
+          if (s.via.length >= MAX_POINTS - 2) return;
           const nextVia = [...s.via];
           nextVia.splice(i, 0, { key: stopKey(), point: [lng, lat], label: mapPointLabel([lng, lat]) });
           applyRef.current({ via: nextVia });
@@ -195,7 +228,23 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
         <h2>Build a route</h2>
         <button type="button" className="rb-x" aria-label="Close route builder" onClick={onClose}>×</button>
       </header>
-      <p className="rb-help">Set a start and an end: search, use your location, or tap the map. The route follows mapped trails only.</p>
+      <div className="rb-scope" role="radiogroup" aria-label="Route type">
+        <button type="button" role="radio" aria-checked={scope === "anywhere"} onClick={() => apply({ scope: "anywhere" })}>Go anywhere</button>
+        <button type="button" role="radio" aria-checked={scope === "trails"} onClick={() => apply({ scope: "trails" })}>Trails only</button>
+      </div>
+      <p className="rb-help">
+        {scope === "anywhere"
+          ? `Any two places on Earth, through up to ${MAX_POINTS} points: trails and paths on foot, roads, and flights between airports when it’s too far or across water.`
+          : "Set a start and an end: search, use your location, or tap the map. The route follows mapped trails only."}
+      </p>
+      {scope === "anywhere" && (
+        <label className="rb-travel">Travel
+          <select value={travel} onChange={(e) => apply({ travel: e.target.value as TravelPreference })}>
+            <option value="fastest">Fastest — walk, drive or fly</option>
+            <option value="walk">On foot wherever possible — fly only across water</option>
+          </select>
+        </label>
+      )}
       <ol className="rb-stops">
         <li><PlaceSearch slot="start" label="Start" stop={start} picking={picking === "start"} center={center} viewFeatures={viewFeatures} onPick={(s) => setSlot("start", s)} onTapMap={() => setPicking(picking === "start" ? null : "start")} /></li>
         {via.map((v, i) => (
@@ -208,13 +257,14 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
         <li><PlaceSearch slot="end" label="End" stop={end} picking={picking === "end"} center={center} viewFeatures={viewFeatures} onPick={(s) => setSlot("end", s)} onTapMap={() => setPicking(picking === "end" ? null : "end")} /></li>
       </ol>
       <div className="rb-row">
-        <button type="button" className="hx-btn" aria-pressed={picking === "via"} disabled={!start || !end} onClick={() => setPicking(picking === "via" ? null : "via")}>{picking === "via" ? "Tap the map…" : "+ Waypoint"}</button>
+        <button type="button" className="hx-btn" aria-pressed={picking === "via"} disabled={!start || !end || via.length >= MAX_POINTS - 2} title={via.length >= MAX_POINTS - 2 ? `Up to ${MAX_POINTS} points: start, ${MAX_POINTS - 2} stops and end` : undefined} onClick={() => setPicking(picking === "via" ? null : "via")}>{picking === "via" ? "Tap the map…" : `+ Stop (${via.length}/${MAX_POINTS - 2})`}</button>
         <button type="button" className="hx-btn" disabled={!start || !end} onClick={reverse}>Reverse</button>
         <button type="button" className="hx-btn" disabled={!start && !end} onClick={clear}>Clear</button>
       </div>
-      <label className="hx-check rb-check"><input type="checkbox" checked={connectors} onChange={(e) => apply({ connectors: e.target.checked })} /> Allow road connectors <small>(walk roads between trail networks, routed on public roads)</small></label>
+      {scope === "trails" && <label className="hx-check rb-check"><input type="checkbox" checked={connectors} onChange={(e) => apply({ connectors: e.target.checked })} /> Allow road connectors <small>(walk roads between trail networks, routed on public roads)</small></label>}
       {picking && <p className="rb-picking" role="status">Tap the map to set the {picking === "via" ? "waypoint" : picking}.</p>}
-      {busy && <p className="rb-status" role="status"><span className="hx-spinner" aria-hidden="true" /> Finding the best trails…</p>}
+      {busy && <p className="rb-status" role="status"><span className="hx-spinner" aria-hidden="true" /> {scope === "anywhere" ? "Planning the journey…" : "Finding the best trails…"}</p>}
+      {journey && !busy && <JourneyResult journey={journey} stops={[start, ...via, end].filter((x): x is Stop => Boolean(x))} name={routeName(start, end)} onRemoveLeg={removeLeg} />}
       {error && <p className="rb-error" role="alert">{error}</p>}
 
       {route && !busy && (
@@ -319,6 +369,61 @@ export function RouteBuilder({ map, initialFrom, center, viewFeatures, onClose, 
   );
 }
 
+const MODE_LABEL: Record<TravelMode, string> = { trail: "Trail", walk: "Walk", drive: "Drive", flight: "Flight", gap: "No mapped route" };
+const MODE_ICON: Record<TravelMode, string> = { trail: "🥾", walk: "🚶", drive: "🚗", flight: "✈️", gap: "⋯" };
+
+function hoursLabel(seconds: number) {
+  const h = seconds / 3600;
+  if (h >= 48) return `${Math.round(h / 24)} days`;
+  return duration(h) ?? "—";
+}
+
+/** A "go anywhere" result: totals, how far by each way of travel, and each leg's parts in order. */
+function JourneyResult({ journey: j, stops, name, onRemoveLeg }: { journey: Journey; stops: Stop[]; name: string; onRemoveLeg: (i: number) => void }) {
+  const legs: Journey["parts"][] = [];
+  let at = 0, leg = 0;
+  for (const p of j.parts) {
+    (legs[leg] ??= []).push(p);
+    at += p.meters;
+    if (at >= j.legEndsMeters[leg] - 1e-6 && leg < j.legEndsMeters.length - 1) leg++;
+  }
+  const flying = Boolean(j.byMode.flight), gaps = Boolean(j.byMode.gap);
+  return (
+    <div className="rb-result">
+      <dl className="rb-stats">
+        <div><dt>Distance</dt><dd>{formatMeters(j.meters)}</dd></div>
+        <div><dt>Travel time</dt><dd title="Walking at 3 mph, driving at road speeds, flights at 800 km/h plus 2.5 h at the airports">{hoursLabel(j.seconds)}</dd></div>
+      </dl>
+      <ul className="rb-modes" aria-label="Distance by way of travel">
+        {(Object.keys(j.byMode) as TravelMode[]).map((m) => <li key={m} className={`rb-mode rb-mode--${m}`}><span aria-hidden="true">{MODE_ICON[m]}</span>{MODE_LABEL[m]} {formatMeters(j.byMode[m]!)}</li>)}
+      </ul>
+      {flying && <p className="rb-help">Flights are drawn between the nearest airports with scheduled service. Check airlines for real routes, connections and times.</p>}
+      {gaps && <p className="rb-warn">Part of this journey has no mapped road or path (dashed grey). Look for a ferry, boat or local transport there.</p>}
+      <ol className="rb-legs-list">
+        {legs.map((parts, i) => (
+          <li key={i}>
+            <p className="rb-leg-head"><strong>{stops[i]?.label ?? `Point ${i + 1}`}</strong> → <strong>{stops[i + 1]?.label ?? `Point ${i + 2}`}</strong></p>
+            <ol className="rb-parts">
+              {parts.map((p, k) => (
+                <li key={k} className={`rb-part rb-part--${p.mode}`}>
+                  <span aria-hidden="true">{MODE_ICON[p.mode]}</span>
+                  <span>{p.mode === "trail" ? `Trail: ${p.label}` : p.label}</span>
+                  <small>{formatMeters(p.meters)} · {hoursLabel(p.seconds)}</small>
+                </li>
+              ))}
+            </ol>
+            {legs.length > 1 && <button type="button" className="rb-link" onClick={() => onRemoveLeg(i)}>Remove this leg</button>}
+          </li>
+        ))}
+      </ol>
+      <div className="rb-row rb-actions">
+        <button type="button" className="hx-btn" onClick={() => downloadGpx(name, routeGpx(name, j.coordinates, []))}>Download GPX</button>
+      </div>
+      <p className="rb-attrib">Walking and driving: OSRM (FOSSGIS and Project OSRM), © OpenStreetMap contributors. Airports: OurAirports (public domain).</p>
+    </div>
+  );
+}
+
 function routeName(start: Stop | null, end: Stop | null) {
   const short = (s: Stop | null) => (s && !s.label.startsWith("Map point") ? s.label : null);
   const a = short(start), b = short(end);
@@ -373,11 +478,22 @@ function PlaceSearch({ slot, label, stop, picking, center, viewFeatures, onPick,
       void Promise.all([
         fetch(`/api/trail-catalog/places?q=${encodeURIComponent(q)}${near}`, { signal: controller.signal }).then((r) => (r.ok ? r.json() : { places: [] })).catch(() => ({ places: [] })),
         q.length >= 3 ? fetch(`/api/trail-catalog?q=${encodeURIComponent(q)}&limit=5`, { signal: controller.signal }).then((r) => (r.ok ? r.json() : { trails: [] })).catch(() => ({ trails: [] })) : { trails: [] },
-      ]).then(([places, trails]: [{ places?: { name: string; region: string; lat: number; lng: number }[] }, { trails?: { id: string; name: string; latitude: number; longitude: number; region?: string; park?: string; forest?: string; trailhead?: { latitude: number; longitude: number; name?: string | null } }[] }]) => {
+        // Anywhere on Earth: cities, addresses, airports, landmarks (Photon geocoder over OpenStreetMap).
+        q.length >= 3 ? fetch(`https://photon.komoot.io/api/?${new URLSearchParams({ q, limit: "6", lang: "en" })}`, { signal: controller.signal }).then((r) => (r.ok ? r.json() : { features: [] })).catch(() => ({ features: [] })) : { features: [] },
+      ]).then(([places, trails, world]: [{ places?: { name: string; region: string; lat: number; lng: number }[] }, { trails?: { id: string; name: string; latitude: number; longitude: number; region?: string; park?: string; forest?: string; trailhead?: { latitude: number; longitude: number; name?: string | null } }[] }, { features?: { geometry: { coordinates: LngLat }; properties: { name?: string; street?: string; housenumber?: string; city?: string; state?: string; country?: string; osm_value?: string } }[] }]) => {
         if (controller.signal.aborted) return;
+        // Cities, regions and airports the geocoder is sure of come first ("Tokyo" is the city, not a trail there).
+        const PLACE_KINDS = new Set(["city", "town", "village", "country", "state", "province", "region", "county", "aerodrome", "island", "suburb"]);
+        const worldOptions: (Option & { major: boolean })[] = (world.features ?? []).map((f, i) => {
+          const pr = f.properties;
+          const label = pr.name ?? [pr.housenumber, pr.street].filter(Boolean).join(" ");
+          return { key: `w:${i}:${f.geometry.coordinates.join(",")}`, label: label || q, detail: [pr.city !== label ? pr.city : null, pr.state, pr.country].filter(Boolean).join(", ") || "Place", point: f.geometry.coordinates, major: PLACE_KINDS.has(pr.osm_value ?? "") };
+        });
         const out: Option[] = [
+          ...worldOptions.filter((o) => o.major),
           ...(trails.trails ?? []).filter((t) => Math.abs(t.latitude) > 0.1).map((t) => ({ key: `t:${t.id}`, label: t.name, detail: `Trail${t.park ?? t.forest ?? t.region ? ` · ${t.park ?? t.forest ?? t.region}` : ""}`, point: (t.trailhead ? [t.trailhead.longitude, t.trailhead.latitude] : [t.longitude, t.latitude]) as LngLat })),
           ...(places.places ?? []).map((p) => ({ key: `p:${p.name}:${p.lat}`, label: p.name, detail: `Town · ${p.region}`, point: [p.lng, p.lat] as LngLat })),
+          ...worldOptions.filter((o) => !o.major),
         ];
         setFound({ q, options: out });
       });

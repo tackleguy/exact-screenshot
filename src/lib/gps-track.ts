@@ -4,8 +4,11 @@
  *   - A fix is rejected when its accuracy is worse than 30 m ("weak GPS"), when reaching it from the last accepted
  *     fix would take more than 15 mph on foot / 40 mph on a bike / 60 mph on skis, or when it is under 3 m from the
  *     last accepted fix (standing-still jitter).
- *   - Accepted fixes are smoothed with an exponential moving average (alpha 0.3) on latitude and longitude; distance
- *     is the sum of great-circle steps between smoothed points only.
+ *   - Accepted fixes are combined with a Kalman filter that weights each fix by its reported accuracy (a ±3 m fix
+ *     counts far more than a ±25 m one) and by how far the walker could have gone since the last fix. The filtered
+ *     position is usually closer to the truth than any single fix; distance is the sum of steps between them.
+ *   - Following a trail, a filtered point within the GPS error of the trail line is placed on the line itself
+ *     ("snap to trail"), so the track follows the real path instead of wandering a few meters either side.
  *   - Elevation comes from the trail's DEM profile when the fix is within 25 m of the trail (GPS altitude is good to
  *     about ±30 m); off the trail, GPS altitude is used. Climb is counted with a 10 ft hysteresis.
  *   - Moving time leaves out stops: stretches slower than 0.3 mph lasting more than 30 s.
@@ -27,7 +30,12 @@ export interface TrailProfile { route: Route; profile: [number, number][] }
 
 export const MAX_ACCURACY_M = 30;
 export const MIN_STEP_M = 3;
-export const EMA_ALPHA = 0.3;
+/** How fast the true position can drift between fixes (m/s), the filter's process noise, by activity. */
+export const DRIFT_MPS: Record<GpsActivity, number> = { hike: 1.5, run: 3, bike: 6, ski: 10 };
+/** The accuracy the recorder aims for: under open sky, phones with precise location report ±3–5 m. */
+export const TARGET_ACCURACY_M = 5;
+/** Snap to the trail line when the filtered point is this close (never further than the fix's own error). */
+const SNAP_TO_TRAIL_M = 15;
 export const MAX_SPEED_MPH: Record<GpsActivity, number> = { hike: 15, run: 15, bike: 40, ski: 60 };
 const SNAP_M = 25;
 const GAIN_HYSTERESIS_FT = 10;
@@ -75,8 +83,16 @@ export class TrackRecorder {
   private lastRaw: Fix | null = null;
   private eleRef: number | null = null;
   private offSince: number | null = null;
+  /** Kalman filter state: filtered position (unsnapped), its variance in m², and the time of the last update. */
+  private kLat = 0;
+  private kLng = 0;
+  private kVar = -1;
+  private kTime = 0;
 
-  constructor(private activity: GpsActivity = "hike", private trail: TrailProfile | null = null) {}
+  constructor(private activity: GpsActivity = "hike", private trail: TrailProfile | null = null, private snap = true) {}
+
+  /** Estimated error of the filtered position, in meters (null before the first fix). */
+  get filteredAccuracyM() { return this.kVar < 0 ? null : Math.sqrt(this.kVar); }
 
   setTrail(trail: TrailProfile | null) { this.trail = trail; }
 
@@ -125,8 +141,22 @@ export class TrackRecorder {
 
   private accept(fix: Fix) {
     const prev = this.points[this.points.length - 1];
-    const lat = prev ? prev.lat + EMA_ALPHA * (fix.lat - prev.lat) : fix.lat;
-    const lng = prev ? prev.lng + EMA_ALPHA * (fix.lng - prev.lng) : fix.lng;
+    const acc2 = Math.max(1, fix.accuracyM) ** 2;
+    if (this.kVar < 0) { this.kLat = fix.lat; this.kLng = fix.lng; this.kVar = acc2; }
+    else {
+      const dt = Math.max(0, (fix.time - this.kTime) / 1000);
+      this.kVar += dt * DRIFT_MPS[this.activity] ** 2;
+      const k = this.kVar / (this.kVar + acc2);
+      this.kLat += k * (fix.lat - this.kLat);
+      this.kLng += k * (fix.lng - this.kLng);
+      this.kVar *= 1 - k;
+    }
+    this.kTime = fix.time;
+    let lat = this.kLat, lng = this.kLng;
+    if (this.snap && this.trail) {
+      const on = this.trail.route.locate([lng, lat]);
+      if (on.offMeters <= Math.min(SNAP_TO_TRAIL_M, Math.max(5, fix.accuracyM))) [lng, lat] = on.at;
+    }
     // Elevation: the trail's DEM profile when on (or near) the trail, GPS altitude otherwise.
     let elevationFt = fix.altitudeM !== null && Number.isFinite(fix.altitudeM) ? fix.altitudeM * 3.28084 : null;
     if (this.trail) {

@@ -186,6 +186,16 @@ export function GpsRecorder({
           <div><button type="button" className="btn-ghost" onClick={gps.dismissGap}>OK</button></div>
         </div>
       )}
+      {gps.approximate && isActive && (
+        <div className="recorder-banner recorder-banner--warn" role="alert">
+          <p><strong>Turn on Precise Location.</strong> Your phone is only sharing an approximate location (±{formatMeters(gps.currentAccuracy ?? 0)}), so the track can’t be recorded.</p>
+          <ul className="recorder-steps">
+            <li><strong>iPhone:</strong> Settings → Privacy &amp; Security → Location Services → Safari Websites (or your browser) → turn on <em>Precise Location</em> and choose <em>While Using</em>.</li>
+            <li><strong>Android:</strong> Settings → Location → App location permissions → Chrome (or your browser) → turn on <em>Use precise location</em>. Also turn on <em>Google Location Accuracy</em>.</li>
+            <li>Then reload this page. For the best accuracy (±3–5 m), stand under open sky for a few seconds before starting.</li>
+          </ul>
+        </div>
+      )}
       {gps.offTrail && gps.state === "recording" && (
         <div className="recorder-banner recorder-banner--warn" role="status">
           <p>You’re about {formatMeters(gps.offTrailM)} off {trail?.name ?? "the trail"}.</p>
@@ -234,12 +244,13 @@ export function GpsRecorder({
           <PrimaryStat label="Pace" value={formatPace(gps.distanceM, gps.movingSec || gps.durationSec)} active={isActive} />
           <PrimaryStat label="Elev gain" value={formatElevation(gps.elevationGainFt) ?? "—"} active={isActive} />
           <PrimaryStat label="Elevation" value={formatElevation(gps.currentAltitudeFt) ?? "—"} active={isActive} />
-          <div>
+          <div title="What the phone reports for its latest fix; the filtered track is usually closer than this.">
             <p className="text-[10px] font-medium uppercase tracking-wide text-mist">GPS accuracy</p>
             <p className="flex items-center justify-center gap-1.5 font-bold tabular-nums text-cream">
-              <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: gps.currentAccuracy === null ? "#6b7280" : gps.currentAccuracy < 10 ? "#22c55e" : gps.currentAccuracy <= 30 ? "#eab308" : "#ef4444" }} />
-              {gps.currentAccuracy !== null ? `±${formatMeters(gps.currentAccuracy)}` : "—"}
+              <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: gps.currentAccuracy === null ? "#6b7280" : gps.currentAccuracy <= 5 ? "#22c55e" : gps.currentAccuracy < 10 ? "#84cc16" : gps.currentAccuracy <= 30 ? "#eab308" : "#ef4444" }} />
+              {gps.currentAccuracy !== null ? `±${Math.round(gps.currentAccuracy)} m` : "—"}
             </p>
+            {gps.currentAccuracy !== null && <p className="text-[10px] text-mist">{gps.currentAccuracy <= 5 ? "Within 5 m" : "Aiming for 5 m"}</p>}
           </div>
         </div>
         <ElevationChart points={gps.points} className="mt-4" height={isActive ? 64 : 112} />
@@ -374,7 +385,7 @@ function StatusBadge({
   if (state === "acquiring") {
     return (
       <span className="shrink-0 animate-pulse rounded-full bg-amber-100 px-3 py-1 text-xs font-medium text-amber-800">
-        GPS {acquiringAccuracy !== null ? `±${Math.round(acquiringAccuracy)}m` : "…"}
+        {acquiringAccuracy !== null ? `Sharpening GPS: ±${Math.round(acquiringAccuracy)} m (starts at 10 m or better)` : "Finding GPS…"}
       </span>
     );
   }
