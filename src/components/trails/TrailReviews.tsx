@@ -6,11 +6,21 @@ import { createClient } from "@/lib/supabase/client";
 import "./trail-social.css";
 
 /**
- * Set when the database has no reviews table yet (its migration not applied): stop asking for the rest of the
- * visit instead of failing on every card and page.
+ * Whether the database has the reviews table (its migration may not be applied yet). Every card, star rating and
+ * reviews section on a page shares one check, and a missing table is remembered for the rest of the visit (this
+ * tab), so a site without it asks once instead of on every trail.
  */
-let reviewsMissing = false;
-const noteMissing = (status: number) => { if (status === 404) reviewsMissing = true; };
+const MISSING_KEY = "hyked:reviews-missing";
+let probe: Promise<boolean> | null = null;
+function reviewsReady(client: NonNullable<ReturnType<typeof createClient>>): Promise<boolean> {
+  try { if (sessionStorage.getItem(MISSING_KEY)) return Promise.resolve(false); } catch { /* storage unavailable */ }
+  probe ??= Promise.resolve(client.from("catalog_trail_reviews").select("id", { head: true }).limit(1)).then(({ status }) => {
+    if (status !== 404) return true;
+    try { sessionStorage.setItem(MISSING_KEY, "1"); } catch { /* storage unavailable */ }
+    return false;
+  }, () => { probe = null; return true; });
+  return probe;
+}
 
 interface Review { id: string; user_id: string; rating: number; body: string | null; hiked_on: string | null; created_at: string }
 
@@ -20,9 +30,11 @@ export function useTrailRating(trailId: string) {
   const reload = useCallback(() => {
     const client = createClient();
     if (!client) return;
-    if (reviewsMissing) { void Promise.resolve().then(() => setState({ id: trailId, reviews: [], available: false })); return; }
-    void client.from("catalog_trail_reviews").select("id,user_id,rating,body,hiked_on,created_at").eq("catalog_trail_id", trailId).order("created_at", { ascending: false }).limit(50)
-      .then(({ data, error, status }) => { noteMissing(status); setState({ id: trailId, reviews: (data ?? []) as Review[], available: !error }); });
+    void reviewsReady(client).then(async (ready) => {
+      if (!ready) { setState({ id: trailId, reviews: [], available: false }); return; }
+      const { data, error } = await client.from("catalog_trail_reviews").select("id,user_id,rating,body,hiked_on,created_at").eq("catalog_trail_id", trailId).order("created_at", { ascending: false }).limit(50);
+      setState({ id: trailId, reviews: (data ?? []) as Review[], available: !error });
+    });
   }, [trailId]);
   useEffect(() => { reload(); }, [reload]);
   const reviews = state?.id === trailId ? state.reviews : [];
@@ -38,10 +50,9 @@ export function useRatings(ids: string[]) {
   useEffect(() => {
     const client = createClient();
     const list = key ? key.split("|") : [];
-    if (!client || !list.length || reviewsMissing) return;
+    if (!client || !list.length) return;
     let live = true;
-    void client.from("catalog_trail_reviews").select("catalog_trail_id,rating").in("catalog_trail_id", list.slice(0, 200)).then(({ data, status }) => {
-      noteMissing(status);
+    void reviewsReady(client).then(async (ready): Promise<{ data: unknown[] | null }> => (ready ? await client.from("catalog_trail_reviews").select("catalog_trail_id,rating").in("catalog_trail_id", list.slice(0, 200)) : { data: [] })).then(({ data }) => {
       const sums = new Map<string, { total: number; count: number }>();
       for (const r of (data ?? []) as { catalog_trail_id: string; rating: number }[]) {
         const s = sums.get(r.catalog_trail_id) ?? { total: 0, count: 0 };

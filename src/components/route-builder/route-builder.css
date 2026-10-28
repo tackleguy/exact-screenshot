@@ -71,7 +71,8 @@
 .rb-handle { width: 16px; height: 16px; border: 3px solid var(--accent, #ffc21a); border-radius: 50%; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.35); cursor: grab; }
 
 @media (max-width: 767px) {
-  .rb-panel { top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 58%; border-radius: 14px 14px 0 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  /* A bottom sheet over the page, just above the bottom menu: the phone map is short, so the panel isn't boxed into it. */
+  .rb-panel { position: fixed; z-index: 61; top: auto; bottom: calc(61px + env(safe-area-inset-bottom)); left: 0; right: 0; width: auto; max-height: min(58dvh, calc(100dvh - 250px)); border-radius: 14px 14px 0 0; box-shadow: 0 -8px 24px rgb(0 0 0 / 0.35); }
 }
 
 /* Personal trail page (catalog template, src/components/trails/catalog.css) */
@@ -107,3 +108,6 @@
 .rb-part--flight { border-left: 3px dashed #7c3aed; }
 .rb-part--drive { border-left: 3px solid #2f7fd8; }
 .rb-part--gap { border-left: 3px dashed #94a3b8; }
+
+/* The "save to your account" nudge would cover the route being built; it comes back when the builder closes. */
+body:has(.rb-panel) .guest-save-banner { display: none; }

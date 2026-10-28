@@ -174,6 +174,37 @@ function ActivityDetail() {
   if (!activity) return <Status title="Loading activity…" />;
   return <section className="fieldbook-page"><Link className="btn-ghost" href="/you">← Your activities</Link><h1>{activity.title}</h1><RouteMiniMap route={activity.route_geojson} className="h-80 w-full" /><EstimatedRouteNote route={activity.route_geojson} /><ActivityStats distanceM={Number(activity.distance_m)} durationSec={Number(activity.duration_sec)} elevationGainFt={Number(activity.elevation_gain_ft)} estimates={routeEstimates(activity.route_geojson)} /><p>{activity.notes}</p></section>;
 }
+/**
+ * A file link (GPX, trip CSV, printable packet) opened directly or in a new tab. The static site has no server, so
+ * the browser builds the file (the same code as an in-page click, through the patched fetch) and downloads it.
+ */
+function ApiFile() {
+  const { pathname, search } = useLocation();
+  const [state, setState] = useState<{ key: string; status: "ready" | "error"; message: string } | null>(null);
+  const key = pathname + search;
+  useEffect(() => {
+    let live = true;
+    void fetch(key).then(async (response) => {
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      if (!response.ok || !/attachment/i.test(disposition)) {
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        if (live) setState({ key, status: "error", message: data?.error ?? "This link isn’t a file to download." });
+        return;
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "download";
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      if (live) setState({ key, status: "ready", message: a.download });
+    }).catch(() => { if (live) setState({ key, status: "error", message: "The file couldn’t be prepared. Try again." }); });
+    return () => { live = false; };
+  }, [key]);
+  const current = state?.key === key ? state : null;
+  if (!current) return <Status title="Preparing your download…" />;
+  return <Status title={current.status === "ready" ? "Download started" : "Download unavailable"}><p>{current.status === "ready" ? `${current.message} is downloading.` : current.message}</p><Link className="btn-ghost" href="/explore/trails/catalog">Browse trails</Link></Status>;
+}
 /** Activity log: recorded hikes for signed-in people; guests learn where their recordings will appear. */
 function ActivityLog() {
   const { user, loading } = useAccount();
@@ -198,7 +229,7 @@ function App() {
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
     <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/about/data" element={<DataSources />} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
-    <Route path="/parks/:id" element={<BackendPage />} /><Route path="/admin/*" element={<BackendPage />} /><Route path="*" element={<Status title="Page not found"><Link className="btn-ghost" href="/">Return to Hyked</Link></Status>} />
+    <Route path="/api/*" element={<ApiFile />} /><Route path="/parks/:id" element={<BackendPage />} /><Route path="/admin/*" element={<BackendPage />} /><Route path="*" element={<Status title="Page not found"><Link className="btn-ghost" href="/">Return to Hyked</Link></Status>} />
   </Routes></AppShell></>;
 }
 installApiBridge();
