@@ -260,9 +260,13 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   }, [myTrails, setSource]);
 
 
-  const showRoute = useCallback((points: Point[]) => {
-    setSource("route", { type: "FeatureCollection", features: points.length ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: points } }] : [] });
-    if (mapRef.current?.getLayer("hy-route")) mapRef.current.moveLayer("hy-route");
+  /** The route builder's line: one part on foot, or a journey's parts each with how it's travelled. */
+  const showRoute = useCallback((points: Point[], parts?: { mode: string; coordinates: Point[] }[]) => {
+    const features: GeoJSON.Feature[] = parts?.length
+      ? parts.map((p) => ({ type: "Feature", properties: { mode: p.mode }, geometry: { type: "LineString", coordinates: p.coordinates } }))
+      : points.length ? [{ type: "Feature", properties: { mode: "trail" }, geometry: { type: "LineString", coordinates: points } }] : [];
+    setSource("route", { type: "FeatureCollection", features });
+    for (const id of ["hy-route-casing", "hy-route", "hy-route-air"]) if (mapRef.current?.getLayer(id)) mapRef.current.moveLayer(id);
   }, [setSource]);
 
   const refresh = useCallback(() => {

@@ -18,6 +18,17 @@ function point(raw: string | null) {
   return Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : null;
 }
 
+/**
+ * The public routers allow about one request a second; faster bursts are refused (and the refusal carries no CORS
+ * header, so the browser reports it as blocked). Requests to each router wait their turn, ~1.1 s apart.
+ */
+const routerQueue = new Map<string, Promise<unknown>>();
+function queued<T>(host: string, task: () => Promise<T>): Promise<T> {
+  const turn = (routerQueue.get(host) ?? Promise.resolve()).then(task, task);
+  routerQueue.set(host, turn.catch(() => undefined).then(() => new Promise((r) => setTimeout(r, 1100))));
+  return turn;
+}
+
 /** GET /api/directions?from=lat,lng&to=lat,lng[&profile=foot] — driving (OSRM) or walking (FOSSGIS OSRM foot). */
 async function directions(url: URL, fetcher: typeof fetch) {
   const from = point(url.searchParams.get("from"));
@@ -26,7 +37,10 @@ async function directions(url: URL, fetcher: typeof fetch) {
   if (!from || !to) return Response.json({ error: "Directions need a start and a destination (lat,lng)." }, { status: 400 });
   try {
     const query = new URLSearchParams({ overview: "full", geometries: "geojson", steps: "true" });
-    const response = await fetcher(`${foot ? FOOT_ROUTER : ROUTER}/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?${query}`, { signal: AbortSignal.timeout(15_000) });
+    const target = `${foot ? FOOT_ROUTER : ROUTER}/route/v1/driving/${from.lng},${from.lat};${to.lng},${to.lat}?${query}`;
+    // One retry after a pause: a refused burst usually goes through on the next turn.
+    const call = () => queued(foot ? FOOT_ROUTER : ROUTER, () => fetcher(target, { signal: AbortSignal.timeout(25_000) }));
+    const response = await call().then((r) => (r.status === 429 ? Promise.reject(new Error("busy")) : r)).catch(() => new Promise<Response>((resolve, reject) => setTimeout(() => call().then(resolve, reject), 1500)));
     const data = (await response.json()) as { code: string; routes?: { distance: number; duration: number; geometry: { coordinates: [number, number][] }; legs: { steps: RouteStep[] }[] }[] };
     const route = data.routes?.[0];
     if (data.code !== "Ok" || !route) {

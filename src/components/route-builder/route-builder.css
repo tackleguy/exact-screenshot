@@ -86,3 +86,24 @@
 .pt-feature { grid-template-columns: 72px 1fr; border-left: 3px solid transparent; }
 .pt-feature--water { border-left-color: #0284c7; }
 .pt-feature--camping { border-left-color: #d97706; }
+
+/* Go anywhere: route type switch, travel preference, and the journey's legs and parts. */
+.rb-scope { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; margin: 4px 0 6px; border-radius: 10px; background: var(--hx-chip, rgb(255 255 255 / 0.06)); }
+.rb-scope button { padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--hx-muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.rb-scope button[aria-checked="true"] { background: var(--accent); color: var(--on-accent, #10291f); }
+.rb-travel { display: grid; gap: 4px; margin: 6px 0; font-size: 12.5px; color: var(--hx-muted); }
+.rb-travel select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-strong, rgb(255 255 255 / 0.2)); background: var(--surface-muted, #1d2a22); color: var(--hx-text, #f4f1e8); font: inherit; font-size: 13px; }
+.rb-modes { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 8px 0; }
+.rb-mode { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; font-size: 12.5px; background: rgb(255 255 255 / 0.07); font-variant-numeric: tabular-nums; }
+.rb-mode--drive { box-shadow: inset 0 0 0 1px #2f7fd8; }
+.rb-mode--flight { box-shadow: inset 0 0 0 1px #7c3aed; }
+.rb-mode--gap { box-shadow: inset 0 0 0 1px #94a3b8; }
+.rb-legs-list { list-style: none; padding: 0; margin: 10px 0; display: grid; gap: 12px; }
+.rb-leg-head { margin: 0 0 4px; font-size: 13px; }
+.rb-parts { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.rb-part { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: baseline; gap: 6px; padding: 6px 8px; border-radius: 8px; background: rgb(255 255 255 / 0.04); font-size: 13px; }
+.rb-part > span:nth-child(2) { overflow-wrap: anywhere; }
+.rb-part small { color: var(--hx-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rb-part--flight { border-left: 3px dashed #7c3aed; }
+.rb-part--drive { border-left: 3px solid #2f7fd8; }
+.rb-part--gap { border-left: 3px dashed #94a3b8; }
