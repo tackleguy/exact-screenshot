@@ -1,3 +1,5 @@
+import { EstimatedRouteNote } from "@/components/activities/EstimatedRouteNote";
+import { routeEstimates } from "@/lib/route-provenance";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getActivity } from "@/lib/activities";
@@ -53,6 +55,7 @@ export default async function ActivityDetailPage({
     <div className="pb-24 md:pb-8">
       <div className="relative">
         <RouteMiniMap route={activity.route_geojson} className="h-56 w-full md:h-80" />
+        <EstimatedRouteNote route={activity.route_geojson} className="mx-auto max-w-2xl px-4 sm:px-6" />
         <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-6">
           <div className="mx-auto max-w-2xl">
             <p className="text-sm text-stone-200">
@@ -76,6 +79,7 @@ export default async function ActivityDetailPage({
             distanceM={distanceM}
             durationSec={activity.duration_sec}
             elevationGainFt={Number(activity.elevation_gain_ft)}
+            estimates={routeEstimates(activity.route_geojson)}
           />
         </div>
 
@@ -83,7 +87,7 @@ export default async function ActivityDetailPage({
           <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm">
             <h2 className="mb-3 font-semibold text-stone-900">Elevation profile</h2>
             <p className="mb-3 text-xs text-stone-500">
-              {points.length} GPS points · route stored as GeoJSON LineString
+              {points.length} {routeEstimates(activity.route_geojson) ? "points, some estimated while GPS was paused" : "GPS points"} · route stored as GeoJSON LineString
             </p>
             <ElevationChart points={points} height={140} />
           </div>

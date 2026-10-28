@@ -253,6 +253,7 @@ export function GpsRecorder({
             {gps.currentAccuracy !== null && <p className="text-[10px] text-mist">{gps.currentAccuracy <= 5 ? "Within 5 m" : "Aiming for 5 m"}</p>}
           </div>
         </div>
+        {gps.estimatedM > 0 && <p className="mt-3 text-xs text-mist">Includes {formatMeters(gps.estimatedM)}{gps.estimatedGainFt > 0 ? ` and ${formatElevation(gps.estimatedGainFt)} of climb` : ""} estimated while GPS was paused. It’s marked as estimated on the saved activity.</p>}
         <ElevationChart points={gps.points} className="mt-4" height={isActive ? 64 : 112} />
       </div>
 

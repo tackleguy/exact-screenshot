@@ -23,6 +23,8 @@ import { SkiMapClient } from "@/components/ski/SkiMapClient";
 import { SkiAreasPage } from "@/components/ski/SkiAreasPage";
 import { SkiAreaDetailPage } from "@/components/ski/SkiAreaDetailPage";
 import { GpsRecorder } from "@/components/gps/GpsRecorder";
+import { EstimatedRouteNote } from "@/components/activities/EstimatedRouteNote";
+import { routeEstimates } from "@/lib/route-provenance";
 import { ActivityListRow } from "@/components/activities/ActivityListRow";
 import { ActivityStats } from "@/components/activities/ActivityStats";
 import { RouteMiniMap } from "@/components/activities/RouteMiniMap";
@@ -170,7 +172,7 @@ function ActivityDetail() {
   useEffect(() => { const client = createClient(); if (!client) return; let active = true; client.from("activities").select("*, trail:trails(*, park:parks(*))").eq("id", id).single().then(({ data, error }) => { if (active) { setActivity(data as Activity | null); setError(error?.message ?? ""); } }); return () => { active = false; }; }, [id]);
   if (error) return <Status title="Activity unavailable">{error}</Status>;
   if (!activity) return <Status title="Loading activity…" />;
-  return <section className="fieldbook-page"><Link className="btn-ghost" href="/you">← Your activities</Link><h1>{activity.title}</h1><RouteMiniMap route={activity.route_geojson} className="h-80 w-full" /><ActivityStats distanceM={Number(activity.distance_m)} durationSec={Number(activity.duration_sec)} elevationGainFt={Number(activity.elevation_gain_ft)} /><p>{activity.notes}</p></section>;
+  return <section className="fieldbook-page"><Link className="btn-ghost" href="/you">← Your activities</Link><h1>{activity.title}</h1><RouteMiniMap route={activity.route_geojson} className="h-80 w-full" /><EstimatedRouteNote route={activity.route_geojson} /><ActivityStats distanceM={Number(activity.distance_m)} durationSec={Number(activity.duration_sec)} elevationGainFt={Number(activity.elevation_gain_ft)} estimates={routeEstimates(activity.route_geojson)} /><p>{activity.notes}</p></section>;
 }
 /** Activity log: recorded hikes for signed-in people; guests learn where their recordings will appear. */
 function ActivityLog() {
