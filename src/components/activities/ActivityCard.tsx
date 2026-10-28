@@ -5,6 +5,7 @@ import { ACTIVITY_THEME } from "@/lib/activity-theme";
 import { avgSpeedMph, formatDistance, formatDuration, formatPace } from "@/lib/gps";
 import { RouteMiniMap } from "@/components/activities/RouteMiniMap";
 import { ActivityStats } from "@/components/activities/ActivityStats";
+import { routeEstimates } from "@/lib/route-provenance";
 import clsx from "clsx";
 
 export function ActivityCard({ activity }: { activity: Activity }) {
@@ -87,6 +88,7 @@ export function ActivityCard({ activity }: { activity: Activity }) {
           distanceM={distanceM}
           durationSec={activity.duration_sec}
           elevationGainFt={Number(activity.elevation_gain_ft)}
+          estimates={routeEstimates(activity.route_geojson)}
         />
 
         {distanceM > 100 && (

@@ -13,18 +13,34 @@
  *     about ±30 m); off the trail, GPS altitude is used. Climb is counted with a 10 ft hysteresis.
  *   - Moving time leaves out stops: stretches slower than 0.3 mph lasting more than 30 s.
  *   - Off-trail: more than 50 m from the trail line for more than 30 s.
+ *   - Every point records whether the stretch reaching it was measured; estimated distance and climb are counted
+ *     separately (estimatedDistanceM, estimatedGainFt) so saved activities can say how much was estimated.
  *   - Gaps: browsers stop GPS while the page is in the background. When fixes resume after 45 s or more, a walker
  *     who was on the followed trail at both ends is assumed to have kept to it, and the gap is filled with points
  *     along the trail's real line; otherwise the two fixes are joined directly (a lower bound on the distance).
  */
 import { chainLines, Route } from "@/lib/geo/line";
+import type { GpsPoint } from "@/lib/types";
 
 export type GpsActivity = "hike" | "run" | "bike" | "ski";
-export interface Fix { lat: number; lng: number; altitudeM: number | null; accuracyM: number; time: number; heading?: number | null; /** Placed along the trail to bridge a GPS gap, not measured. */ filled?: boolean }
+/** How a stretch of track was obtained when it wasn't measured: placed along the trail, or a straight join. */
+export type Estimate = "trail" | "direct";
+export interface Fix {
+  lat: number; lng: number; altitudeM: number | null; accuracyM: number; time: number; heading?: number | null;
+  /** Placed along the trail to bridge a GPS gap, not measured. */
+  filled?: boolean;
+  /** The first real fix after a GPS gap: the stretch leading to it wasn't measured. Kept in saved tracks so a
+   * resumed recording knows the same. */
+  afterGap?: Estimate;
+}
 /** A stretch with no GPS (usually the page in the background) and how it was bridged. */
 export interface TrackGap { fromTime: number; toTime: number; meters: number; bridged: "trail" | "direct" }
 export type FixVerdict = "accepted" | "weak" | "too-fast" | "jitter";
-export interface TrackPoint { lat: number; lng: number; time: number; elevationFt: number | null; accuracyM: number; heading: number | null }
+export interface TrackPoint {
+  lat: number; lng: number; time: number; elevationFt: number | null; accuracyM: number; heading: number | null;
+  /** Set when the stretch arriving at this point wasn't measured by GPS (see Fix.filled / Fix.afterGap). */
+  estimated?: Estimate;
+}
 /** The trail being followed: its line and its DEM profile as [mile, feet] pairs. */
 export interface TrailProfile { route: Route; profile: [number, number][] }
 
@@ -78,6 +94,9 @@ export class TrackRecorder {
   /** Distance from the followed trail at the last accepted fix, in meters (null without a trail). */
   offTrailM: number | null = null;
   readonly gaps: TrackGap[] = [];
+  /** Of distanceM and gainFt, how much comes from stretches GPS didn't measure. */
+  estimatedDistanceM = 0;
+  estimatedGainFt = 0;
   private movingMs = 0;
   private slowMs = 0;
   private lastRaw: Fix | null = null;
@@ -117,30 +136,33 @@ export class TrackRecorder {
       const dt = (fix.time - last.time) / 1000;
       if (step < MIN_STEP_M) return "jitter";
       if (dt > 0 && step / dt > MAX_SPEED_MPH[this.activity] * MPS_PER_MPH) return "too-fast";
-      if (dt >= GAP_SEC && step >= GAP_MIN_M && !fix.filled) this.bridge(last, fix, step, dt);
+      if (dt >= GAP_SEC && step >= GAP_MIN_M && !fix.filled && !fix.afterGap) fix = { ...fix, afterGap: this.bridge(last, fix, step, dt) };
     }
     this.accept(fix);
     return "accepted";
   }
 
   /** Fills a GPS gap along the followed trail when both ends are on it; otherwise records a direct join. */
-  private bridge(from: Fix, to: Fix, step: number, dt: number) {
+  private bridge(from: Fix, to: Fix, step: number, dt: number): Estimate {
     const route = this.trail?.route;
     const a = route?.locate([from.lng, from.lat]), b = route?.locate([to.lng, to.lat]);
     const along = a && b ? b.alongMeters - a.alongMeters : 0;
     // On the trail at both ends, at a believable pace, and not a shortcut the trail itself goes far around.
     const onTrail = route && a && b && a.offMeters <= OFF_TRAIL_M && b.offMeters <= OFF_TRAIL_M && Math.abs(along) / dt <= MAX_SPEED_MPH[this.activity] * MPS_PER_MPH && Math.abs(along) <= step * 3 + 200;
-    if (!onTrail) { this.gaps.push({ fromTime: from.time, toTime: to.time, meters: step, bridged: "direct" }); return; }
+    if (!onTrail) { this.gaps.push({ fromTime: from.time, toTime: to.time, meters: step, bridged: "direct" }); return "direct"; }
     const n = Math.max(1, Math.round(Math.abs(along) / FILL_STEP_M));
     for (let i = 1; i < n; i++) {
       const at = route.pointAt(a.alongMeters + (along * i) / n);
       if (at) this.accept({ lat: at[1], lng: at[0], altitudeM: null, accuracyM: Math.max(from.accuracyM, to.accuracyM), time: from.time + ((to.time - from.time) * i) / n, filled: true });
     }
     this.gaps.push({ fromTime: from.time, toTime: to.time, meters: Math.abs(along), bridged: "trail" });
+    return "trail";
   }
 
   private accept(fix: Fix) {
     const prev = this.points[this.points.length - 1];
+    // A filled point, or the first real fix after a gap: the stretch arriving here wasn't measured.
+    const estimated: Estimate | undefined = fix.filled ? "trail" : fix.afterGap;
     const acc2 = Math.max(1, fix.accuracyM) ** 2;
     if (this.kVar < 0) { this.kLat = fix.lat; this.kLng = fix.lng; this.kVar = acc2; }
     else {
@@ -168,12 +190,17 @@ export class TrackRecorder {
     }
     if (elevationFt !== null) {
       if (this.eleRef === null) this.eleRef = elevationFt;
-      else if (elevationFt - this.eleRef >= GAIN_HYSTERESIS_FT) { this.gainFt += elevationFt - this.eleRef; this.eleRef = elevationFt; }
+      else if (elevationFt - this.eleRef >= GAIN_HYSTERESIS_FT) {
+        this.gainFt += elevationFt - this.eleRef;
+        if (estimated) this.estimatedGainFt += elevationFt - this.eleRef;
+        this.eleRef = elevationFt;
+      }
       else if (this.eleRef - elevationFt >= GAIN_HYSTERESIS_FT) this.eleRef = elevationFt;
     }
     if (prev) {
       const step = haversineM(prev.lat, prev.lng, lat, lng);
       this.distanceM += step;
+      if (estimated) this.estimatedDistanceM += step;
       const dt = fix.time - prev.time;
       if (dt > 0) {
         const mph = step / (dt / 1000) / MPS_PER_MPH;
@@ -188,7 +215,7 @@ export class TrackRecorder {
     }
     this.lastRaw = fix;
     this.accepted.push(fix);
-    this.points.push({ lat, lng, time: fix.time, elevationFt, accuracyM: fix.accuracyM, heading: fix.heading ?? null });
+    this.points.push({ lat, lng, time: fix.time, elevationFt, accuracyM: fix.accuracyM, heading: fix.heading ?? null, ...(estimated ? { estimated } : {}) });
   }
 }
 
@@ -197,4 +224,12 @@ export function trailProfile(lines: [number, number][][], profile: [number, numb
   // Chained end to end like the elevation profile (src/web/trail-service.ts), so "mile X" means the same on both.
   const route = new Route(chainLines(lines.filter((l) => l.length > 1)));
   return route.points.length > 1 && profile.length > 1 ? { route, profile } : null;
+}
+
+/** Track points as the GpsPoints the screen shows and the saved line is built from, keeping which were estimated. */
+export function toGpsPoints(points: TrackPoint[]): GpsPoint[] {
+  return points.map((p) => ({
+    lat: p.lat, lng: p.lng, altitude: p.elevationFt !== null ? p.elevationFt / 3.28084 : null, accuracy: p.accuracyM, speed: null, heading: p.heading, timestamp: p.time,
+    ...(p.estimated ? { estimated: p.estimated } : {}),
+  }));
 }

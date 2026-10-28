@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { GeoLineString } from "@/lib/types";
+import { routeRuns } from "@/lib/route-provenance";
 
 interface RouteMiniMapProps {
   route: GeoLineString | null;
@@ -13,7 +14,7 @@ interface RouteMiniMapProps {
 export function RouteMiniMap({ route, className = "" }: RouteMiniMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
-  const lineRef = useRef<L.Polyline | null>(null);
+  const lineRef = useRef<L.LayerGroup | null>(null);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -48,14 +49,15 @@ export function RouteMiniMap({ route, className = "" }: RouteMiniMapProps) {
     const latlngs = route.coordinates.map(
       ([lng, lat]) => [lat, lng] as L.LatLngExpression,
     );
-    if (lineRef.current) {
-      lineRef.current.setLatLngs(latlngs);
-    } else {
-      lineRef.current = L.polyline(latlngs, {
-        color: "#059669",
-        weight: 3,
-      }).addTo(map);
-    }
+    // Measured stretches solid; stretches GPS didn't measure (bridged while the phone paused GPS) dashed.
+    lineRef.current?.remove();
+    lineRef.current = L.layerGroup(
+      routeRuns(route).map((run) =>
+        L.polyline(run.coordinates.map(([lng, lat]) => [lat, lng] as L.LatLngExpression), run.estimated
+          ? { color: "#059669", weight: 3, opacity: 0.8, dashArray: "6 6" }
+          : { color: "#059669", weight: 3 }),
+      ),
+    ).addTo(map);
     map.fitBounds(L.latLngBounds(latlngs).pad(0.15), { maxZoom: 14 });
     map.invalidateSize();
   }, [route]);

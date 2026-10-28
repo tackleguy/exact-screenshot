@@ -96,6 +96,22 @@ export type ConfidenceLevel =
 export interface GeoLineString {
   type: "LineString";
   coordinates: [number, number, number?][];
+  /**
+   * Which stretches GPS didn't measure (see src/lib/route-provenance.ts). A GeoJSON "foreign member": readers that
+   * don't know it still get a valid line, and routes saved before it existed have none (every stretch measured).
+   */
+  estimated?: RouteEstimates;
+}
+
+/** Estimated stretches of a recorded route: coordinate index ranges, and how much of the totals they make up. */
+export interface RouteEstimates {
+  version: 1;
+  /** [from, to, kind]: the line from coordinates[from] to coordinates[to] was "trail" (placed along the followed
+   * trail) or "direct" (two fixes joined in a straight line) instead of measured. */
+  ranges: [number, number, "trail" | "direct"][];
+  /** Estimated part of the saved distance, in meters, and of the climb, in feet. */
+  meters: number;
+  gainFt: number;
 }
 
 export interface ElevationSample {
@@ -192,6 +208,8 @@ export interface GpsPoint {
   speed: number | null;
   heading: number | null;
   timestamp: number;
+  /** The stretch arriving at this point wasn't measured by GPS (filled along the trail, or a direct join). */
+  estimated?: "trail" | "direct";
 }
 
 export interface MapMarker {

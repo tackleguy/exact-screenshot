@@ -10,7 +10,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { computeHeading, mpsToMph, smoothSpeed } from "@/lib/gps";
-import { GAP_SEC, TrackRecorder, type Fix, type GpsActivity, type TrackGap, type TrailProfile } from "@/lib/gps-track";
+import { GAP_SEC, toGpsPoints, TrackRecorder, type Fix, type GpsActivity, type TrackGap, type TrailProfile } from "@/lib/gps-track";
 import { clearTrack, loadTrack, saveTrack, type SavedTrack } from "@/lib/track-store";
 import type { GpsPoint } from "@/lib/types";
 
@@ -43,6 +43,9 @@ export interface RecordingView {
   approximate: boolean;
   /** Estimated error of the filtered track position, in meters. */
   filteredAccuracyM: number | null;
+  /** How much of distanceM and gainFt GPS didn't measure (gaps bridged while the page was in the background). */
+  estimatedM: number;
+  estimatedGainFt: number;
 }
 
 /** Fixes this vague (or worse) mean the phone shares only an approximate location. */
@@ -56,7 +59,7 @@ type WakeLockSentinelLike = { release: () => Promise<void> };
 
 const INITIAL: RecordingView = {
   state: "idle", error: null, activity: "hike", title: "", trailId: null, returnUrl: null, points: [], distanceM: 0, gainFt: 0, movingSec: 0,
-  elapsedSec: 0, offTrail: false, offTrailM: null, current: null, weakGps: false, speedMph: 0, backgrounded: false, gap: null, savedTrack: null, approximate: false, filteredAccuracyM: null,
+  elapsedSec: 0, offTrail: false, offTrailM: null, current: null, weakGps: false, speedMph: 0, backgrounded: false, gap: null, savedTrack: null, approximate: false, filteredAccuracyM: null, estimatedM: 0, estimatedGainFt: 0,
 };
 
 class RecordingSession {
@@ -125,10 +128,11 @@ class RecordingSession {
 
   private publishTrack() {
     const r = this.recorder;
-    const points: GpsPoint[] = r.points.map((p) => ({ lat: p.lat, lng: p.lng, altitude: p.elevationFt !== null ? p.elevationFt / 3.28084 : null, accuracy: p.accuracyM, speed: null, heading: p.heading, timestamp: p.time }));
+    // Points keep whether GPS measured them, so the saved activity can mark estimated stretches.
+    const points: GpsPoint[] = toGpsPoints(r.points);
     const gap = r.gaps.length > this.gapsSeen ? r.gaps[r.gaps.length - 1] : this.view.gap;
     this.gapsSeen = r.gaps.length;
-    this.set({ points, distanceM: r.totalDistanceM, gainFt: Math.round(r.gainFt), movingSec: r.movingSec, offTrail: r.offTrail, offTrailM: r.offTrailM, gap });
+    this.set({ points, distanceM: r.totalDistanceM, gainFt: Math.round(r.gainFt), estimatedM: r.estimatedDistanceM, estimatedGainFt: Math.round(r.estimatedGainFt), movingSec: r.movingSec, offTrail: r.offTrail, offTrailM: r.offTrailM, gap });
   }
 
   private persist() {

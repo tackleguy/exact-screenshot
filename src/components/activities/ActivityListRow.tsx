@@ -4,8 +4,10 @@ import type { Activity } from "@/lib/types";
 import { ACTIVITY_LABELS } from "@/lib/types";
 import { formatDistance, formatDuration } from "@/lib/gps";
 import { RouteSparkline } from "@/components/activities/RouteSparkline";
+import { routeEstimates } from "@/lib/route-provenance";
 
 export function ActivityListRow({ activity }: { activity: Activity }) {
+  const estimatedM = Math.min(routeEstimates(activity.route_geojson)?.meters ?? 0, Number(activity.distance_m));
   const date = new Date(activity.started_at).toLocaleDateString(undefined, {
     weekday: "short",
     month: "short",
@@ -26,7 +28,8 @@ export function ActivityListRow({ activity }: { activity: Activity }) {
           {ACTIVITY_LABELS[activity.activity_type]} · {date}
         </p>
         <p className="mt-1 text-xs tabular-nums text-sage">
-          {formatDistance(Number(activity.distance_m))} ·{" "}
+          {formatDistance(Number(activity.distance_m))}
+          {estimatedM > 0 && <span title="Part of this distance was estimated while GPS was paused"> ({formatDistance(estimatedM)} est.)</span>} ·{" "}
           {formatDuration(activity.duration_sec)} ·{" "}
           {formatElevation(Number(activity.elevation_gain_ft))} ↑
         </p>

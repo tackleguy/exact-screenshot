@@ -1,3 +1,4 @@
+import { recordedLine } from "@/lib/route-provenance";
 import { formatMeters, formatPace as unitsPace, formatSpeed as unitsSpeed } from "@/lib/units";
 import type { GeoLineString, GpsPoint } from "@/lib/types";
 
@@ -61,13 +62,12 @@ export function computeTrackStats(points: GpsPoint[]) {
   return { distanceM, elevationGainFt: Math.round(elevationGainFt), durationSec };
 }
 
-export function pointsToGeoJSON(points: GpsPoint[]): GeoLineString {
-  return {
-    type: "LineString",
-    coordinates: points.map((p) =>
-      p.altitude !== null ? [p.lng, p.lat, p.altitude] : [p.lng, p.lat],
-    ),
-  };
+/**
+ * The recorded line to save. Stretches GPS didn't measure (a gap bridged while the page was in the background) are
+ * listed in its `estimated` member; see src/lib/route-provenance.ts.
+ */
+export function pointsToGeoJSON(points: GpsPoint[], estimatedGainFt = 0): GeoLineString {
+  return recordedLine(points, estimatedGainFt);
 }
 
 export function formatDuration(seconds: number): string {
