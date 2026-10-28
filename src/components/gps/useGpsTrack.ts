@@ -8,10 +8,11 @@ import { recording, useRecording, type RecorderState } from "@/lib/recording";
 export type { RecorderState };
 export type GpsQuality = "excellent" | "good" | "fair" | "poor" | "unknown";
 
-/** Green under 10 m, yellow 10–30 m, red over 30 m. */
+/** Excellent within 5 m (the target), good under 10 m, fair to 30 m, poor beyond. */
 export function qualityFromAccuracy(m: number | null): GpsQuality {
   if (m === null) return "unknown";
-  if (m < 10) return "excellent";
+  if (m <= 5) return "excellent";
+  if (m < 10) return "good";
   if (m <= 30) return "fair";
   return "poor";
 }
@@ -45,6 +46,8 @@ export function useGpsTrack({ activity = "hike", title = "", trailId = null, tra
     gpsQuality: qualityFromAccuracy(v.current?.accuracy ?? null),
     acquiringProgress: v.state === "acquiring" ? v.current?.accuracy ?? null : null,
     weakGps: v.weakGps,
+    approximate: v.approximate,
+    filteredAccuracy: v.filteredAccuracyM,
     distanceM: v.distanceM,
     elevationGainFt: v.gainFt,
     durationSec,

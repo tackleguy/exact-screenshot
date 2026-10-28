@@ -620,3 +620,4 @@ html { scroll-padding-block:20px 100px; }
 @keyframes recording-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .recording-pill i { animation: none; } }
 @media (max-width: 767px) { .recording-pill { top: auto; bottom: calc(84px + env(safe-area-inset-bottom)); } }
+.recorder-steps { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; list-style: disc; }

@@ -39,7 +39,16 @@ export interface RecordingView {
   /** The last GPS gap bridged, shown once when the page comes back. */
   gap: TrackGap | null;
   savedTrack: SavedTrack | null;
+  /** The phone is giving an approximate location (accuracy of hundreds of meters): Precise Location is off. */
+  approximate: boolean;
+  /** Estimated error of the filtered track position, in meters. */
+  filteredAccuracyM: number | null;
 }
+
+/** Fixes this vague (or worse) mean the phone shares only an approximate location. */
+const APPROXIMATE_M = 500;
+/** Recording waits this long for a fix within 10 m before settling for one within 30 m. */
+const PRECISE_WAIT_MS = 20_000;
 
 const WATCH: PositionOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: 10_000 };
 const SAVE_EVERY = 10;
@@ -47,7 +56,7 @@ type WakeLockSentinelLike = { release: () => Promise<void> };
 
 const INITIAL: RecordingView = {
   state: "idle", error: null, activity: "hike", title: "", trailId: null, returnUrl: null, points: [], distanceM: 0, gainFt: 0, movingSec: 0,
-  elapsedSec: 0, offTrail: false, offTrailM: null, current: null, weakGps: false, speedMph: 0, backgrounded: false, gap: null, savedTrack: null,
+  elapsedSec: 0, offTrail: false, offTrailM: null, current: null, weakGps: false, speedMph: 0, backgrounded: false, gap: null, savedTrack: null, approximate: false, filteredAccuracyM: null,
 };
 
 class RecordingSession {
@@ -65,6 +74,7 @@ class RecordingSession {
   private gapsSeen = 0;
   private wired = false;
   private checkedSaved = false;
+  private acquireSince = 0;
 
   subscribe = (listener: () => void) => {
     this.wire();
@@ -145,11 +155,12 @@ class RecordingSession {
   private onFix(position: GeolocationPosition) {
     const c = position.coords;
     const fix: Fix = { lat: c.latitude, lng: c.longitude, altitudeM: c.altitude, accuracyM: c.accuracy, time: position.timestamp || Date.now(), heading: c.heading };
-    const patch: Partial<RecordingView> = { weakGps: c.accuracy > 30 };
+    const patch: Partial<RecordingView> = { weakGps: c.accuracy > 30, approximate: c.accuracy >= APPROXIMATE_M };
     if (c.speed !== null && c.speed >= 0) { this.speedAvg = smoothSpeed(this.speedAvg, mpsToMph(c.speed)); patch.speedMph = this.speedAvg; }
     if (this.view.state === "acquiring") {
-      // Recording starts at the first fix good enough to keep.
-      if (c.accuracy > 30) { this.set({ ...patch, current: { lat: fix.lat, lng: fix.lng, accuracy: c.accuracy, altitudeFt: null, heading: null } }); return; }
+      // Recording starts at the first fix within 10 m, or within 30 m once 20 s have passed without one.
+      const enough = c.accuracy <= 10 || (c.accuracy <= 30 && Date.now() - this.acquireSince > PRECISE_WAIT_MS);
+      if (!enough) { this.set({ ...patch, current: { lat: fix.lat, lng: fix.lng, accuracy: c.accuracy, altitudeFt: null, heading: null } }); return; }
       this.startedAt ??= Date.now();
       patch.state = "recording";
       this.set(patch);
@@ -169,6 +180,7 @@ class RecordingSession {
     });
     if (verdict === "accepted") {
       this.publishTrack();
+      this.set({ filteredAccuracyM: r.filteredAccuracyM });
       if (r.accepted.length % SAVE_EVERY === 0) this.persist();
     }
   }
@@ -200,6 +212,7 @@ class RecordingSession {
     this.gapsSeen = this.recorder.gaps.length;
     this.set({ ...INITIAL, ...meta, ...(restore ? { activity: restore.activity, title: restore.title || meta.title, trailId: restore.trailId } : {}), state: restore ? "recording" : "acquiring", gap: null });
     this.publishTrack();
+    this.acquireSince = Date.now();
     this.tick(true);
     void this.keepAwake(true);
     this.watch();
