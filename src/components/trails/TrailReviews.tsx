@@ -14,8 +14,9 @@ const MISSING_KEY = "hyked:reviews-missing";
 let probe: Promise<boolean> | null = null;
 function reviewsReady(client: NonNullable<ReturnType<typeof createClient>>): Promise<boolean> {
   try { if (sessionStorage.getItem(MISSING_KEY)) return Promise.resolve(false); } catch { /* storage unavailable */ }
-  probe ??= Promise.resolve(client.from("catalog_trail_reviews").select("id", { head: true }).limit(1)).then(({ status }) => {
-    if (status !== 404) return true;
+  // A one-row read: a HEAD request can't tell (supabase-js reports a missing table's HEAD as 204, no error).
+  probe ??= Promise.resolve(client.from("catalog_trail_reviews").select("id").limit(1)).then(({ status, error }) => {
+    if (status !== 404 && error?.code !== "PGRST205") return true;
     try { sessionStorage.setItem(MISSING_KEY, "1"); } catch { /* storage unavailable */ }
     return false;
   }, () => { probe = null; return true; });
