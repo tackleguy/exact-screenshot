@@ -81,6 +81,7 @@ function slim(t: CatalogTrail): CatalogTrail {
 }
 
 async function main() {
+  const __t0=Date.now();const lap=(m:string)=>console.log(`[prep ${((Date.now()-__t0)/1000).toFixed(1)}s] ${m}`);
   const root = path.resolve("data/trail-catalog");
   const pointer = JSON.parse(await readFile(path.join(root, "current.json"), "utf8"));
   if (!/^snapshot-\d+$/.test(pointer.directory)) throw new Error("Invalid trail snapshot");
@@ -174,6 +175,7 @@ async function main() {
     if (Object.keys(data).length) await writeFile(path.join(output, `geometry-${shard}.json.gz`), zipped(data));
   }
 
+  lap("geometry done");
   // ---- cleanup (src/lib/trail-catalog/cleanup.ts): names, route type from the line, rating, junk, near-duplicates ----
   const tally = { renamed: 0, review: 0, routeTypes: 0, dropped: 0, merged: 0 };
   const lineCache = new Map<string, Record<string, [number, number][][]>>();
@@ -228,8 +230,10 @@ async function main() {
     return kept;
   };
 
+  lap("cleanup defined");
   // ---- U.S. and Canada: trails by 2° cell; a trail is listed in every cell its line passes through ----
   const naRows = await cleanup(rows);
+  lap("NA cleanup done");
   const cells = new Map<string, CatalogTrail[]>();
   for (const row of naRows) {
     const b = boundsById.get(row.id);
@@ -240,6 +244,7 @@ async function main() {
   for (const t of naRows) { index(t); count(t); pageOf(t); }
   for (const [from, to] of Object.entries(redirects)) setRecord(from, JSON.stringify(`r:${to}`));
 
+  lap("NA written");
   // ---- worldwide, one country file at a time ----
   const world = manifest.world as { files: Record<string, { rows: number; sha256: string }> } | undefined;
   const worldCells: Record<string, string[]> = {};
@@ -267,6 +272,7 @@ async function main() {
     worldRows += data.rows.length;
   }
 
+  lap("world done");
   // ---- indexes ----
   const writeText = (file: string, text: string) => writeFile(path.join(output, file), gzipSync(text));
   for (const [key, entries] of searchFiles) await writeText(`q/${key}.json.gz`, `[${entries.join(",")}]`);
