@@ -18,6 +18,7 @@ import { TrailHighlights } from "./TrailHighlights";
 import { TrailReviews } from "./TrailReviews";
 import { estimatedTime } from "./TrailStats";
 import { describeTrail } from "@/lib/trail-catalog/describe";
+import { permitLinks } from "@/lib/trip/permits";
 import { cleanTrailName } from "@/lib/trail-catalog/cleanup";
 import "./catalog.css";
 import { trailSacScale } from "@/lib/trail-catalog/types";
@@ -48,6 +49,7 @@ export function CatalogTrailDetail({
     ...(t.region && !isRoute && !t.region.includes("·") && (t.country === "US" || t.country === "CA") ? { region: t.region } : {}),
   });
   const difficulty = trailDifficulty(t);
+  const permits = permitLinks(t);
 
   return (
     <article className="catalog-shell catalog-detail">
@@ -135,6 +137,15 @@ export function CatalogTrailDetail({
         <details className="trail-more">
           <summary><span>Along the trail</span><small>Water, campsites, shelters and viewpoints by mile</small></summary>
           <TrailFeatureList trailId={t.id} hasLine={hasLines} />
+        </details>
+      )}
+      {permits.length > 0 && (
+        <details className="trail-more">
+          <summary><span>Permits &amp; reservations</span><small>Where to get permits and book camping</small></summary>
+          <ul className="trail-permits">
+            {permits.map((p) => <li key={p.url}><a href={p.url} target="_blank" rel="noopener noreferrer">{p.label}</a>{p.note && <small>{p.note}</small>}</li>)}
+          </ul>
+          <p className="catalog-muted">Rules, quotas and fire restrictions change. Confirm on the official page before you go.</p>
         </details>
       )}
       <details className="trail-more">

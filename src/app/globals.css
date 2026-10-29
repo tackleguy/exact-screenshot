@@ -622,3 +622,32 @@ html { scroll-padding-block:20px 100px; }
 @media (max-width: 767px) { .recording-pill { top: auto; bottom: calc(84px + env(safe-area-inset-bottom)); } }
 .recorder-steps { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; list-style: disc; }
 .activity-estimated-note { margin: 10px 0; padding: 10px 12px; border-left: 3px dashed #059669; border-radius: 6px; background: var(--surface-muted); color: var(--foreground); font-size: 13px; line-height: 1.5; }
+
+/* Backpacking mode on the recorder: what's next, and campsites, water, towns and permits along the trail. */
+.backpack-panel { margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-xl, 16px); background: var(--surface-elevated); color: var(--cream); }
+.backpack-panel h2 { margin: 0 0 10px; font-size: 18px; font-weight: 700; }
+.backpack-next { list-style: none; padding: 0; margin: 0 0 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.backpack-next li { display: grid; gap: 2px; padding: 10px; border-radius: 10px; background: var(--surface-muted); min-width: 0; }
+.backpack-next small { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sage); }
+.backpack-next strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.backpack-next span { font-size: 12px; color: var(--sage); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backpack-next--water { box-shadow: inset 3px 0 0 #2f7fd8; }
+.backpack-next--camp { box-shadow: inset 3px 0 0 #2f9e5b; }
+.backpack-next--town { box-shadow: inset 3px 0 0 #d8a02f; }
+.backpack-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface-muted); margin-bottom: 10px; }
+.backpack-tabs button { padding: 8px 4px; border: 0; border-radius: 8px; background: transparent; color: var(--sage); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.backpack-tabs button[aria-selected="true"] { background: var(--accent); color: var(--on-accent, #10291f); }
+.backpack-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; max-height: 360px; overflow: auto; }
+.backpack-list li { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+.backpack-list li.is-passed { opacity: 0.5; }
+.backpack-mile { font-size: 12px; color: var(--sage); font-variant-numeric: tabular-nums; }
+.backpack-name { display: grid; min-width: 0; }
+.backpack-name strong { font-size: 14px; overflow-wrap: anywhere; }
+.backpack-name small { font-size: 12px; color: var(--sage); }
+.backpack-link { font-size: 13px; color: var(--accent); white-space: nowrap; }
+.backpack-permits { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.backpack-permits li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--surface-muted); }
+.backpack-permits a { color: var(--accent); font-weight: 600; }
+.backpack-permits small { color: var(--sage); font-size: 12px; }
+.backpack-help { margin: 8px 0; font-size: 13px; color: var(--sage); }
+.backpack-attrib { margin: 10px 0 0; font-size: 11px; color: var(--sage); }

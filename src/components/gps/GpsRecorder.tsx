@@ -19,6 +19,8 @@ import { formatDuration as formatClock, formatPace } from "@/lib/gps";
 // The 3D view reuses the trail map (MapLibre), loaded only when asked for.
 const Map3d = dynamic(() => import("@/components/trails/CatalogMapViewGl").then((m) => m.CatalogMapView), { ssr: false });
 import { ACTIVITY_LABELS, type ActivityType } from "@/lib/types";
+import type { CatalogTrail } from "@/lib/trail-catalog/types";
+import { BackpackPanel } from "./BackpackPanel";
 
 interface GpsRecorderProps {
   activityType: ActivityType;
@@ -27,6 +29,8 @@ interface GpsRecorderProps {
   skiAreaId?: string;
   skiAreaName?: string;
   autoStart?: boolean;
+  /** "Backpacking trip" from the trail page: campsites, water, towns and permits along the trail. */
+  backpack?: boolean;
 }
 
 export function GpsRecorder({
@@ -36,6 +40,7 @@ export function GpsRecorder({
   skiAreaId,
   skiAreaName,
   autoStart = false,
+  backpack = false,
 }: GpsRecorderProps) {
   const router = useRouter();
   const location = useLocationPermission();
@@ -43,7 +48,7 @@ export function GpsRecorder({
   const [locationConfirmed, setLocationReady] = useState(false);
   // The trail being followed ("Start trail" on a trail page): its line on the live map, and its DEM profile so
   // climb is measured from elevation data rather than GPS altitude while on the trail.
-  const [trail, setTrail] = useState<{ name: string; lines: [number, number][][]; profile: TrailProfile | null } | null>(null);
+  const [trail, setTrail] = useState<{ name: string; lines: [number, number][][]; profile: TrailProfile | null; record: CatalogTrail } | null>(null);
   useEffect(() => {
     if (!trailId) return;
     const controller = new AbortController();
@@ -51,8 +56,8 @@ export function GpsRecorder({
     Promise.all([
       fetch(`/api/trail-catalog/${id}`, { signal: controller.signal }).then((r) => (r.ok ? r.json() : null)),
       fetch(`/api/trail-catalog/${id}/elevation`, { signal: controller.signal }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-    ]).then(([d, e]: [{ trail?: { name: string }; lines?: [number, number][][] } | null, { profile?: [number, number][] } | null]) => {
-      if (d?.trail) setTrail({ name: d.trail.name, lines: d.lines ?? [], profile: d.lines && e?.profile ? trailProfile(d.lines, e.profile) : null });
+    ]).then(([d, e]: [{ trail?: CatalogTrail; lines?: [number, number][][] } | null, { profile?: [number, number][] } | null]) => {
+      if (d?.trail) setTrail({ name: d.trail.name, lines: d.lines ?? [], profile: d.lines && e?.profile ? trailProfile(d.lines, e.profile) : null, record: d.trail });
     }).catch(() => undefined);
     return () => controller.abort();
   }, [trailId]);
@@ -153,7 +158,7 @@ export function GpsRecorder({
     >
       {/* Header */}
       <div className="mb-6 text-center">
-        <p className="section-label">{ACTIVITY_LABELS[activityType]}</p>
+        <p className="section-label">{backpack ? "Backpacking trip" : ACTIVITY_LABELS[activityType]}</p>
         <h1 className="mt-1 truncate font-display text-2xl font-semibold text-cream">{(isActive && gps.recordingTitle) || title}</h1>
         {(trailId || skiAreaName) && (
           <p className="mt-1 truncate text-xs text-accent">
@@ -227,6 +232,10 @@ export function GpsRecorder({
             isActive ? "h-40" : "h-52 sm:h-60",
           )}
         />
+      )}
+
+      {backpack && trailId && (
+        <BackpackPanel trailId={trailId} trail={trail?.record ?? null} lines={trail?.lines ?? []} position={gps.currentLat !== null && gps.currentLng !== null ? [gps.currentLng, gps.currentLat] : null} />
       )}
 
       {/* Gauges */}
