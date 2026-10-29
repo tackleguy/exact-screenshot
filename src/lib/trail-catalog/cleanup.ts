@@ -57,7 +57,10 @@ export function isJunkSegment(t: Pick<CatalogTrail, "name" | "miles" | "kind" | 
 
 /** Route type from the line: loop, out & back, point to point, or a trail segment when it can't be told. */
 export function routeTypeFromLines(lines: LngLat[][]): "loop" | "out-and-back" | "point-to-point" | "segment" {
-  const pieces = chainLines(lines.filter((l) => l.length >= 2));
+  const usable = lines.filter((l) => l.length >= 2);
+  // Chaining is quadratic in the number of pieces; a relation mapped as hundreds of ways is a network, not one path.
+  if (usable.length > 150) return "segment";
+  const pieces = chainLines(usable);
   if (!pieces.length) return "segment";
   // Pieces only count as one path when each starts where the last ended (within 50 m).
   for (let i = 1; i < pieces.length; i++) {

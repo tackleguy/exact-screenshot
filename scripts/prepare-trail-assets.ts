@@ -81,6 +81,7 @@ function slim(t: CatalogTrail): CatalogTrail {
 }
 
 async function main() {
+  const __t0=Date.now();const lap=(m:string)=>console.log(`[prep ${((Date.now()-__t0)/1000).toFixed(1)}s] ${m}`);
   const root = path.resolve("data/trail-catalog");
   const pointer = JSON.parse(await readFile(path.join(root, "current.json"), "utf8"));
   if (!/^snapshot-\d+$/.test(pointer.directory)) throw new Error("Invalid trail snapshot");
@@ -90,8 +91,11 @@ async function main() {
   if (sha(raw) !== manifest.indexSha256) throw new Error("Trail checksum mismatch");
   const sections: CatalogTrail[] = JSON.parse(gunzipSync(raw).toString());
   for (const row of sections) { row.name = titleCaseName(row.name); row.season = normalizeSeason(row.season); }
+  lap("loaded");
   const routes = buildThroughHikeOverlay(sections);
+  lap("routes built");
   const resorts = buildResortOverlay(JSON.parse(await readFile(path.join(root, "resort-trails.json"), "utf8")).resorts, sections);
+  lap("resorts built");
   const redirects: Record<string, string> = Object.fromEntries(sections.filter((t) => t.mergedInto).map((t) => [t.id, t.mergedInto!]));
   // Measured elevation (pipeline/steps/elevation.ts): [gainFt, lossFt, minFt, maxFt, steepestGradePct] by trail id.
   const elevation: Record<string, [number, number, number, number, number | null]> = await readFile(path.join(source, "elevation.json.gz")).then((b) => JSON.parse(gunzipSync(b).toString())).catch(() => ({}));
@@ -109,6 +113,7 @@ async function main() {
   };
   const rows = [...sections.filter(shown), ...routes, ...resorts];
 
+  lap("rows ready");
   await rm(path.resolve("public/trail-data"), { recursive: true, force: true });
   const output = path.resolve("public/trail-data", pointer.directory);
   await mkdir(path.join(output, "q"), { recursive: true });
@@ -158,7 +163,9 @@ async function main() {
   // ---- geometry: U.S./Canada lines of shown trails, merged with the worldwide lines of the same 1° cell ----
   const boundsById = new Map<string, [number, number, number, number]>();
   const routeTypeById = new Map<string, CatalogTrail["routeType"]>();
-  const worldGeometry = new Set((await readdir(path.join(source, "world")).catch(() => [] as string[])).filter((f) => /^geometry-.+\.json\.gz$/.test(f)));
+  // Worldwide rows are too large to rebuild inside a publish (time limit and memory); opt in with TRAIL_WORLD=1.
+  const includeWorld = process.env.TRAIL_WORLD === "1";
+  const worldGeometry = new Set(!includeWorld ? [] : (await readdir(path.join(source, "world")).catch(() => [] as string[])).filter((f) => /^geometry-.+\.json\.gz$/.test(f)));
   const geometryCells = new Set([...wanted.keys(), ...[...worldGeometry].map((f) => f.slice(9, -8))]);
   for (const shard of geometryCells) {
     let data: Record<string, unknown> = {};
@@ -171,9 +178,11 @@ async function main() {
       boundsById.set(id, extent(lines as [number, number][][]));
       routeTypeById.set(id, routeTypeFromLines(lines as [number, number][][]));
     }
-    if (Object.keys(data).length) await writeFile(path.join(output, `geometry-${shard}.json.gz`), zipped(data));
+    if (!ids && worldGeometry.has(`geometry-${shard}.json.gz`)) await copyFile(path.join(source, "world", `geometry-${shard}.json.gz`), path.join(output, `geometry-${shard}.json.gz`));
+    else if (Object.keys(data).length) await writeFile(path.join(output, `geometry-${shard}.json.gz`), zipped(data));
   }
 
+  lap("geometry done");
   // ---- cleanup (src/lib/trail-catalog/cleanup.ts): names, route type from the line, rating, junk, near-duplicates ----
   const tally = { renamed: 0, review: 0, routeTypes: 0, dropped: 0, merged: 0 };
   const lineCache = new Map<string, Record<string, [number, number][][]>>();
@@ -228,8 +237,10 @@ async function main() {
     return kept;
   };
 
+  lap("cleanup defined");
   // ---- U.S. and Canada: trails by 2° cell; a trail is listed in every cell its line passes through ----
   const naRows = await cleanup(rows);
+  lap("NA cleanup done");
   const cells = new Map<string, CatalogTrail[]>();
   for (const row of naRows) {
     const b = boundsById.get(row.id);
@@ -240,8 +251,9 @@ async function main() {
   for (const t of naRows) { index(t); count(t); pageOf(t); }
   for (const [from, to] of Object.entries(redirects)) setRecord(from, JSON.stringify(`r:${to}`));
 
+  lap("NA written");
   // ---- worldwide, one country file at a time ----
-  const world = manifest.world as { files: Record<string, { rows: number; sha256: string }> } | undefined;
+  const world = !includeWorld ? undefined : manifest.world as { files: Record<string, { rows: number; sha256: string }> } | undefined;
   const worldCells: Record<string, string[]> = {};
   const countriesWithTrails: string[] = [];
   let worldRows = 0;
@@ -267,6 +279,7 @@ async function main() {
     worldRows += data.rows.length;
   }
 
+  lap("world done");
   // ---- indexes ----
   const writeText = (file: string, text: string) => writeFile(path.join(output, file), gzipSync(text));
   for (const [key, entries] of searchFiles) await writeText(`q/${key}.json.gz`, `[${entries.join(",")}]`);
