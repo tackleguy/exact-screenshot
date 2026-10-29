@@ -163,7 +163,9 @@ async function main() {
   // ---- geometry: U.S./Canada lines of shown trails, merged with the worldwide lines of the same 1° cell ----
   const boundsById = new Map<string, [number, number, number, number]>();
   const routeTypeById = new Map<string, CatalogTrail["routeType"]>();
-  const worldGeometry = new Set((await readdir(path.join(source, "world")).catch(() => [] as string[])).filter((f) => /^geometry-.+\.json\.gz$/.test(f)));
+  // Worldwide rows are too large to rebuild inside a publish (time limit and memory); opt in with TRAIL_WORLD=1.
+  const includeWorld = process.env.TRAIL_WORLD === "1";
+  const worldGeometry = new Set(!includeWorld ? [] : (await readdir(path.join(source, "world")).catch(() => [] as string[])).filter((f) => /^geometry-.+\.json\.gz$/.test(f)));
   const geometryCells = new Set([...wanted.keys(), ...[...worldGeometry].map((f) => f.slice(9, -8))]);
   for (const shard of geometryCells) {
     let data: Record<string, unknown> = {};
@@ -251,7 +253,7 @@ async function main() {
 
   lap("NA written");
   // ---- worldwide, one country file at a time ----
-  const world = manifest.world as { files: Record<string, { rows: number; sha256: string }> } | undefined;
+  const world = !includeWorld ? undefined : manifest.world as { files: Record<string, { rows: number; sha256: string }> } | undefined;
   const worldCells: Record<string, string[]> = {};
   const countriesWithTrails: string[] = [];
   let worldRows = 0;
