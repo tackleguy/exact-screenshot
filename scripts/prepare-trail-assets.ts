@@ -176,7 +176,8 @@ async function main() {
       boundsById.set(id, extent(lines as [number, number][][]));
       routeTypeById.set(id, routeTypeFromLines(lines as [number, number][][]));
     }
-    if (Object.keys(data).length) await writeFile(path.join(output, `geometry-${shard}.json.gz`), zipped(data));
+    if (!ids && worldGeometry.has(`geometry-${shard}.json.gz`)) await copyFile(path.join(source, "world", `geometry-${shard}.json.gz`), path.join(output, `geometry-${shard}.json.gz`));
+    else if (Object.keys(data).length) await writeFile(path.join(output, `geometry-${shard}.json.gz`), zipped(data));
   }
 
   lap("geometry done");
