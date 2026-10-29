@@ -18,3 +18,4 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - Trail catalog navigation and forms target /explore/trails/catalog so filters, collections and pagination do not accidentally open the map workspace.
 - Keep homepage promotion isolated from account activity views in a shared presentation component so appearance updates preserve signed-in history and trail navigation.
 - The browser account client falls back to the project's built-in public URL and publishable key when build-time env values are missing, because published builds may run without env files.
+- The publish-time trail asset step (scripts/prepare-trail-assets.ts) builds U.S./Canada only; worldwide rows need TRAIL_WORLD=1 because they exceed the publish time and memory limits.
