@@ -91,8 +91,11 @@ async function main() {
   if (sha(raw) !== manifest.indexSha256) throw new Error("Trail checksum mismatch");
   const sections: CatalogTrail[] = JSON.parse(gunzipSync(raw).toString());
   for (const row of sections) { row.name = titleCaseName(row.name); row.season = normalizeSeason(row.season); }
+  lap("loaded");
   const routes = buildThroughHikeOverlay(sections);
+  lap("routes built");
   const resorts = buildResortOverlay(JSON.parse(await readFile(path.join(root, "resort-trails.json"), "utf8")).resorts, sections);
+  lap("resorts built");
   const redirects: Record<string, string> = Object.fromEntries(sections.filter((t) => t.mergedInto).map((t) => [t.id, t.mergedInto!]));
   // Measured elevation (pipeline/steps/elevation.ts): [gainFt, lossFt, minFt, maxFt, steepestGradePct] by trail id.
   const elevation: Record<string, [number, number, number, number, number | null]> = await readFile(path.join(source, "elevation.json.gz")).then((b) => JSON.parse(gunzipSync(b).toString())).catch(() => ({}));
@@ -110,6 +113,7 @@ async function main() {
   };
   const rows = [...sections.filter(shown), ...routes, ...resorts];
 
+  lap("rows ready");
   await rm(path.resolve("public/trail-data"), { recursive: true, force: true });
   const output = path.resolve("public/trail-data", pointer.directory);
   await mkdir(path.join(output, "q"), { recursive: true });
