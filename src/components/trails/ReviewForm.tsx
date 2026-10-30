@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { friendlyError } from "@/lib/errors";
 import type { Difficulty, Review } from "@/lib/types";
 import { DIFFICULTY_OPTIONS } from "@/lib/trail-difficulty";
 
@@ -43,7 +44,7 @@ export function ReviewForm({
 
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error ?? "Something went wrong");
+      setError(friendlyError(data.error, "Your review couldn’t be saved right now."));
       setLoading(false);
       return;
     }

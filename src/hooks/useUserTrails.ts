@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { friendlyError } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import type { PackTrail } from "@/lib/gear";
@@ -23,7 +24,7 @@ export function useUserTrails(userId: string) {
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false });
-      if (error) setMessage(error.message);
+      if (error) setMessage(friendlyError(error, "Your trails couldn’t load right now."));
       else
         setTrails(
           (data ?? []).map((r) => ({
@@ -61,7 +62,7 @@ export function useUserTrails(userId: string) {
       .select()
       .single();
     if (error) {
-      setMessage(error.message);
+      setMessage(friendlyError(error, "That change couldn’t be saved right now."));
       return;
     }
     setTrails((prev) => [{ ...trail, id: String(data.id) }, ...prev]);
@@ -73,7 +74,7 @@ export function useUserTrails(userId: string) {
     if (!supabase) return;
     const { error } = await supabase.from("user_trails").delete().eq("id", id);
     if (error) {
-      setMessage(error.message);
+      setMessage(friendlyError(error, "That change couldn’t be saved right now."));
       return;
     }
     setTrails((prev) => prev.filter((t) => t.id !== id));

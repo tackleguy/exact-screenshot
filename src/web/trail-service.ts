@@ -1,3 +1,4 @@
+import { friendlyError } from "@/lib/errors";
 import { parseCatalogFilters, filterCatalog, normalize, distanceKm } from "@/lib/trail-catalog/search";
 import type { CatalogTrail, CatalogManifest } from "@/lib/trail-catalog/types";
 import { buildCatalogMap } from "@/lib/trail-catalog/map";
@@ -702,7 +703,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
 
     return Response.json({ error: "Action not supported." }, { status: 404 });
   } catch (error) {
-    return Response.json({ error: error instanceof Error ? error.message : "Trail data could not load." }, { status: 503 });
+    return Response.json({ error: friendlyError(error, "Trail data could not load. Try again in a moment.") }, { status: 503 });
   }
 }
 /** [id, name, lng, lat, country, region, locality, activity codes, runs, lifts, top m, base m, website] */

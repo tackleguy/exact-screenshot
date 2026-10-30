@@ -1,5 +1,6 @@
 "use client";
 import { useSyncExternalStore } from "react";
+import { friendlyError } from "@/lib/errors";
 
 /**
  * Account sync status shown in the sidebar, plus a small in-memory retry queue: a write that fails because the
@@ -56,7 +57,7 @@ export async function cloudWrite(write: () => PromiseLike<{ error?: { message: s
       set({ state: "offline", pending: queue.length + active, message: "" });
       return true;
     }
-    set({ state: "error", pending: queue.length + active, message: error instanceof Error ? error.message : String((error as { message?: string })?.message ?? error) });
+    set({ state: "error", pending: queue.length + active, message: friendlyError(error, "A change couldn’t be saved yet. It will retry.") });
     return false;
   }
 }
@@ -71,7 +72,7 @@ export async function trackCloud<T>(work: () => Promise<T>): Promise<T> {
     return result;
   } catch (error) {
     active--;
-    set(isNetworkError(error) ? { state: "offline", pending: queue.length + active } : { state: "error", pending: queue.length + active, message: error instanceof Error ? error.message : "A change could not be saved." });
+    set(isNetworkError(error) ? { state: "offline", pending: queue.length + active } : { state: "error", pending: queue.length + active, message: friendlyError(error, "A change couldn’t be saved yet. It will retry.") });
     throw error;
   }
 }
@@ -84,7 +85,7 @@ export async function flushQueue() {
     catch (error) {
       if (isNetworkError(error)) { set({ state: "offline", pending: queue.length }); return; }
       queue.shift();
-      set({ state: "error", message: error instanceof Error ? error.message : "A change could not be saved." });
+      set({ state: "error", message: friendlyError(error, "A change couldn’t be saved yet. It will retry.") });
     }
   }
   set({ state: "synced", lastSyncedAt: Date.now(), pending: 0 });

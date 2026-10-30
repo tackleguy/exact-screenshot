@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { friendlyError } from "@/lib/errors";
 import type { ElevationProfile } from "@/lib/trip/elevation";
 import { steepestGrade } from "@/lib/trip/grade";
 import { formatElevation, formatGrade, formatMeters, useUnits } from "@/lib/units";
@@ -36,7 +37,7 @@ export function TrailElevationSection({ trailId, stored, difficulty }: { trailId
     const controller = new AbortController();
     fetch(`/api/trail-catalog/${encodeURIComponent(trailId)}/elevation`, { signal: controller.signal })
       .then(async (r) => { const data = await r.json(); if (!r.ok) throw new Error(data.error ?? "Elevation couldn’t be loaded."); setLoad({ state: "ready", data }); })
-      .catch((e: Error) => { if (e.name !== "AbortError") setLoad({ state: "error", message: e.message }); });
+      .catch((e: Error) => { if (e.name !== "AbortError") setLoad({ state: "error", message: friendlyError(e, "Elevation couldn’t be loaded right now.") }); });
     return () => controller.abort();
   }, [trailId]);
 

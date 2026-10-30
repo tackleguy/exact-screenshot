@@ -1,6 +1,7 @@
 "use client";
 
 import { formatDistance, formatElevation } from "@/lib/units";
+import { friendlyError } from "@/lib/errors";
 import { useRef, useState } from "react";
 
 interface GpxRouteUploadProps {
@@ -58,7 +59,7 @@ export function GpxRouteUpload({ trailId, className = "" }: GpxRouteUploadProps)
 
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import failed");
+      setError(friendlyError(err, "That file couldn’t be imported. Check it’s a GPX file and try again."));
     } finally {
       setLoading(false);
     }

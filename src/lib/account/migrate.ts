@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { friendlyError } from "@/lib/errors";
 import { emptyMemory, parseMemory } from "@/lib/assistant/memory";
 import type { PlannerMemory } from "@/lib/assistant/types";
 import { gearToRow, planToRow, profileIsEmpty } from "./planner-cloud";
@@ -73,7 +74,7 @@ export function cloudRows(planner: PlannerMemory, routes: GuestSavedRoute[], use
 
 async function must(result: PromiseLike<{ error: { message: string } | null }>) {
   const { error } = await result;
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyError(error, "Your saved items couldn’t be moved to your account yet. They stay on this device."));
 }
 
 /** Write a guest's or legacy data into the account. Existing account preferences are kept unless empty. */

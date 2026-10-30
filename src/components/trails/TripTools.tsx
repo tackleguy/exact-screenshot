@@ -1,6 +1,7 @@
 "use client";
 
 import { formatDistance } from "@/lib/units";
+import { friendlyError } from "@/lib/errors";
 import { useEffect, useMemo, useState } from "react";
 import { useMyGear } from "@/lib/account/my-gear";
 import type { WaterReport } from "@/lib/trip/water";
@@ -20,7 +21,7 @@ function useJson<T>(url: string | null): Load<T> {
     const controller = new AbortController();
     fetch(url, { signal: controller.signal })
       .then(async (r) => { const data = await r.json(); if (!r.ok) throw new Error(data.error ?? "Couldn’t load this."); setState({ state: "ready", data }); })
-      .catch((e: Error) => { if (e.name !== "AbortError") setState({ state: "error", message: e.message }); });
+      .catch((e: Error) => { if (e.name !== "AbortError") setState({ state: "error", message: friendlyError(e, "Trip details couldn’t load right now.") }); });
     return () => controller.abort();
   }, [url]);
   return url ? state : { state: "error", message: "Not available for this trail." };

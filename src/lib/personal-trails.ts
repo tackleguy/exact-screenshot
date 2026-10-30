@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import { friendlyError } from "@/lib/errors";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { guest, guestChanged, subscribeGuest } from "@/lib/account/guest";
@@ -65,7 +66,7 @@ export async function uploadTrailPhoto(client: SupabaseClient, userId: string, t
   const ext = (photo.name.split(".").pop() || photo.type.split("/")[1] || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5) || "jpg";
   const path = `${userId}/${trailId}-${Date.now()}.${ext}`;
   const { error } = await client.storage.from(BUCKET).upload(path, photo, { contentType: photo.type || undefined, upsert: false });
-  if (error) throw new Error(`The photo could not be uploaded: ${error.message}`);
+  if (error) throw new Error(friendlyError(error, "The photo couldn’t be uploaded. Try a smaller image, or save without it."));
   return path;
 }
 
@@ -74,7 +75,7 @@ export async function listPersonalTrails(): Promise<PersonalTrail[]> {
   if (!s) return guestTrails().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   return trackCloud(async () => {
     const { data, error } = await s.client.from("personal_trails").select(COLUMNS).order("updated_at", { ascending: false }).limit(500);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(friendlyError(error, "Your trails couldn’t be reached right now. Try again in a moment."));
     return Promise.all((data as Row[]).map(row => withPhoto(s.client, row)));
   });
 }
@@ -85,7 +86,7 @@ export async function getPersonalTrail(id: string): Promise<PersonalTrail | null
   const s = await session();
   if (!s || !/^[0-9a-f-]{36}$/i.test(id)) return null;
   const { data, error } = await s.client.from("personal_trails").select(COLUMNS).eq("id", id).maybeSingle();
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyError(error, "Your trails couldn’t be reached right now. Try again in a moment."));
   return data ? withPhoto(s.client, data as Row) : null;
 }
 
@@ -93,7 +94,7 @@ export async function getSharedPersonalTrail(token: string): Promise<PersonalTra
   const client = createClient();
   if (!client || !/^[A-Za-z0-9_-]{16,128}$/.test(token)) return null;
   const { data, error } = await client.rpc("get_shared_personal_trail", { token });
-  if (error) throw new Error(error.message);
+  if (error) throw new Error(friendlyError(error, "Your trails couldn’t be reached right now. Try again in a moment."));
   const row = (Array.isArray(data) ? data[0] : data) as Row | undefined;
   return row ? withPhoto(client, row) : null;
 }
@@ -122,7 +123,7 @@ export async function savePersonalTrail(input: PersonalTrailInput): Promise<Pers
       ? s.client.from("personal_trails").update(row).eq("id", id).select(COLUMNS).single()
       : s.client.from("personal_trails").insert({ id, user_id: s.userId, ...row }).select(COLUMNS).single();
     const { data, error } = await query;
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(friendlyError(error, "Your trails couldn’t be reached right now. Try again in a moment."));
     changed();
     return withPhoto(s.client, data as Row);
   });
@@ -140,7 +141,7 @@ export async function deletePersonalTrail(id: string): Promise<void> {
   await trackCloud(async () => {
     const { data } = await s.client.from("personal_trails").select("photo_path").eq("id", id).maybeSingle();
     const { error } = await s.client.from("personal_trails").delete().eq("id", id);
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(friendlyError(error, "Your trails couldn’t be reached right now. Try again in a moment."));
     if (data?.photo_path) await s.client.storage.from(BUCKET).remove([data.photo_path]);
   });
   changed();
@@ -151,7 +152,7 @@ export async function setPersonalTrailSharing(id: string, isPublic: boolean): Pr
   if (!s) throw new Error("Sign in to share a trail. Trails you build as a guest are kept only for this visit.");
   return trackCloud(async () => {
     const { data, error } = await s.client.from("personal_trails").update({ is_public: isPublic }).eq("id", id).select(COLUMNS).single();
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(friendlyError(error, "Your trails couldn’t be reached right now. Try again in a moment."));
     changed();
     return withPhoto(s.client, data as Row);
   });

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { friendlyError } from "@/lib/errors";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -27,7 +28,7 @@ export function AuthCallback() {
       router.replace(next);
       router.refresh();
     };
-    finish().catch((e: unknown) => setError(e instanceof Error ? e.message : "Sign-in could not be completed."));
+    finish().catch((e: unknown) => setError(friendlyError(e, "Sign-in could not be completed.")));
   }, [router]);
   return (
     <section className="fieldbook-page">

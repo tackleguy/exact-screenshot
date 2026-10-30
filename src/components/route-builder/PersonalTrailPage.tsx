@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { friendlyError } from "@/lib/errors";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { deletePersonalTrail, getPersonalTrail, getSharedPersonalTrail, setPersonalTrailSharing, type PersonalTrail } from "@/lib/personal-trails";
@@ -37,7 +38,7 @@ export function PersonalTrailPage({ id, token }: { id?: string; token?: string }
     let live = true;
     (id ? getPersonalTrail(id) : getSharedPersonalTrail(token ?? ""))
       .then((trail) => { if (live) setLoaded({ key, trail }); })
-      .catch((e: unknown) => { if (live) setLoaded({ key, trail: null, error: e instanceof Error ? e.message : "This trail couldn’t load." }); });
+      .catch((e: unknown) => { if (live) setLoaded({ key, trail: null, error: friendlyError(e, "This trail couldn’t load.") }); });
     return () => { live = false; };
   }, [id, token, key]);
 
@@ -76,7 +77,7 @@ export function PersonalTrailPage({ id, token }: { id?: string; token?: string }
       const next = await setPersonalTrailSharing(trail!.id, !trail!.isPublic);
       setLoaded({ key, trail: next });
       setNotice(next.isPublic ? "Anyone with the link can view this trail." : "Sharing is off. The old link no longer works.");
-    } catch (e) { setNotice(e instanceof Error ? e.message : "Sharing couldn’t be changed."); }
+    } catch (e) { setNotice(friendlyError(e, "Sharing couldn’t be changed.")); }
   }
   async function copyLink() {
     if (!shareUrl) return;
@@ -84,7 +85,7 @@ export function PersonalTrailPage({ id, token }: { id?: string; token?: string }
   }
   async function remove() {
     try { await deletePersonalTrail(trail!.id); router.push("/explore/trails"); }
-    catch (e) { setNotice(e instanceof Error ? e.message : "The trail couldn’t be deleted."); }
+    catch (e) { setNotice(friendlyError(e, "The trail couldn’t be deleted.")); }
   }
 
   return (

@@ -1,6 +1,7 @@
 "use client";
 
 import { isGearStorageMissing } from "@/lib/assistant/gear-storage";
+import { friendlyError } from "@/lib/errors";
 import { cleanStoredProductDetails } from "@/lib/assistant/product-details";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
@@ -34,7 +35,8 @@ export function useGear(userId: string) {
     void supabase.from("gear_items").select("*").eq("user_id", userId).order("created_at")
       .then(({ data, error: failure }) => {
         if (!active) return;
-        setError(failure?.message ?? null);
+        // A missing gear table falls back to this device (storageMissing); anything else gets one plain sentence.
+        setError(failure && !isGearStorageMissing(failure) ? friendlyError(failure, "Your gear couldn’t load right now.") : null);
         setStorageMissing(isGearStorageMissing(failure));
         if (!failure) setGear((data ?? []).map(mapGear));
         setLoading(false);
@@ -55,7 +57,7 @@ export function useGear(userId: string) {
       .select()
       .single();
     if (err) {
-      setError(err.message);
+      setError(friendlyError(err, "Your gear couldn’t be saved right now."));
       return false;
     }
     if (data) setGear((prev) => [...prev, mapGear(data)]);
@@ -71,7 +73,7 @@ export function useGear(userId: string) {
       .update(toRow(item))
       .eq("id", id);
     if (err) {
-      setError(err.message);
+      setError(friendlyError(err, "Your gear couldn’t be saved right now."));
       return false;
     }
     setGear((prev) => prev.map((g) => (g.id === id ? { ...item, id } : g)));
@@ -87,7 +89,7 @@ export function useGear(userId: string) {
       .delete()
       .eq("id", id);
     if (err) {
-      setError(err.message);
+      setError(friendlyError(err, "Your gear couldn’t be saved right now."));
       return false;
     }
     setGear((prev) => prev.filter((g) => g.id !== id));

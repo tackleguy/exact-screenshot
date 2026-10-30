@@ -66,9 +66,11 @@ export function useRatings(ids: string[]) {
   return state?.key === key ? state.byId : new Map<string, { average: number; count: number }>();
 }
 
-/** Stars and the review count for a card; outlined stars and "No reviews" when nobody has rated it yet. */
+/** Stars and the review count for a card, once the trail has a rating. */
 export function CardRating({ rating }: { rating?: { average: number; count: number } }) {
-  return <span className="card-rating"><Stars value={rating ? rating.average : null} size={13} /><small>{rating ? `${rating.average.toFixed(1)} (${rating.count})` : "No reviews"}</small></span>;
+  // Cards stay quiet until a trail has been rated: no row of empty stars on every card.
+  if (!rating) return null;
+  return <span className="card-rating"><Stars value={rating ? rating.average : null} size={13} /><small>{`${rating.average.toFixed(1)} (${rating.count})`}</small></span>;
 }
 
 /** Five stars filled to `value` (out of 5); outlined when there is no rating yet. */
@@ -111,13 +113,15 @@ export function TrailReviews({ trailId, name }: { trailId: string; name: string 
     setStatus(null); setOpen(false); setBody(""); reload();
   };
 
+  // Until the reviews table exists (its migration applied), the section stays out of the way entirely.
+  if (loaded && !available) return null;
   return (
     <section className="trail-reviews" aria-labelledby="trail-reviews-heading">
       <div className="trail-reviews-head">
         <h2 id="trail-reviews-heading">Reviews</h2>
         <div className="trail-reviews-summary"><Stars value={average} size={18} /><span>{count ? `${average!.toFixed(1)} · ${count} ${count === 1 ? "review" : "reviews"}` : "No reviews yet"}</span></div>
       </div>
-      {loaded && count === 0 && <p className="catalog-muted">{available ? `Be the first to review ${name}.` : "Reviews aren’t available right now."}</p>}
+      {loaded && count === 0 && <p className="catalog-muted">{`Be the first to review ${name}.`}</p>}
       {reviews.length > 0 && (
         <ul className="trail-review-list">
           {reviews.map((r) => (

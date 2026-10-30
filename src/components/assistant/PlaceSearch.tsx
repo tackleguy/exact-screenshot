@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { friendlyError } from "@/lib/errors";
 import type { TripPlace, TripRequest } from "@/lib/assistant/types";
 export function PlaceSearch({ request, onChange }: { request: TripRequest; onChange: (patch: Partial<TripRequest>) => void }) {
   const [places, setPlaces] = useState<TripPlace[]>([]);
@@ -17,7 +18,7 @@ export function PlaceSearch({ request, onChange }: { request: TripRequest; onCha
       fetch(`/api/assistant/places?q=${encodeURIComponent(region)}`, { signal: controller.signal })
         .then(async response => { const data = await response.json(); if (!response.ok) throw new Error(data.error); return data; })
         .then(data => { if (active) { setPlaces(data.places); if (!data.places.length) setError("No US or Canadian place found. Add the state or province, or try a nearby town."); } })
-        .catch(error => { if (active) setError(controller.signal.aborted ? "Place lookup timed out. Search again." : error.message); })
+        .catch(error => { if (active) setError(controller.signal.aborted ? "Place lookup timed out. Search again." : friendlyError(error, "Place search isn’t working right now. Try again.")); })
         .finally(() => { clearTimeout(timer); if (active) setBusy(false); });
     }, 650);
     return () => { active = false; controller.abort(); clearTimeout(timer); clearTimeout(debounce); };

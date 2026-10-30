@@ -1,5 +1,6 @@
 "use client";
 import { createClient } from "@/lib/supabase/client";
+import { friendlyError } from "@/lib/errors";
 import { handOffGuestBeforeRedirect } from "./guest";
 import { lovable } from "@/integrations/lovable";
 
@@ -35,11 +36,11 @@ export async function signInWithGoogle(next: string): Promise<string | null> {
   handOffGuestBeforeRedirect();
   if (viaLovableBroker()) {
     const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: callbackUrl(next) });
-    if (result.error) return result.error.message;
+    if (result.error) return friendlyError(result.error, "Sign-in isn’t working right now. Try again in a moment.");
     // Popup sign-in (editor preview) finishes here; a redirect finishes on /auth/callback.
     if (!result.redirected) window.location.assign(safeNext(next));
     return null;
   }
   const { error } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: callbackUrl(next) } });
-  return error ? error.message : null;
+  return error ? friendlyError(error, "Sign-in isn’t working right now. Try again in a moment.") : null;
 }

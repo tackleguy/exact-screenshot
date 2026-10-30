@@ -283,7 +283,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                           {t.sections && t.sections.length > 0 ? ` · ${t.sections.length} sections` : ""}
                           {t.summitElevationFt ? ` · Summit ${t.summitElevationFt.toLocaleString()} ft` : ""}
                         </p>
-                        <p className="card-meta"><CardRating rating={ratings.get(t.id)} />{here && <small>{formatMeters(metersBetween(here, [t.longitude, t.latitude]))} away</small>}</p>
+                        {(ratings.has(t.id) || here) && <p className="card-meta"><CardRating rating={ratings.get(t.id)} />{here && <small>{formatMeters(metersBetween(here, [t.longitude, t.latitude]))} away</small>}</p>}
                       </div>
                       <span className="catalog-distance">
                         {displayMiles(t.miles)}

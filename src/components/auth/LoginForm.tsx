@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { friendlyError } from "@/lib/errors";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -33,7 +34,7 @@ export function LoginForm() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(friendlyError(error, "Sign-in isn’t working right now. Try again in a moment."));
       setLoading(false);
       return;
     }

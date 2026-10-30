@@ -1,6 +1,7 @@
 "use client";
 
 import { formatElevation, formatMeters } from "@/lib/units";
+import { friendlyError } from "@/lib/errors";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as maplibregl from "@/lib/maplibre";
@@ -707,7 +708,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
             for (const p of d.line) bounds.extend(p);
             mapRef.current?.fitBounds(bounds, { padding: { top: 140, bottom: 320, left: 60, right: 80 }, duration: 900 });
           })
-          .catch((error: Error) => setDriveState(error.message || "Directions are unavailable right now. Use Google or Apple Maps."));
+          .catch((error: Error) => setDriveState(friendlyError(error, "Directions are unavailable right now. Use Google or Apple Maps.")));
       },
       () => setDriveState("Location is off. Allow location, or open Google or Apple Maps."),
       { enableHighAccuracy: false, timeout: 12_000, maximumAge: 300_000 },
@@ -994,7 +995,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
                     <div className="hx-card-title">
                       <h3>{name}</h3>
                       <p>{joinParts([place, routeType && ROUTE_LABEL[routeType]]) ?? "Location not recorded"}</p>
-                      <p className="card-meta"><CardRating rating={ratings.get(id)} />{away && <small>{away}</small>}</p>
+                      {(ratings.has(id) || away) && <p className="card-meta"><CardRating rating={ratings.get(id)} />{away && <small>{away}</small>}</p>}
                     </div>
                     <SaveHeart trailId={id} name={name} className="save-heart--card" />
                     {active && weather && (weather.temperatureF ?? weather.lowF) !== undefined && (

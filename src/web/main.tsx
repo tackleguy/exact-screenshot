@@ -25,6 +25,7 @@ import { SkiAreaDetailPage } from "@/components/ski/SkiAreaDetailPage";
 import { GpsRecorder } from "@/components/gps/GpsRecorder";
 import { EstimatedRouteNote } from "@/components/activities/EstimatedRouteNote";
 import { routeEstimates } from "@/lib/route-provenance";
+import { friendlyError, isMissingTable } from "@/lib/errors";
 import { ActivityListRow } from "@/components/activities/ActivityListRow";
 import { ActivityStats } from "@/components/activities/ActivityStats";
 import { RouteMiniMap } from "@/components/activities/RouteMiniMap";
@@ -87,7 +88,7 @@ function Catalog() {
     Promise.all([
       fetch(`/api/trail-catalog?${query}`, { signal: controller.signal }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error); return data as CatalogResult; }),
       fetch(`/api/trail-catalog/map?${query}`, { signal: controller.signal }).then(res => res.ok ? res.json() : undefined).catch(() => undefined),
-    ]).then(([result, map]) => { if (!controller.signal.aborted) setState({ result, map, for: query }); }).catch(error => { if (!controller.signal.aborted) setState({ error: error.message, for: query }); });
+    ]).then(([result, map]) => { if (!controller.signal.aborted) setState({ result, map, for: query }); }).catch(error => { if (!controller.signal.aborted) setState({ error: friendlyError(error, "Trails couldn’t load right now. Try again in a moment."), for: query }); });
     return () => controller.abort();
   }, [query, waiting]);
   if (state.for === query && state.error) return <Status title="Trail catalog unavailable">{state.error}</Status>;
@@ -112,7 +113,7 @@ function TrailDetail() {
       fetch(`/api/trail-catalog/${encodeURIComponent(id)}`, { signal: controller.signal }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error); return data; }),
       fetch("/api/trail-catalog?limit=1", { signal: controller.signal }).then(res => res.json()),
     ]).then(([detail, catalog]) => { if (!controller.signal.aborted) setLoaded({ id, ...detail, manifest: catalog.manifest }); })
-      .catch(error => { if (!controller.signal.aborted) setLoaded({ id, error: error.message }); });
+      .catch(error => { if (!controller.signal.aborted) setLoaded({ id, error: friendlyError(error, "This trail couldn’t load right now. Try again in a moment.") }); });
     return () => controller.abort();
   }, [id]);
   const state = loaded?.id === id ? loaded : null;
@@ -165,13 +166,13 @@ function SkiAreaDetail() { const { slug } = useParams(); return <SkiAreaDetailPa
 function Recorder() { const { search } = useLocation(); const params = new URLSearchParams(search); const type = params.get("type"); const activity: ActivityType = type === "run" || type === "bike" || type === "ski" ? type : "hike"; return <GpsRecorder activityType={activity} title={params.get("name")?.slice(0, 120) || `${activity.charAt(0).toUpperCase()}${activity.slice(1)}`} trailId={params.get("trail_id") ?? undefined} backpack={params.get("trip") === "backpack"} skiAreaId={params.get("resort_id") ?? undefined} skiAreaName={params.get("resort_name") ?? undefined} autoStart={Boolean(params.get("trail_id") || params.get("resort_id"))} />; }
 function ActivityFeed({ profile = false }: { profile?: boolean }) {
   const { user } = useAccount(); const [activities, setActivities] = useState<Activity[]>([]); const [error, setError] = useState("");
-  useEffect(() => { const client = createClient(); if (!user || !client) return; let active = true; client.from("activities").select("*, trail:trails(*, park:parks(*))").eq("user_id", user.id).eq("status", "completed").order("started_at", { ascending: false }).limit(50).then(({ data, error }) => { if (active) { setActivities((data ?? []) as Activity[]); setError(error?.message ?? ""); } }); return () => { active = false; }; }, [user?.id]);
-  return <section className="fieldbook-page"><h1>{profile ? user?.user_metadata?.first_name || "Your profile" : "Your outings"}</h1>{profile && <p>{user?.email}</p>}<Link className="btn-ghost" href="/record">Record an activity</Link>{error && <p role="alert">{error}</p>}<div className="mt-6">{activities.map(activity => <ActivityListRow key={activity.id} activity={activity} />)}{activities.length === 0 && !error && <p>No activities yet.</p>}</div></section>;
+  useEffect(() => { const client = createClient(); if (!user || !client) return; let active = true; client.from("activities").select("*, trail:trails(*, park:parks(*))").eq("user_id", user.id).eq("status", "completed").order("started_at", { ascending: false }).limit(50).then(({ data, error }) => { if (active) { setActivities((data ?? []) as Activity[]); setError(error && !isMissingTable(error) ? friendlyError(error, "Your activities couldn’t load right now.") : ""); } }); return () => { active = false; }; }, [user?.id]);
+  return <section className="fieldbook-page"><h1>{profile ? user?.user_metadata?.first_name || "Your profile" : "Your outings"}</h1>{profile && <p>{user?.email}</p>}<Link className="btn-ghost" href="/record">Record an activity</Link>{error && <p className="catalog-muted" role="status">{error}</p>}<div className="mt-6">{activities.map(activity => <ActivityListRow key={activity.id} activity={activity} />)}{activities.length === 0 && !error && <p>No activities yet.</p>}</div></section>;
 }
 function ActivityDetail() {
   const { id } = useParams(); const [activity, setActivity] = useState<Activity | null>(null); const [error, setError] = useState("");
-  useEffect(() => { const client = createClient(); if (!client) return; let active = true; client.from("activities").select("*, trail:trails(*, park:parks(*))").eq("id", id).single().then(({ data, error }) => { if (active) { setActivity(data as Activity | null); setError(error?.message ?? ""); } }); return () => { active = false; }; }, [id]);
-  if (error) return <Status title="Activity unavailable">{error}</Status>;
+  useEffect(() => { const client = createClient(); if (!client) return; let active = true; client.from("activities").select("*, trail:trails(*, park:parks(*))").eq("id", id).single().then(({ data, error }) => { if (active) { setActivity(data as Activity | null); setError(error ? "This activity isn’t available." : ""); } }); return () => { active = false; }; }, [id]);
+  if (error) return <Status title="Activity unavailable"><p>{error}</p><Link className="btn-ghost" href="/you">Your activities</Link></Status>;
   if (!activity) return <Status title="Loading activity…" />;
   return <section className="fieldbook-page"><Link className="btn-ghost" href="/you">← Your activities</Link><h1>{activity.title}</h1><RouteMiniMap route={activity.route_geojson} className="h-80 w-full" /><EstimatedRouteNote route={activity.route_geojson} /><ActivityStats distanceM={Number(activity.distance_m)} durationSec={Number(activity.duration_sec)} elevationGainFt={Number(activity.elevation_gain_ft)} estimates={routeEstimates(activity.route_geojson)} /><p>{activity.notes}</p></section>;
 }
