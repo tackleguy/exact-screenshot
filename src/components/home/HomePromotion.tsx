@@ -3,17 +3,22 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ArrowUpRight, Search } from "lucide-react";
-import { headlineCount, type CatalogManifest, type CatalogTrail } from "@/lib/trail-catalog/types";
+import { countryName, headlineCount, type CatalogManifest, type CatalogTrail } from "@/lib/trail-catalog/types";
 import { join, miles as fmtMiles } from "@/lib/display";
 import discovery from "@/assets/trail-discovery.jpg";
 import { TRAIL_SECTIONS } from "@/lib/trail-catalog/activity";
 import { SectionIcon } from "@/components/explore/SectionIcon";
 import { locate, timezoneRegion, useKnownPosition } from "@/lib/start-location";
-import { DIFFICULTY_COLORS, DIFFICULTY_LABELS, trailDifficulty } from "@/lib/trail-difficulty";
-import { trailThumbnail } from "@/lib/trail-catalog/thumbnail";
+import { DIFFICULTY_LABELS, trailDifficulty } from "@/lib/trail-difficulty";
+import { trailSatellite, trailThumbnail } from "@/lib/trail-catalog/thumbnail";
+import { useRouter } from "next/navigation";
+import { TrailCard } from "@/components/ui/trail-card";
+import { Reveal } from "@/components/ui/reveal";
+import { estimatedTime } from "@/components/trails/TrailStats";
+import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { SaveHeart } from "@/components/trails/SaveHeart";
 import { metersBetween } from "@/lib/geo/line";
-import { formatMeters } from "@/lib/units";
+import { formatDistance, formatElevation, formatMeters } from "@/lib/units";
 
 const photo = typeof discovery === "string" ? discovery : discovery.src;
 /** Famous long-distance trails: Hyked guides first, then worldwide classics found by search. */
@@ -27,10 +32,12 @@ const LONG_TRAILS = [
   { name: "Milford Track", detail: "New Zealand · 33 mi", href: "/explore/trails/catalog?q=milford+track" },
   { name: "Kungsleden", detail: "Swedish Lapland", href: "/explore/trails/catalog?q=kungsleden" },
 ];
+/** Places to start when we don't know where the visitor is. Photos: Unsplash; Zion uses satellite imagery. */
+const unsplash = (id: string) => `https://images.unsplash.com/${id}?w=800&q=70&auto=format&fit=crop`;
 const destinations = [
-  { name: "Yosemite", detail: "Granite peaks & waterfall walks", lat: 37.745, lng: -119.596 },
-  { name: "Mount Rainier", detail: "Alpine meadows & mountain air", lat: 46.852, lng: -121.76 },
-  { name: "Zion", detail: "Red cliffs & canyon trails", lat: 37.298, lng: -113.026 },
+  { name: "Yosemite", detail: "Granite peaks & waterfall walks", region: "California", lat: 37.745, lng: -119.596, image: unsplash("photo-1426604966848-d7adac402bff"), distance: "800+ mi of trails", elevation: "2,000–13,000 ft", duration: "Day hikes to weeks" },
+  { name: "Mount Rainier", detail: "Alpine meadows & mountain air", region: "Washington", lat: 46.852, lng: -121.76, image: unsplash("photo-1464822759023-fed622ff2c3b"), distance: "260+ mi of trails", elevation: "1,600–14,410 ft", duration: "Day hikes to 2 weeks" },
+  { name: "Zion", detail: "Red cliffs & canyon trails", region: "Utah", lat: 37.298, lng: -113.026, image: null, distance: "90+ mi of trails", elevation: "3,700–8,700 ft", duration: "Day hikes to 3 days" },
 ];
 
 /**
@@ -63,6 +70,7 @@ function useCatalogCount() {
 
 export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
   const nearby = useNearby();
+  const router = useRouter();
   const here = useKnownPosition();
   const manifest = useCatalogCount();
   const [photoFailed, setPhotoFailed] = useState(false);
@@ -80,39 +88,77 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
     <section className="home-destinations">
       <div className="home-section-heading"><div><p className="section-label">{nearby.trails.length ? (nearby.place ? `IN ${nearby.place.toUpperCase()}` : "NEAR YOU") : "FIND YOUR NEXT ESCAPE"}</p><h2>{nearby.trails.length ? "Trails near me" : "Somewhere worth going."}</h2></div><Link href="/explore/trails/catalog" className="fieldbook-text-link">Browse trails <ArrowUpRight size={16} aria-hidden /></Link></div>
       {nearby.trails.length ? (
-        <div className="home-near-grid">
-          {nearby.trails.map((t) => {
+        <div className="home-trail-cards">
+          {nearby.trails.map((t, i) => {
             const level = trailDifficulty(t);
+            const open = () => router.push(`/explore/trails/${encodeURIComponent(t.id)}`);
             return (
-              <div key={t.id} className="home-near-card">
-                <Link href={`/explore/trails/${encodeURIComponent(t.id)}`}>
-                  {/* eslint-disable-next-line @next/next/no-img-element -- remote static map picture */}
-                  <img src={trailThumbnail(t, 320, 180)} alt="" loading="lazy" width={320} height={180} />
-                  <h3>{t.name}</h3>
-                  <p><i style={{ background: DIFFICULTY_COLORS[level] }} aria-hidden="true" />{join([DIFFICULTY_LABELS[level], fmtMiles(t.miles), here ? `${formatMeters(metersBetween(here, [t.longitude, t.latitude]))} away` : t.park ?? t.forest ?? t.region])}</p>
-                </Link>
-                <SaveHeart trailId={t.id} name={t.name} className="save-heart--card" />
-              </div>
+              <Reveal key={t.id} delay={i * 0.08}>
+                <TrailCard
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`${t.name}: ${DIFFICULTY_LABELS[level]}, ${fmtMiles(t.miles) ?? "distance unknown"}`}
+                  onClick={open}
+                  onKeyDown={(e) => { if (e.key === "Enter") open(); }}
+                  imageUrl={trailSatellite(t)}
+                  mapImageUrl={trailThumbnail(t, 160, 80)}
+                  title={t.name}
+                  location={join([t.park ?? t.forest, t.region]) ?? countryName(t.country)}
+                  difficulty={DIFFICULTY_LABELS[level]}
+                  creators={join([here ? `${formatMeters(metersBetween(here, [t.longitude, t.latitude]))} away` : null, t.manager]) ?? "Mapped trail"}
+                  distance={formatDistance(t.miles) ?? "—"}
+                  elevation={formatElevation(t.gainFt) ?? "—"}
+                  duration={estimatedTime({ miles: t.miles, gainFt: t.gainFt ?? null, lossFt: t.lossFt, steepestGradePct: t.steepestGradePct, routeType: t.routeType, difficulty: level }) ?? "—"}
+                  onDirectionsClick={() => window.open(googleMapsDirectionsUrl(t.trailhead?.latitude ?? t.latitude, t.trailhead?.longitude ?? t.longitude), "_blank", "noopener")}
+                  corner={<SaveHeart trailId={t.id} name={t.name} className="save-heart--card" />}
+                />
+              </Reveal>
             );
           })}
         </div>
       ) : (
-        <div className="home-destination-grid">{destinations.map((place, index) => <Link key={place.name} href={`/explore/trails?lat=${place.lat}&lng=${place.lng}&z=11`} className="home-destination"><span className="home-destination-number">0{index + 1}</span><div><h3>{place.name}</h3><p>{place.detail}</p></div><ArrowUpRight size={22} aria-hidden /></Link>)}</div>
+        <div className="home-trail-cards">
+          {destinations.map((place, i) => {
+            const open = () => router.push(`/explore/trails?lat=${place.lat}&lng=${place.lng}&z=11`);
+            const spot = { latitude: place.lat, longitude: place.lng, bounds: [place.lng - 0.12, place.lat - 0.09, place.lng + 0.12, place.lat + 0.09] as [number, number, number, number] };
+            return (
+              <Reveal key={place.name} delay={i * 0.08}>
+                <TrailCard
+                  role="link"
+                  tabIndex={0}
+                  aria-label={`Explore trails in ${place.name}`}
+                  onClick={open}
+                  onKeyDown={(e) => { if (e.key === "Enter") open(); }}
+                  imageUrl={place.image ?? trailSatellite(spot)}
+                  mapImageUrl={trailThumbnail(spot, 160, 80)}
+                  title={place.name}
+                  location={place.region}
+                  difficulty="All levels"
+                  creators={place.detail}
+                  distance={place.distance}
+                  elevation={place.elevation}
+                  duration={place.duration}
+                  onDirectionsClick={() => window.open(googleMapsDirectionsUrl(place.lat, place.lng), "_blank", "noopener")}
+                />
+              </Reveal>
+            );
+          })}
+        </div>
       )}
     </section>
     <section className="home-activities" aria-label="Trails by activity">
       <div className="home-section-heading"><div><p className="section-label">EVERY WAY OUTSIDE</p><h2>Pick your adventure.</h2></div></div>
-      <div className="home-activity-grid">
+      <Reveal className="home-activity-grid">
         {TRAIL_SECTIONS.map((s) => <Link key={s.key} href={`/explore/trails?activity=${s.activity}`} className="home-activity"><SectionIcon section={s.key} size={26} /><span><strong>{s.label}</strong><small>{s.blurb}</small></span></Link>)}
         <Link href="/explore/ski" className="home-activity"><SectionIcon section="snow" size={26} /><span><strong>Ski areas</strong><small>Every ski area worldwide, with runs and lifts</small></span></Link>
-      </div>
+      </Reveal>
     </section>
     <section className="home-long-trails" aria-label="Famous long-distance trails">
       <div className="home-section-heading"><div><p className="section-label">THE BIG ONES</p><h2>Legendary long trails.</h2></div><Link href="/explore/trails/catalog?collection=thru-hikes" className="fieldbook-text-link">All through-hikes <ArrowUpRight size={16} aria-hidden /></Link></div>
-      <div className="home-long-grid">
+      <Reveal className="home-long-grid">
         {LONG_TRAILS.map((t) => <Link key={t.name} href={t.href} className="home-long"><strong>{t.name}</strong><small>{t.detail}</small><ArrowUpRight size={18} aria-hidden /></Link>)}
-      </div>
+      </Reveal>
     </section>
-    <section className="home-invitation"><h2>Make the next one yours.</h2><Link href={signedIn ? "/explore/trails" : "/signup"} className="btn-primary">{signedIn ? "Find your next trail" : "Join Hyked"}<ArrowUpRight size={18} aria-hidden /></Link>{!signedIn && <p>Already part of the adventure? <Link href="/login">Sign in</Link></p>}</section>
+    <Reveal><section className="home-invitation"><h2>Make the next one yours.</h2><Link href={signedIn ? "/explore/trails" : "/signup"} className="btn-primary">{signedIn ? "Find your next trail" : "Join Hyked"}<ArrowUpRight size={18} aria-hidden /></Link>{!signedIn && <p>Already part of the adventure? <Link href="/login">Sign in</Link></p>}</section></Reveal>
   </div>;
 }

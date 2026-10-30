@@ -367,3 +367,11 @@
 /* Photo credit: one short line on a dark backing so it never wraps into the badges or vanishes on bright imagery. */
 .trail-hero-credit { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: calc(100% - 1.5rem) !important; padding: 2px 8px; border-radius: 6px; background: rgb(0 0 0 / 0.45); opacity: 1 !important; }
 .trail-hero-text { padding-top: 2.4rem; }
+/* "Start trail" choice: day hike or backpacking trip. */
+.trail-start-wrap { position: relative; }
+.trail-start-choice { position: absolute; z-index: 8; top: calc(100% + 6px); left: 0; display: grid; gap: 4px; width: min(320px, calc(100vw - 32px)); padding: 6px; border-radius: var(--radius-lg, 12px); background: var(--surface-elevated); box-shadow: var(--overlay-shadow); }
+.trail-start-choice a { display: grid; gap: 2px; padding: 10px 12px; border-radius: 8px; color: var(--foreground); text-decoration: none; }
+.trail-start-choice a:hover, .trail-start-choice a:focus-visible { background: var(--surface-muted); }
+.trail-start-choice strong { font-size: 15px; }
+.trail-start-choice span { font-size: 13px; color: var(--sage); }
+.trail-permits { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; } .trail-permits li { display: grid; gap: 2px; } .trail-permits small { color: var(--sage); font-size: 0.85rem; }

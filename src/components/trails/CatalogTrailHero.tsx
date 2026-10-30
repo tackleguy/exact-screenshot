@@ -34,6 +34,7 @@ export function CatalogTrailHero({ trail: t, difficulty, hasLines }: { trail: Ca
   const [photos, setPhotos] = useState<{ id: string; list: CatalogPhoto[] } | null>(null);
   const { average, count } = useTrailRating(t.id);
   const [shared, setShared] = useState<string | null>(null);
+  const [startOpen, setStartOpen] = useState(false);
   const [gainFor, setGainFor] = useState<{ id: string; gainFt: number } | null>(null);
   useEffect(() => {
     let live = true;
@@ -89,10 +90,32 @@ export function CatalogTrailHero({ trail: t, difficulty, hasLines }: { trail: Ca
     </header>
       {/* Sticky action bar, outside the header so it stays in reach all the way down the page. */}
       <div className="trail-actions trail-actions--sticky">
-        <Link className="catalog-button trail-start" href={`/record/live?${new URLSearchParams({ trail_id: t.id, name: t.name, type: recordType(t) })}`}>
-          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
-          Start trail
-        </Link>
+        {recordType(t) === "hike" ? (
+          // Hiking trails ask how: a day hike, or a backpacking trip (campsites, water, towns and permits on the way).
+          <div className="trail-start-wrap">
+            <button type="button" className="catalog-button trail-start" aria-expanded={startOpen} aria-controls="trail-start-choice" onClick={() => setStartOpen((v) => !v)}>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
+              Start trail
+            </button>
+            {startOpen && (
+              <div id="trail-start-choice" className="trail-start-choice" role="group" aria-label="How are you doing this trail?">
+                <Link href={`/record/live?${new URLSearchParams({ trail_id: t.id, name: t.name, type: "hike" })}`}>
+                  <strong>Day hike</strong>
+                  <span>Record your hike with live stats</span>
+                </Link>
+                <Link href={`/record/live?${new URLSearchParams({ trail_id: t.id, name: t.name, type: "hike", trip: "backpack" })}`}>
+                  <strong>Backpacking trip</strong>
+                  <span>Campsites, water, towns and permits along the way</span>
+                </Link>
+              </div>
+            )}
+          </div>
+        ) : (
+          <Link className="catalog-button trail-start" href={`/record/live?${new URLSearchParams({ trail_id: t.id, name: t.name, type: recordType(t) })}`}>
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>
+            Start trail
+          </Link>
+        )}
         <a className="catalog-button secondary" href={googleMapsDirectionsUrl(head.latitude, head.longitude)} target="_blank" rel="noopener noreferrer">Directions</a>
         <SaveHeart trailId={t.id} name={t.name} label className="catalog-button secondary" />
         <button type="button" className="catalog-button secondary" onClick={share}>{shared ?? "Share"}</button>

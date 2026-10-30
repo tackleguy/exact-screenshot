@@ -10,6 +10,8 @@ import { SectionIcon } from "@/components/explore/SectionIcon";
 import { CATALOG_ACTIVITY_LABELS, TRAIL_SECTIONS, sectionOf } from "@/lib/trail-catalog/activity";
 import "@/components/trails/catalog.css";
 import { SaveHeart } from "@/components/trails/SaveHeart";
+import { motion } from "framer-motion";
+import { staggerItem } from "@/components/ui/reveal";
 import { CardRating, useRatings } from "@/components/trails/TrailReviews";
 import { trailThumbnail } from "@/lib/trail-catalog/thumbnail";
 import { useKnownPosition } from "@/lib/start-location";
@@ -254,8 +256,8 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
           {trails.length > 0 ? (
             <>
               <ul className="catalog-list">
-                {trails.map((t) => (
-                  <li key={t.id} className="catalog-list-item">
+                {trails.map((t, i) => (
+                  <motion.li key={t.id} className="catalog-list-item" {...staggerItem(i)}>
                     <Link href={`/explore/trails/${encodeURIComponent(t.id)}`} prefetch={false} className="catalog-row">
                       {/* eslint-disable-next-line @next/next/no-img-element -- remote static map picture */}
                       <img className="catalog-row-thumb" src={trailThumbnail(t)} alt="" loading="lazy" width={80} height={60} />
@@ -289,7 +291,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                       <NavIcon name="chevron" />
                     </Link>
                     <SaveHeart trailId={t.id} name={t.name} className="save-heart--card catalog-row-heart" />
-                  </li>
+                  </motion.li>
                 ))}
               </ul>
               {preview ? (

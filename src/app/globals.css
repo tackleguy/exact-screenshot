@@ -2,30 +2,30 @@
 
 :root {
   color-scheme: dark;
-  --background: #141814;
-  --foreground: #ece8df;
-  --surface: #1e241e;
-  --surface-elevated: #272f27;
-  --surface-muted: #323a32;
-  --cream: #f5f0e6;
+  --background: #0e1612;
+  --foreground: #eee9df;
+  --surface: #16211b;
+  --surface-elevated: #1d2a22;
+  --surface-muted: #26352c;
+  --cream: #f6f1e7;
   --pine: #3d5a45;
   --pine-light: #5a7d62;
-  --forest: #0d120d;
-  --sage: #adb7a7;
-  --mist: #adb7a7;
-  --accent: #a8df8e;
-  --accent-dim: #94ce79;
-  --accent-glow: #a8df8e26;
-  --border: #384134;
-  --border-strong: #4e5b48;
+  --forest: #08100c;
+  --sage: #b3c0ad;
+  --mist: #b3c0ad;
+  --accent: #a8e58f;
+  --accent-dim: #8fd476;
+  --accent-glow: #a8e58f2e;
+  --border: #2c3b31;
+  --border-strong: #42564a;
   --control-border: #718167;
-  --on-accent: #141814;
+  --on-accent: #0b1a10;
   --warning: #e6b474;
   --danger: #ed9690;
-  --rail-background: #101710ee;
+  --rail-background: #0b130fee;
   --rail-hover: #2b3528;
-  --rail-active: #a8df8e18;
-  --glass-background: #1e241ee6;
+  --rail-active: #a8e58f1c;
+  --glass-background: #16211bcc;
   --overlay: #080d0dd9;
   --overlay-shadow: 0 12px 40px #00000059;
   --hero-shade: linear-gradient(90deg, #0d120dee, #0d120d66 70%, #0d120d26);
@@ -34,10 +34,34 @@
   --hero-muted: #eef3e9;
   --hero-search: #ffffff;
   --hero-search-ink: #233623;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
-  --radius-2xl: 16px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
   --rail-width: 240px;
+  /* Colorway: shadcn-studio's "Nature" dark preset (forest greens, warm cream text), lifted with an aurora of
+     emerald and teal for highlights, gradients and glows. */
+  --emerald: #34d399;
+  --teal: #2dd4bf;
+  --accent-gradient: linear-gradient(135deg, #c8f5a0 0%, #6ee7a8 45%, #2dd4bf 100%);
+  --aurora: radial-gradient(1100px 560px at 8% -12%, #2dd4bf1a, transparent 62%), radial-gradient(900px 520px at 100% -6%, #a8e58f14, transparent 58%), radial-gradient(800px 600px at 50% 120%, #34d39912, transparent 60%);
+  --glow: 0 0 0 1px #a8e58f26, 0 10px 34px -10px #34d39966;
+  --card-shadow: 0 1px 0 #ffffff0a inset, 0 18px 40px -22px #000000cc;
+  /* shadcn/ui semantic tokens (src/components/ui), mapped onto the Hyked palette. */
+  --card: var(--surface-elevated);
+  --card-foreground: var(--foreground);
+  --popover: var(--surface-elevated);
+  --popover-foreground: var(--foreground);
+  --primary: var(--accent);
+  --primary-foreground: var(--on-accent);
+  --secondary: var(--surface-muted);
+  --secondary-foreground: var(--cream);
+  --muted: var(--surface-muted);
+  --muted-foreground: var(--sage);
+  --accent-foreground: var(--on-accent);
+  --destructive: #e5534b;
+  --destructive-foreground: #ffffff;
+  --input: var(--border-strong);
+  --ring: var(--accent);
 }
 @theme inline {
   --color-background: var(--background);
@@ -53,11 +77,28 @@
   --color-mist: var(--mist);
   --color-accent: var(--accent);
   --color-accent-dim: var(--accent-dim);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-emerald-glow: var(--emerald);
   --font-sans: var(--font-inter), sans-serif;
   --font-display: var(--font-playfair), Georgia, serif;
   --font-mono: var(--font-data), monospace;
 }
-body { margin: 0; background: var(--background); color: var(--foreground); }
+body { margin: 0; background: var(--aurora), var(--background); background-attachment: fixed; color: var(--foreground); }
 .font-display { font-family: var(--font-playfair), Georgia, serif; }
 * { scrollbar-color: #9aafa1 transparent; scrollbar-width: thin; }
 :where(a,button,input,textarea,select,summary):focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
@@ -622,3 +663,88 @@ html { scroll-padding-block:20px 100px; }
 @media (max-width: 767px) { .recording-pill { top: auto; bottom: calc(84px + env(safe-area-inset-bottom)); } }
 .recorder-steps { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; list-style: disc; }
 .activity-estimated-note { margin: 10px 0; padding: 10px 12px; border-left: 3px dashed #059669; border-radius: 6px; background: var(--surface-muted); color: var(--foreground); font-size: 13px; line-height: 1.5; }
+
+/* Backpacking mode on the recorder: what's next, and campsites, water, towns and permits along the trail. */
+.backpack-panel { margin-top: 16px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-xl, 16px); background: var(--surface-elevated); color: var(--cream); }
+.backpack-panel h2 { margin: 0 0 10px; font-size: 18px; font-weight: 700; }
+.backpack-next { list-style: none; padding: 0; margin: 0 0 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.backpack-next li { display: grid; gap: 2px; padding: 10px; border-radius: 10px; background: var(--surface-muted); min-width: 0; }
+.backpack-next small { font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--sage); }
+.backpack-next strong { font-size: 18px; font-variant-numeric: tabular-nums; }
+.backpack-next span { font-size: 12px; color: var(--sage); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backpack-next--water { box-shadow: inset 3px 0 0 #2f7fd8; }
+.backpack-next--camp { box-shadow: inset 3px 0 0 #2f9e5b; }
+.backpack-next--town { box-shadow: inset 3px 0 0 #d8a02f; }
+.backpack-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: var(--surface-muted); margin-bottom: 10px; }
+.backpack-tabs button { padding: 8px 4px; border: 0; border-radius: 8px; background: transparent; color: var(--sage); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.backpack-tabs button[aria-selected="true"] { background: var(--accent); color: var(--on-accent, #10291f); }
+.backpack-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 2px; max-height: 360px; overflow: auto; }
+.backpack-list li { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px 4px; border-bottom: 1px solid var(--border); }
+.backpack-list li.is-passed { opacity: 0.5; }
+.backpack-mile { font-size: 12px; color: var(--sage); font-variant-numeric: tabular-nums; }
+.backpack-name { display: grid; min-width: 0; }
+.backpack-name strong { font-size: 14px; overflow-wrap: anywhere; }
+.backpack-name small { font-size: 12px; color: var(--sage); }
+.backpack-link { font-size: 13px; color: var(--accent); white-space: nowrap; }
+.backpack-permits { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.backpack-permits li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 10px; background: var(--surface-muted); }
+.backpack-permits a { color: var(--accent); font-weight: 600; }
+.backpack-permits small { color: var(--sage); font-size: 12px; }
+.backpack-help { margin: 8px 0; font-size: 13px; color: var(--sage); }
+.backpack-attrib { margin: 10px 0 0; font-size: 11px; color: var(--sage); }
+
+/* ---- Finish & motion (colorway: shadcn-studio "Nature" + aurora; motion ideas from cult-ui / Motion) ---- */
+/* Primary actions: the aurora gradient, a soft glow, and a light sweep on hover. */
+.btn-primary, .hx-btn--primary, .catalog-button:not(.secondary), .planner-button { position: relative; overflow: hidden; isolation: isolate; background: var(--accent-gradient) !important; color: var(--on-accent) !important; border-color: transparent !important; box-shadow: var(--glow); transition: transform 180ms cubic-bezier(.2,.8,.2,1), box-shadow 180ms ease-out, filter 180ms ease-out; }
+.btn-primary::after, .hx-btn--primary::after, .catalog-button:not(.secondary)::after, .planner-button::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(110deg, transparent 30%, #ffffff66 48%, transparent 66%); transform: translateX(-120%); transition: transform 650ms ease-out; }
+.btn-primary:hover, .hx-btn--primary:hover, .catalog-button:not(.secondary):hover, .planner-button:hover { transform: translateY(-1px); filter: saturate(1.08); box-shadow: 0 0 0 1px #a8e58f40, 0 14px 38px -10px #34d399aa; }
+.btn-primary:hover::after, .hx-btn--primary:hover::after, .catalog-button:not(.secondary):hover::after, .planner-button:hover::after { transform: translateX(120%); }
+.btn-primary:active, .hx-btn--primary:active, .catalog-button:not(.secondary):active { transform: translateY(0) scale(0.98); }
+/* Secondary buttons: glass with a hairline that lights up. */
+.btn-ghost, .catalog-button.secondary, .hx-btn:not(.hx-btn--primary) { background: color-mix(in srgb, var(--surface-elevated) 70%, transparent); backdrop-filter: blur(10px); border: 1px solid var(--border-strong); transition: border-color 160ms ease-out, background-color 160ms ease-out, transform 160ms ease-out; }
+.btn-ghost:hover, .catalog-button.secondary:hover, .hx-btn:not(.hx-btn--primary):hover { border-color: #a8e58f73; background: color-mix(in srgb, var(--surface-muted) 80%, transparent); transform: translateY(-1px); }
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: 0 0 0 6px #a8e58f26; }
+
+/* Cards: glass surfaces with an inner highlight that lift on hover. */
+.surface-card, .backpack-panel, .trail-reviews, .rb-panel, .hx-card, .catalog-about, .trail-elevation, .home-near-card > a, .card-glass { box-shadow: var(--card-shadow); }
+.hx-card, .surface-card, .trail-reviews, .backpack-panel { background: linear-gradient(180deg, color-mix(in srgb, var(--surface-elevated) 92%, transparent), color-mix(in srgb, var(--surface) 92%, transparent)); backdrop-filter: blur(12px); }
+.hx-card { transition: transform 220ms cubic-bezier(.2,.8,.2,1), box-shadow 220ms ease-out; }
+.hx-card:hover { transform: translateY(-3px); box-shadow: var(--card-shadow), 0 0 0 1px #a8e58f2e; }
+.catalog-list-item .catalog-row { transition: background-color 180ms ease-out, transform 220ms cubic-bezier(.2,.8,.2,1); }
+.catalog-list-item:hover .catalog-row { transform: translateX(4px); background: linear-gradient(90deg, #a8e58f0f, transparent 70%); }
+.catalog-row-thumb { transition: transform 300ms cubic-bezier(.2,.8,.2,1), box-shadow 300ms ease-out; }
+.catalog-list-item:hover .catalog-row-thumb { transform: scale(1.06) rotate(-1deg); box-shadow: 0 10px 24px -12px #000; }
+
+/* Headings: the big ones take the aurora gradient. */
+.fieldbook-page > h1, .catalog-shell > header h1, .catalog-heading h1, .home-section-heading h2, .hx-workspace-header h1 { background: linear-gradient(100deg, var(--cream) 0%, #d9f7c4 45%, #7ee8c0 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.section-label { letter-spacing: 0.14em; background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent !important; }
+
+/* Navigation: the active destination glows. */
+.fieldbook-destinations [aria-current], .fieldbook-bottom-nav a[aria-current] { box-shadow: inset 0 0 0 1px #a8e58f33, 0 0 22px -6px #34d39966; }
+.fieldbook-destinations a, .fieldbook-bottom-nav a { transition: background-color 160ms ease-out, color 160ms ease-out, transform 160ms ease-out; }
+.fieldbook-destinations a:hover { transform: translateX(2px); }
+
+/* Difficulty chips and stats: a little depth. */
+.trail-chip { box-shadow: 0 6px 18px -8px currentColor; }
+.trail-stats, .rb-stats > div, .backpack-next li { background-image: linear-gradient(180deg, #ffffff07, transparent); }
+
+/* Trail cards (src/components/ui/trail-card.tsx) and the expanding map card. */
+.trail-card { cursor: pointer; border: 1px solid var(--border); box-shadow: var(--card-shadow); }
+.trail-card:hover { box-shadow: var(--card-shadow), 0 0 0 1px #a8e58f33, 0 24px 50px -24px #34d39955; }
+@media (hover: none) { .trail-card-directions { opacity: 1 !important; transform: none !important; } }
+.home-trail-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 20px; }
+.home-trail-cards .trail-card { max-width: none; }
+.trail-intro-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px 24px; margin-bottom: 1.6rem; }
+.trail-intro-row > .trail-highlights { flex: 1 1 280px; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary::after, .hx-btn--primary::after, .catalog-button:not(.secondary)::after, .planner-button::after { display: none; }
+  .btn-primary:hover, .hx-btn--primary:hover, .catalog-button:not(.secondary):hover, .hx-card:hover, .catalog-list-item:hover .catalog-row, .catalog-list-item:hover .catalog-row-thumb, .fieldbook-destinations a:hover, .btn-ghost:hover, .catalog-button.secondary:hover, .hx-btn:not(.hx-btn--primary):hover { transform: none; }
+}
+.trail-card .save-heart--card { position: static; }
+/* Home tiles: lift with an aurora edge; the icon gets a soft halo. */
+.home-activity, .home-long { position: relative; background: linear-gradient(160deg, color-mix(in srgb, var(--surface-elevated) 94%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)); box-shadow: var(--card-shadow); transition: transform 220ms cubic-bezier(.2,.8,.2,1), border-color 200ms ease-out, box-shadow 220ms ease-out; }
+.home-activity:hover, .home-long:hover { transform: translateY(-3px); border-color: #a8e58f66; box-shadow: var(--card-shadow), 0 18px 40px -22px #34d39999; }
+.home-activity > svg { padding: 8px; width: 42px; height: 42px; border-radius: 12px; background: radial-gradient(circle at 30% 30%, #a8e58f33, #2dd4bf14 70%); box-shadow: 0 0 18px -6px #34d39999; }
+.home-invitation { background: radial-gradient(600px 240px at 50% 0%, #34d39922, transparent 70%), var(--surface); border: 1px solid var(--border); border-radius: var(--radius-2xl); box-shadow: var(--card-shadow); }
+@media (prefers-reduced-motion: reduce) { .home-activity:hover, .home-long:hover { transform: none; } }

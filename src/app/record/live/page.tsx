@@ -20,6 +20,7 @@ export default async function LiveRecordPage({
     trail_id?: string;
     resort_id?: string;
     resort_name?: string;
+    trip?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -56,6 +57,7 @@ export default async function LiveRecordPage({
       activityType={activityType}
       title={title}
       trailId={trailId}
+      backpack={params.trip === "backpack"}
       skiAreaId={skiAreaId}
       skiAreaName={skiAreaName}
       autoStart={autoStart}

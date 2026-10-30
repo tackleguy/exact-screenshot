@@ -33,9 +33,12 @@
     "@lovable.dev/cloud-auth-js": "^1.2.1",
     "@mapbox/vector-tile": "^3.0.0",
     "@mlc-ai/web-llm": "^0.2.85",
+    "@radix-ui/react-slot": "^1.5.0",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "framer-motion": "^14.8.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.60.0",
     "maplibre-contour": "^0.1.0",
@@ -45,7 +48,8 @@
     "pngjs": "^7.0.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "react-router-dom": "^7.18.4"
+    "react-router-dom": "^7.18.4",
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
