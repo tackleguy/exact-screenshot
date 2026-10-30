@@ -15,6 +15,12 @@ import { QUALITY_FLAGS, QUALITY_STATUS_LABELS, formatDistance } from "@/lib/trai
 import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, trailDifficulty } from "@/lib/trail-difficulty";
 import { CatalogTrailHero } from "./CatalogTrailHero";
 import { TrailHighlights } from "./TrailHighlights";
+import { LocationMap } from "@/components/ui/expand-map";
+
+/** "37.7425° N, 119.5964° W". */
+function formatCoordinates(lat: number, lng: number) {
+  return `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? "N" : "S"}, ${Math.abs(lng).toFixed(4)}° ${lng >= 0 ? "E" : "W"}`;
+}
 import { TrailReviews } from "./TrailReviews";
 import { estimatedTime } from "./TrailStats";
 import { describeTrail } from "@/lib/trail-catalog/describe";
@@ -89,7 +95,17 @@ export function CatalogTrailDetail({
           {parent && <> <Link className="catalog-link" href={`/explore/trails/${encodeURIComponent(parent.id)}`}>View {parent.name} ({formatDistance(parent.miles).primary})</Link></>}
         </p>
       )}
-      <TrailHighlights trail={t} hasLine={hasLines} />
+      <div className="trail-intro-row">
+        <TrailHighlights trail={t} hasLine={hasLines} />
+        {hasLocation && (
+          <LocationMap
+            className="trail-locator"
+            badge={t.trailhead && t.trailhead.kind !== "trail-end" ? "Trailhead" : "Start"}
+            location={t.trailhead?.name ?? t.park ?? t.forest ?? t.region ?? t.name}
+            coordinates={formatCoordinates(t.trailhead?.latitude ?? t.latitude, t.trailhead?.longitude ?? t.longitude)}
+          />
+        )}
+      </div>
       <section className="catalog-about" aria-label="About this trail">
         {/* The official or Wikipedia text when there is one; otherwise a summary written from the measured facts. */}
         <p>{t.wiki?.extract ?? t.osm?.description ?? (t.source === "resort" && t.note ? t.note : isRoute ? (t.note ?? "A through-hike guide. Confirm distance, permits and current conditions with the trail association or land manager.") : describeTrail(t, { difficulty, time: estimatedTime({ miles: t.miles, gainFt: t.gainFt ?? null, lossFt: t.lossFt, steepestGradePct: t.steepestGradePct, routeType: t.routeType, difficulty, multiDay: Boolean(t.peakCategory) }) }))}</p>
