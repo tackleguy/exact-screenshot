@@ -36,7 +36,7 @@ export async function loadCloudPlanner(userId: string, force = false) {
   if (cloud?.userId !== userId) return;
   const failure = prefs.error ?? trips.error;
   cloud = failure
-    ? { ...cloud, status: "error", error: `Your saved trips could not be loaded (${failure.message}).` }
+    ? { ...cloud, status: "error", error: "Your saved trips couldn’t load right now." }
     : { userId, memory: { ...memoryFromRows(prefs.data?.planner_profile, (trips.data ?? []).map(t => t.plan)), gear: cloud.memory.gear }, status: "ready", error: "" };
   notify();
 }

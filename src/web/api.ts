@@ -1,3 +1,4 @@
+import { friendlyError, isMissingTable } from "@/lib/errors";
 import { createClient } from "@/lib/supabase/client";
 import { apiTarget } from "./api-target";
 import { isTrailServicePath, trailService, tripPacket } from "./trail-service";
@@ -43,7 +44,7 @@ async function accountActivities(request: Request): Promise<Response> {
       })
       .select("*")
       .single();
-    return Response.json(error ? { error: error.message } : { activity: data }, { status: error ? 400 : 201 });
+    return Response.json(error ? { error: isMissingTable(error) ? "Saving activities isn’t available yet." : friendlyError(error, "Your activity couldn’t be saved. Try again.") } : { activity: data }, { status: error ? 400 : 201 });
   }
   if (request.method === "GET") {
     const { data, error } = await client
@@ -53,7 +54,7 @@ async function accountActivities(request: Request): Promise<Response> {
       .eq("status", "completed")
       .order("started_at", { ascending: false })
       .limit(50);
-    return Response.json(error ? { error: error.message } : { activities: data ?? [] }, { status: error ? 400 : 200 });
+    return Response.json(error ? (isMissingTable(error) ? { activities: [] } : { error: friendlyError(error, "Your activities couldn’t load right now.") }) : { activities: data ?? [] }, { status: error && !isMissingTable(error) ? 400 : 200 });
   }
   return Response.json({ error: "This action is not supported." }, { status: 405 });
 }

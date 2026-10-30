@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { friendlyError } from "@/lib/errors";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import Link from "next/link";
@@ -46,7 +47,7 @@ export function SignupForm() {
     });
 
     if (error) {
-      setError(error.message);
+      setError(friendlyError(error, "Sign-up isn’t working right now. Try again in a moment."));
       setLoading(false);
       return;
     }

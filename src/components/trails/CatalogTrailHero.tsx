@@ -32,7 +32,7 @@ function satelliteImage(t: CatalogTrail) {
 /** AllTrails-style header: photo, name, difficulty chip, key stats and primary actions. */
 export function CatalogTrailHero({ trail: t, difficulty, hasLines }: { trail: CatalogTrail; difficulty: string; distance?: string; hasLines: boolean }) {
   const [photos, setPhotos] = useState<{ id: string; list: CatalogPhoto[] } | null>(null);
-  const { average, count } = useTrailRating(t.id);
+  const { average, count, available } = useTrailRating(t.id);
   const [shared, setShared] = useState<string | null>(null);
   const [startOpen, setStartOpen] = useState(false);
   const [gainFor, setGainFor] = useState<{ id: string; gainFt: number } | null>(null);
@@ -80,7 +80,7 @@ export function CatalogTrailHero({ trail: t, difficulty, hasLines }: { trail: Ca
           {badge && <span className={`trail-confidence trail-confidence--${badge.tier}`} title={badge.detail}>{badge.label}</span>}
           <h1>{t.name}</h1>
           <p>{join([t.park ?? t.forest, t.region, countryName(t.country)])}</p>
-          <p className="trail-hero-rating"><Stars value={average} /> <span>{count ? `${average!.toFixed(1)} (${count})` : "No ratings yet"}</span></p>
+          {available && <p className="trail-hero-rating"><Stars value={average} /> <span>{count ? `${average!.toFixed(1)} (${count})` : "No ratings yet"}</span></p>}
         </div>
         {strip.length ? (
           <span className="trail-hero-credit">{strip.map((p, i) => <a key={p.id} href={p.sourceUrl} target="_blank" rel="noopener noreferrer">{i ? " · " : "Photos: "}{p.artist} ({p.license})</a>)}</span>

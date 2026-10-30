@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { friendlyError } from "@/lib/errors";
 import { useEffect, useRef, useState } from "react";
 import * as maplibregl from "@/lib/maplibre";
 import { buildRoute, RouteError, type BuiltRoute, type LngLat } from "@/lib/routing";
@@ -442,7 +443,7 @@ function SaveForm({ defaultName, onSave, onCancel }: { defaultName: string; onSa
         e.preventDefault();
         if (!name.trim()) { setState({ busy: false, error: "Give your trail a name." }); return; }
         setState({ busy: true, error: "" });
-        onSave({ name: name.trim().slice(0, 120), notes: notes.trim().slice(0, 4000), photo }).catch((err: unknown) => setState({ busy: false, error: err instanceof Error ? err.message : "Saving failed. Try again." }));
+        onSave({ name: name.trim().slice(0, 120), notes: notes.trim().slice(0, 4000), photo }).catch((err: unknown) => setState({ busy: false, error: friendlyError(err, "Saving failed. Try again.") }));
       }}
     >
       <label>Name<input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} required /></label>

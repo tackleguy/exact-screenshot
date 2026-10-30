@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { friendlyError } from "@/lib/errors";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -117,7 +118,7 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "", i
       const response = await fetch(`/api/assistant/research?kind=trail&q=${encodeURIComponent(q)}`, { signal: controller.signal });
       const data = await response.json(); if (!response.ok) throw new Error(data.error);
       if (sequence === searchSequence.current) { setSources(data.sources); if (!data.sources.length) setSearchError("No online matches returned. Try a more specific region or use the web search link."); }
-    } catch (error) { if (sequence === searchSequence.current) setSearchError(controller.signal.aborted ? "Trail research timed out. Try again; your route comparisons remain available." : error instanceof Error ? error.message : "Search failed. Try again."); }
+    } catch (error) { if (sequence === searchSequence.current) setSearchError(controller.signal.aborted ? "Trail research timed out. Try again; your route comparisons remain available." : friendlyError(error, "Search failed. Try again.")); }
     finally { clearTimeout(timeout); if (sequence === searchSequence.current) setSearching(false); }
   }
   function buildTrip() {
@@ -137,7 +138,7 @@ export function TripPlanner({ context, initialRegion = "", initialPrompt = "", i
       }
       const result = await model.explain(aiContext, insights); setExplanation(result); setExplainedSignature(aiSignature);
     }
-    catch (error) { setAiError(error instanceof Error ? error.message : "Could not generate an explanation. The calculated plan is still available."); }
+    catch (error) { setAiError(friendlyError(error, "Could not generate an explanation. The calculated plan is still available.")); }
   }
   const planSignature = JSON.stringify({ prompt, request, route, gear: selected, shopping, packed: packed.filter(id => selected.some(g => g.id === id)) });
   function savePlan() {

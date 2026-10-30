@@ -9,6 +9,7 @@
  * along the trail being followed (src/lib/gps-track.ts).
  */
 import { useSyncExternalStore } from "react";
+import { friendlyError } from "@/lib/errors";
 import { computeHeading, mpsToMph, smoothSpeed } from "@/lib/gps";
 import { GAP_SEC, toGpsPoints, TrackRecorder, type Fix, type GpsActivity, type TrackGap, type TrailProfile } from "@/lib/gps-track";
 import { clearTrack, loadTrack, saveTrack, type SavedTrack } from "@/lib/track-store";
@@ -194,7 +195,7 @@ class RecordingSession {
     this.watchId = navigator.geolocation.watchPosition((p) => this.onFix(p), (err) => {
       // A timeout only means no fix arrived in 10 s (tree cover, a canyon): ask again.
       if (err.code === err.TIMEOUT) { if (this.view.state === "recording" || this.view.state === "acquiring") this.watch(); return; }
-      this.set({ error: err.message || "Location is unavailable." });
+      this.set({ error: friendlyError(err, "Location is unavailable.") });
       if (this.view.state === "acquiring") { this.set({ state: "idle" }); this.stopWatching(); }
     }, WATCH);
   }
