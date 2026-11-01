@@ -751,7 +751,7 @@ html { scroll-padding-block:20px 100px; }
 
 /* ---- Home refresh: AllTrails / Hiiker-style minimal hero ---- */
 .discovery-hero { min-height: min(78vh, 680px); }
-.discovery-hero--member { min-height: min(52vh, 460px); }
+.discovery-hero--member { min-height: 420px; height: min(520px,55dvh); }
 .discovery-hero-image { filter: saturate(1.08) contrast(1.04); }
 .discovery-hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(180deg, hsl(150 30% 4% / 0.15) 0%, hsl(150 30% 4% / 0.35) 55%, var(--background, #0b0f0c) 100%); }
 .discovery-hero-content { position: relative; z-index: 1; }
