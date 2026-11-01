@@ -784,3 +784,8 @@ html { scroll-padding-block:20px 100px; }
   .home-long-grid { display: flex !important; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
   .home-long { flex: 0 0 72%; scroll-snap-align: start; }
 }
+@media (max-width: 720px) {
+  .discovery-hero-content { width: 100%; max-width: 100%; box-sizing: border-box; padding-inline: 20px; min-width: 0; }
+  .discovery-headline { font-size: 34px !important; }
+  .discovery-search { width: 100%; max-width: 100%; box-sizing: border-box; }
+}
