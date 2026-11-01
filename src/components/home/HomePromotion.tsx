@@ -75,14 +75,19 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
   const manifest = useCatalogCount();
   const [photoFailed, setPhotoFailed] = useState(false);
   return <div className="home-promotion">
-    <header className={`discovery-hero${photoFailed ? " discovery-hero--no-photo" : ""}`}>
+    <header className={`discovery-hero${photoFailed ? " discovery-hero--no-photo" : ""}${signedIn ? " discovery-hero--member" : ""}`}>
       {!photoFailed && <img src={photo} alt="Hikers on an alpine trail above a turquoise mountain lake" width={1920} height={1088} className="discovery-hero-image" fetchPriority="high" onError={() => setPhotoFailed(true)} />}
       <div className="discovery-hero-content">
         <h1 className="sr-only">Hyked</h1>
-        <p className="discovery-headline">Your next great day<br />starts on a trail.</p>
-        <form action="/explore/trails/catalog" className="discovery-search" role="search"><Search size={20} aria-hidden /><label htmlFor="discovery-query" className="sr-only">Search trails</label><input id="discovery-query" name="q" type="search" placeholder="Find a trail or your next escape" /><button type="submit" className="btn-primary" aria-label="Search trails"><ArrowUpRight size={22} aria-hidden /></button></form>
-        <Link href="/explore/trails" className="discovery-map-link">Explore the map <ArrowUpRight size={17} aria-hidden /></Link>
-        {manifest && <p className="discovery-proof">{headlineCount(manifest).toLocaleString("en-US")} trails in {Object.keys(manifest.countries ?? {}).length || 2} countries.</p>}
+        <p className="discovery-kicker">{signedIn ? "Welcome back" : "Hike · Ride · Run · Ski"}</p>
+        <p className="discovery-headline">{signedIn ? <>Where to next?</> : <>Your next great day<br />starts on a trail.</>}</p>
+        <form action="/explore/trails/catalog" className="discovery-search" role="search"><Search size={20} aria-hidden /><label htmlFor="discovery-query" className="sr-only">Search trails</label><input id="discovery-query" name="q" type="search" placeholder="Search by city, park or trail name" /><button type="submit" className="btn-primary" aria-label="Search trails"><ArrowUpRight size={22} aria-hidden /></button></form>
+        <nav className="discovery-chips" aria-label="Quick filters">
+          <Link href="/explore/trails" className="discovery-chip discovery-chip--solid">Near me</Link>
+          {TRAIL_SECTIONS.slice(0, 4).map((s) => <Link key={s.key} href={`/explore/trails?activity=${s.activity}`} className="discovery-chip">{s.label}</Link>)}
+          <Link href="/explore/ski" className="discovery-chip">Ski areas</Link>
+        </nav>
+        {manifest && <p className="discovery-proof">{headlineCount(manifest).toLocaleString("en-US")} trails in {Object.keys(manifest.countries ?? {}).length || 2} countries</p>}
       </div>
     </header>
     <section className="home-destinations">
