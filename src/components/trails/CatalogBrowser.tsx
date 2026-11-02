@@ -39,6 +39,7 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
     activity !== "hike" && activity !== "all" && CATALOG_ACTIVITY_LABELS[activity],
     filters.uniqueNames && "Unique names",
     filters.includeFragments && "Partial segments",
+    filters.allSegments && !filters.includeFragments && "All mapped segments",
     filters.region,
     filters.minMiles !== undefined && `${filters.minMiles}+ mi`,
     filters.maxMiles !== undefined && `Up to ${filters.maxMiles} mi`,
@@ -198,6 +199,10 @@ export async function CatalogBrowser({ params }: { params: URLSearchParams }) {
                   defaultChecked={params.get("uniqueNames") === "true"}
                 />
                 One card per trail name
+              </label>
+              <label className="catalog-checkbox">
+                <input type="checkbox" name="allSegments" value="true" defaultChecked={params.get("allSegments") === "true"} />
+                Show all mapped segments <small className="catalog-muted">(pieces under 0.3 mi and trails without a mapped line)</small>
               </label>
               <label className="catalog-checkbox">
                 <input

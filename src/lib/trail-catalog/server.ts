@@ -16,6 +16,7 @@ import { listScore } from "./cleanup";
 import { withinBounds } from "./map";
 import { buildCatalogMap } from "./map";
 import { trailSacScale } from "./types";
+import { withDisplayName } from "./naming";
 
 const unzip = promisify(gunzip);
 const root = path.join(process.cwd(), "data/trail-catalog");
@@ -52,6 +53,8 @@ function load() {
     // Many source names are all capitals ("HALF DOME CRAG"); show them in title case.
     for (const row of sections) {
       row.name = titleCaseName(row.name);
+      // Incomplete names ("Burton") read as trails: "Burton Trail — Angeles National Forest".
+      Object.assign(row, withDisplayName(row));
       // Older snapshots stored raw season codes ("No", "Unknown") and called those trails seasonal.
       row.season = normalizeSeason(row.season);
       if (row.trailStatus === "SEASONAL" || row.trailStatus === "UNKNOWN") row.trailStatus = trailStatusFor(row);
@@ -99,7 +102,9 @@ function load() {
 
 export async function searchCatalog(filters: CatalogFilters = {}) {
   const [data, reviews] = await Promise.all([load(), reviewDecisions()]);
-  return { ...filterCatalog(data.rows, filters, data.texts, reviews), manifest: data.manifest };
+  // Lists hide unmapped and very short pieces unless "Show all mapped segments" (allSegments) is on.
+  const listFilters = { hideStubs: !filters.resort && !filters.collection, ...filters };
+  return { ...filterCatalog(data.rows, listFilters, data.texts, reviews), manifest: data.manifest };
 }
 
 export async function searchCatalogMap(filters: CatalogFilters = {}) {

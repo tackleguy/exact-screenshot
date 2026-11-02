@@ -1,4 +1,5 @@
 "use client";
+import { cachedJson } from "@/lib/trail-catalog/client-cache";
 
 import { useEffect, useState } from "react";
 import { FEATURE_LABELS, groupOf, type FeatureGroup, type TrailFeature } from "@/lib/trail-catalog/features";
@@ -14,12 +15,11 @@ export function TrailFeatureList({ trailId, hasLine }: { trailId: string; hasLin
   const [filter, setFilter] = useState<FeatureGroup | "all">("all");
   useEffect(() => {
     if (!url) return;
-    const controller = new AbortController();
-    fetch(url, { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : { features: [] }))
-      .then((data: { features?: TrailFeature[] }) => setState({ url, features: data.features ?? [] }))
-      .catch(() => { if (!controller.signal.aborted) setState({ url, features: [] }); });
-    return () => controller.abort();
+    let live = true;
+    cachedJson<{ features?: TrailFeature[] }>(url)
+      .then((data) => { if (live) setState({ url, features: data.features ?? [] }); })
+      .catch(() => { if (live) setState({ url, features: [] }); });
+    return () => { live = false; };
   }, [url]);
   const features = state && state.url === url ? state.features : [];
   // Parking lots and bridges are useful on the map but crowd a mile-by-mile list.

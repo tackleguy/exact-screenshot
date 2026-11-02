@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { formatDistance } from "@/lib/units";
+import { rememberTrails } from "@/lib/trail-catalog/client-cache";
 
 type Near = CatalogTrail & { distanceKm: number };
 const TIMEOUT_MS = 5000;
@@ -17,7 +18,7 @@ export function NearbyTrails({ trailId }: { trailId: string }) {
     fetch(`/api/trail-catalog/${encodeURIComponent(trailId)}/nearby`, { signal: controller.signal })
       .then(async (r) => (r.ok ? ((await r.json()) as { trails?: Near[] }).trails ?? [] : []))
       .catch(() => [] as Near[])
-      .then((trails) => setState({ id: trailId, trails }))
+      .then((trails) => { rememberTrails(trails); setState({ id: trailId, trails }); })
       .finally(() => clearTimeout(timer));
     return () => { clearTimeout(timer); controller.abort(); };
   }, [trailId]);

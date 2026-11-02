@@ -1,8 +1,8 @@
-import { StrictMode, useEffect, useMemo, useState, type ReactNode } from "react";
+import { StrictMode, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useUnits } from "@/lib/units";
 import { locate, timezoneRegion } from "@/lib/start-location";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigationType, useParams } from "react-router-dom";
 import Link from "./compat/link";
 import { AppShell } from "@/components/nav/AppShell";
 import { GuestSaveBanner } from "@/components/nav/GuestSaveBanner";
@@ -10,7 +10,8 @@ import { HomePromotion } from "@/components/home/HomePromotion";
 import { TrailExplorer } from "@/components/explore/TrailExplorer";
 import { PersonalTrailPage } from "@/components/route-builder/PersonalTrailPage";
 import { OsmTrailRedirect } from "./OsmTrailRedirect";
-import { CatalogTrailDetail } from "@/components/trails/CatalogTrailDetail";
+import { CatalogTrailDetail, TrailDetailSkeleton } from "@/components/trails/CatalogTrailDetail";
+import { cachedJson, cachedTrailDetail, loadTrailDetail, rememberTrails, trailSummary, type TrailDetailData } from "@/lib/trail-catalog/client-cache";
 import { CatalogPresentation, type CatalogResult } from "./CatalogPresentation";
 import { CommunityTrails } from "./CommunityTrails";
 import { GearPageClient } from "@/components/gear/GearPageClient";
@@ -37,7 +38,7 @@ import { createClient } from "@/lib/supabase/client";
 import { REFERENCE_ROUTES } from "@/lib/assistant/catalog";
 import type { PlannerContext } from "@/lib/assistant/types";
 import type { Activity, ActivityType } from "@/lib/types";
-import type { CatalogManifest, CatalogTrail, CatalogMapResult } from "@/lib/trail-catalog/types";
+import type { CatalogTrail, CatalogMapResult } from "@/lib/trail-catalog/types";
 import { CATALOG_ACTIVITIES, type CatalogActivity } from "@/lib/trail-catalog/activity";
 import mountainNight from "@/assets/mountain-night.jpg";
 import { apiOrigin, installApiBridge } from "./api";
@@ -88,7 +89,7 @@ function Catalog() {
     Promise.all([
       fetch(`/api/trail-catalog?${query}`, { signal: controller.signal }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error); return data as CatalogResult; }),
       fetch(`/api/trail-catalog/map?${query}`, { signal: controller.signal }).then(res => res.ok ? res.json() : undefined).catch(() => undefined),
-    ]).then(([result, map]) => { if (!controller.signal.aborted) setState({ result, map, for: query }); }).catch(error => { if (!controller.signal.aborted) setState({ error: friendlyError(error, "Trails couldn’t load right now. Try again in a moment."), for: query }); });
+    ]).then(([result, map]) => { if (!controller.signal.aborted) { rememberTrails(result.trails); setState({ result, map, for: query }); } }).catch(error => { if (!controller.signal.aborted) setState({ error: friendlyError(error, "Trails couldn’t load right now. Try again in a moment."), for: query }); });
     return () => controller.abort();
   }, [query, waiting]);
   if (state.for === query && state.error) return <Status title="Trail catalog unavailable">{state.error}</Status>;
@@ -103,26 +104,46 @@ function TrailCatalogPage() {
   return new URLSearchParams(search).get("collection") === "community" ? <CommunityTrails /> : <Catalog />;
 }
 function OsmTrailRoute() { const { id } = useParams(); return <OsmTrailRedirect key={id} id={id ?? ""} />; }
+/**
+ * A trail page draws at once from what the visitor already has: the row of the list they clicked (router state,
+ * else this session's summary cache) or the full record from earlier this session (back/forward is instant). The
+ * full record (line, trailhead, sources) loads in the background; the map, elevation and secondary sections show
+ * skeletons until it arrives. Opened cold (a shared link), it shows a skeleton of its layout until the record alone (one small file) arrives.
+ */
 function TrailDetail() {
   const { id = "" } = useParams();
+  const location = useLocation();
+  const fromList = (location.state as { trail?: CatalogTrail } | null)?.trail;
+  const cached = cachedTrailDetail(id);
   // Results are kept with the id they belong to, so navigating between trails never shows the previous one.
-  const [loaded, setLoaded] = useState<{ id: string; trail?: CatalogTrail; lines?: [number, number][][]; manifest?: CatalogManifest; error?: string } | null>(null);
+  const [loaded, setLoaded] = useState<{ id: string; detail?: TrailDetailData; error?: string } | null>(null);
   useEffect(() => {
-    const controller = new AbortController();
-    Promise.all([
-      fetch(`/api/trail-catalog/${encodeURIComponent(id)}`, { signal: controller.signal }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error); return data; }),
-      fetch("/api/trail-catalog?limit=1", { signal: controller.signal }).then(res => res.json()),
-    ]).then(([detail, catalog]) => { if (!controller.signal.aborted) setLoaded({ id, ...detail, manifest: catalog.manifest }); })
-      .catch(error => { if (!controller.signal.aborted) setLoaded({ id, error: friendlyError(error, "This trail couldn’t load right now. Try again in a moment.") }); });
-    return () => controller.abort();
+    if (cachedTrailDetail(id)?.manifest) return;
+    let live = true;
+    loadTrailDetail(id)
+      .then((detail) => { if (live) setLoaded({ id, detail }); })
+      .catch((error) => { if (live) setLoaded({ id, error: friendlyError(error, "This trail couldn’t load right now. Try again in a moment.") }); });
+    return () => { live = false; };
   }, [id]);
-  const state = loaded?.id === id ? loaded : null;
-  usePageMeta(state?.trail ? trailPageMeta(state.trail) : null);
-  if (state?.error) return <Status title="Trail unavailable">{state.error}</Status>;
-  if (!state?.trail || !state.manifest) return <Status title="Loading trail…" />;
+  const detail = (loaded?.id === id ? loaded.detail : undefined) ?? cached ?? undefined;
+  const error = loaded?.id === id ? loaded.error : undefined;
+  // Opened cold (a shared link): the record alone arrives well before the line and trailheads.
+  const [quick, setQuick] = useState<{ for: string; trail: CatalogTrail } | null>(null);
+  const known = fromList?.id === id ? fromList : trailSummary(id);
+  useEffect(() => {
+    if (known || cachedTrailDetail(id)) return;
+    let live = true;
+    cachedJson<{ trail?: CatalogTrail }>(`/api/trail-catalog/${encodeURIComponent(id)}/summary`).then((s) => { if (live && s.trail) setQuick({ for: id, trail: s.trail }); }).catch(() => undefined);
+    return () => { live = false; };
+  }, [id, known]);
+  const preview = known ?? (quick?.for === id ? quick.trail : null);
+  const trail = detail?.trail ?? preview;
+  usePageMeta(trail ? trailPageMeta(trail) : null);
+  if (error && !preview) return <Status title="Trail unavailable">{error}</Status>;
   // Merged or duplicate ids open their trail; show its own address.
-  if (state.trail.id !== id) return <Navigate to={`/explore/trails/${encodeURIComponent(state.trail.id)}`} replace />;
-  return <CatalogTrailDetail trail={state.trail} lines={state.lines ?? []} manifest={state.manifest} />;
+  if (detail && detail.trail.id !== id) return <Navigate to={`/explore/trails/${encodeURIComponent(detail.trail.id)}`} replace />;
+  if (!trail) return <TrailDetailSkeleton />;
+  return <CatalogTrailDetail key={trail.id} trail={trail} lines={detail ? detail.lines : null} manifest={detail?.manifest ?? null} parent={detail?.parent ?? null} loadError={error} />;
 }
 function MapPage({ workspace = false }: { workspace?: boolean }) {
   const { search } = useLocation(); const params = new URLSearchParams(search);
@@ -225,6 +246,10 @@ function App() {
   const { pathname } = useLocation();
   // Pages redraw when the units setting changes (every formatter reads it).
   const units = useUnits();
+  // A new page opens at the top (pages now draw at once, so they would keep the last page's scroll position);
+  // back and forward keep the position the browser restores.
+  const navigationType = useNavigationType();
+  useLayoutEffect(() => { if (navigationType !== "POP") window.scrollTo(0, 0); }, [pathname, navigationType]);
   return <><RouteMeta pathname={pathname} /><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><MotionConfig reducedMotion="user"><AppShell><motion.div key={pathname} className="page-fade" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.28, ease: "easeOut" }}><Routes key={units}>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<ExploreRedirect />} /><Route path="/my/trails/:id" element={<PersonalTrailRoute />} /><Route path="/shared/trails/:token" element={<PersonalTrailRoute shared />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<ExploreRedirect />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />

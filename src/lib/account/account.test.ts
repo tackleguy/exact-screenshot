@@ -148,7 +148,7 @@ test("planner routes from personal trails and encoded route links", () => {
 
 test("sync status labels", () => {
   const now = Date.UTC(2026, 9, 21, 12);
-  assert.equal(syncLabel({ state: "guest", lastSyncedAt: null, pending: 0, message: "" }, now), "Guest · not saved");
+  assert.equal(syncLabel({ state: "guest", lastSyncedAt: null, pending: 0, message: "" }, now), "Save trails — Sign in");
   assert.equal(syncLabel({ state: "synced", lastSyncedAt: now - 10_000, pending: 0, message: "" }, now), "Synced · just now");
   assert.equal(syncLabel({ state: "synced", lastSyncedAt: now - 5 * 60_000, pending: 0, message: "" }, now), "Synced · 5 min ago");
   assert.equal(syncLabel({ state: "offline", lastSyncedAt: null, pending: 2, message: "" }, now), "Offline — changes will sync");

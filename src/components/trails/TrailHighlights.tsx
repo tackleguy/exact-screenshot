@@ -1,4 +1,5 @@
 "use client";
+import { cachedJson } from "@/lib/trail-catalog/client-cache";
 
 import { useEffect, useState } from "react";
 import type { CatalogTrail } from "@/lib/trail-catalog/types";
@@ -10,12 +11,11 @@ export function TrailHighlights({ trail: t, hasLine }: { trail: CatalogTrail; ha
   const [features, setFeatures] = useState<{ id: string; types: FeatureType[] } | null>(null);
   useEffect(() => {
     if (!hasLine) return;
-    const controller = new AbortController();
-    fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/features`, { signal: controller.signal })
-      .then((r) => (r.ok ? r.json() : { features: [] }))
-      .then((d: { features?: TrailFeature[] }) => setFeatures({ id: t.id, types: (d.features ?? []).map((f) => f.type) }))
+    let live = true;
+    cachedJson<{ features?: TrailFeature[] }>(`/api/trail-catalog/${encodeURIComponent(t.id)}/features`)
+      .then((d) => { if (live) setFeatures({ id: t.id, types: (d.features ?? []).map((f) => f.type) }); })
       .catch(() => undefined);
-    return () => controller.abort();
+    return () => { live = false; };
   }, [t.id, hasLine]);
   const chips = trailHighlights(t, features?.id === t.id ? features.types : []);
   if (!chips.length) return null;

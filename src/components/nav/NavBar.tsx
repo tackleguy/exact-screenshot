@@ -135,15 +135,24 @@ function UnitsToggle() {
   );
 }
 
-/** Account sync status: "Synced · just now", "Syncing…", "Offline — changes will sync", or "Guest · not saved". */
+/** Account sync status: "Synced · just now", "Syncing…", "Offline — changes will sync"; guests get a sign-in link. */
 function SyncBadge({ signedIn }: { signedIn: boolean }) {
   const status = useSyncStatus();
+  const pathname = usePathname();
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
   }, []);
-  const label = signedIn ? syncLabel(status.state === "guest" ? { ...status, state: "idle" } : status, now) : "Guest · not saved";
+  if (!signedIn) {
+    return (
+      <Link className="fieldbook-sync fieldbook-sync--guest fieldbook-sync-link" href={`/login?next=${encodeURIComponent(pathname)}`} title="Sign in to save trails, hikes and trips to your account">
+        <span className="fieldbook-sync-dot" aria-hidden="true" />
+        <span className="fieldbook-nav-label">Save trails — Sign in</span>
+      </Link>
+    );
+  }
+  const label = syncLabel(status.state === "guest" ? { ...status, state: "idle" } : status, now);
   const tone = !signedIn ? "guest" : status.state === "error" ? "error" : status.state === "offline" ? "offline" : status.state === "syncing" ? "syncing" : "synced";
   return (
     <p className={`fieldbook-sync fieldbook-sync--${tone}`} role="status" aria-live="polite" title={status.message || label}>

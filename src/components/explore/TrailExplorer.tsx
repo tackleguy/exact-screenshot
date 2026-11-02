@@ -19,6 +19,7 @@ import { FEATURE_LABELS, featureGroup, featureName, fetchFeatures, type HikeFeat
 import { usePersonalTrails } from "@/lib/personal-trails";
 import type { Point } from "@/lib/trail-catalog/quality";
 import { NearbyTrails } from "./NearbyTrails";
+import { primeJson, rememberTrailDetail } from "@/lib/trail-catalog/client-cache";
 import {
   BASEMAPS,
   DIFFICULTY_COLORS,
@@ -617,6 +618,8 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error("detail"))))
       .then((d: Detail) => {
         setDetailFor({ id: forId, value: d });
+        // "View trail" then opens instantly from this record.
+        rememberTrailDetail(forId, d);
         if (d.lines?.length) {
           setSource("selected", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: d.lines } }] });
           const map = mapRef.current;
@@ -640,7 +643,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       .catch(() => undefined);
     void fetch(`/api/trail-catalog/${id}/elevation`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : "none"))
-      .then((e: Elevation | "none") => setElevationFor({ id: forId, value: e }))
+      .then((e: Elevation | "none") => { if (e !== "none") primeJson(`/api/trail-catalog/${id}/elevation`, e); setElevationFor({ id: forId, value: e }); })
       .catch((error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) setElevationFor({ id: forId, value: "none" }); });
     return () => controller.abort();
   }, [selectedId, setSource, syncSelectedPin]);
