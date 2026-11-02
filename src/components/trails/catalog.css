@@ -375,3 +375,34 @@
 .trail-start-choice strong { font-size: 15px; }
 .trail-start-choice span { font-size: 13px; color: var(--sage); }
 .trail-permits { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; } .trail-permits li { display: grid; gap: 2px; } .trail-permits small { color: var(--sage); font-size: 0.85rem; }
+
+/* Loading skeletons: the trail page keeps its shape while the full record, map and elevation load. */
+.trail-skeleton { display: block; border-radius: var(--radius-lg, 10px); background: linear-gradient(100deg, var(--surface-muted) 30%, var(--surface-elevated) 50%, var(--surface-muted) 70%); background-size: 200% 100%; animation: trail-skeleton-sheen 1.4s ease-in-out infinite; }
+@keyframes trail-skeleton-sheen { from { background-position: 150% 0; } to { background-position: -50% 0; } }
+@media (prefers-reduced-motion: reduce) { .trail-skeleton { animation: none; } }
+.trail-skeleton--map { height: clamp(260px, 48vw, 420px); margin-top: 8px; }
+.trail-skeleton--chart { height: 180px; margin-top: 12px; }
+.trail-skeleton--line { height: 14px; margin: 0 0 10px; border-radius: 7px; }
+.trail-skeleton-lines { max-width: 70ch; margin-top: 4px; }
+.trail-skeleton--row { height: 48px; margin-top: 12px; }
+.trail-skeleton--link { width: 160px; height: 16px; margin-bottom: 16px; border-radius: 8px; }
+.trail-skeleton--hero { height: clamp(160px, 30vw, 260px); margin-bottom: 18px; }
+.trail-skeleton--title { width: min(520px, 80%); height: 36px; margin-bottom: 10px; }
+.trail-skeleton--subtitle { width: min(320px, 60%); height: 16px; margin-bottom: 18px; border-radius: 8px; }
+.trail-skeleton-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin-bottom: 18px; }
+.trail-skeleton--stat { height: 58px; }
+.trail-detail-skeleton .trail-skeleton-lines { margin-bottom: 18px; }
+
+/* "Report a problem with this trail". */
+.trail-report { margin-top: 16px; }
+.trail-report-link { padding: 0; border: 0; background: none; color: var(--sage); font: inherit; font-size: 14px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.trail-report-link:hover, .trail-report-link:focus-visible { color: var(--accent); }
+.trail-report-form { display: grid; gap: 12px; max-width: 560px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-xl, 14px); background: var(--surface); }
+.trail-report-form h2 { margin: 0; font-size: 17px; }
+.trail-report-form label { display: grid; gap: 6px; font-size: 14px; font-weight: 600; }
+.trail-report-form select, .trail-report-form textarea, .trail-report-form input { width: 100%; padding: 9px 11px; border: 1px solid var(--control-border); border-radius: 8px; background: var(--background); color: var(--foreground); font: inherit; font-weight: 400; }
+.trail-report-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.trail-report--done { padding: 12px 16px; border-left: 3px solid var(--accent); border-radius: 6px; background: var(--surface); font-size: 14px; }
+
+/* The place part of a rebuilt trail name, set smaller in the page heading. */
+.trail-name-context { display: block; margin-top: 4px; font-size: 0.5em; font-weight: 600; line-height: 1.25; opacity: 0.85; }

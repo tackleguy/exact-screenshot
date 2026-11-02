@@ -22,6 +22,8 @@ interface TrailCardProps extends Omit<HTMLMotionProps<"div">, "title"> {
   onDirectionsClick?: () => void;
   /** Overlay content in the image's top corner (a save heart, a badge). */
   corner?: React.ReactNode;
+  /** A short "Why this trail" tag over the image ("Shortest climb"). */
+  tag?: string;
 }
 
 // Define stat item component for DRY principle
@@ -54,6 +56,7 @@ const TrailCard = React.forwardRef<HTMLDivElement, TrailCardProps>(
       duration,
       onDirectionsClick,
       corner,
+      tag,
       ...props
     },
     ref
@@ -84,6 +87,7 @@ const TrailCard = React.forwardRef<HTMLDivElement, TrailCardProps>(
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
           {corner && <div className="absolute right-3 top-3 z-10">{corner}</div>}
+          {tag && <p className="trail-card-tag"><span className="sr-only">Why this trail: </span>{tag}</p>}
           <div className="absolute bottom-0 left-0 flex w-full items-end justify-between gap-3 p-4">
             <div className="min-w-0 text-white">
               <h3 className="text-xl font-bold leading-tight">{title}</h3>

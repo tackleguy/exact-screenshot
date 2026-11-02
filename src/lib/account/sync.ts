@@ -95,7 +95,7 @@ if (typeof window !== "undefined") window.addEventListener("online", () => { if 
 
 /** "Synced · just now", "Synced · 5 min ago", … */
 export function syncLabel(s: SyncStatus, now = Date.now()): string {
-  if (s.state === "guest") return "Guest · not saved";
+  if (s.state === "guest") return "Save trails — Sign in";
   if (s.state === "syncing") return "Syncing…";
   if (s.state === "offline") return "Offline — changes will sync";
   if (s.state === "error") return "Sync problem — retry";

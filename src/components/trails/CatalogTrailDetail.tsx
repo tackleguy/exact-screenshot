@@ -23,30 +23,43 @@ function formatCoordinates(lat: number, lng: number) {
 }
 import { TrailReviews } from "./TrailReviews";
 import { estimatedTime } from "./TrailStats";
-import { describeTrail } from "@/lib/trail-catalog/describe";
+import { TrailDescription } from "./TrailDescription";
+import { TrailReportProblem } from "./TrailReportProblem";
 import { permitLinks } from "@/lib/trip/permits";
 import { cleanTrailName } from "@/lib/trail-catalog/cleanup";
 import "./catalog.css";
 import { trailSacScale } from "@/lib/trail-catalog/types";
 
+/**
+ * A catalog trail's page. `lines` and `manifest` are null while the full record is still loading: the title, stats
+ * and description render from the list row straight away, and the map, elevation and secondary sections show
+ * skeletons until the record arrives.
+ */
 export function CatalogTrailDetail({
   trail: t,
-  lines,
+  lines: loadedLines,
   manifest,
   parent = null,
+  loadError,
 }: {
   trail: CatalogTrail;
-  lines: [number, number][][];
-  manifest: CatalogManifest;
+  lines: [number, number][][] | null;
+  manifest: CatalogManifest | null;
   parent?: { id: string; name: string; miles: number | null } | null;
+  /** The full record failed to load (the page still shows what the list row had). */
+  loadError?: string;
 }) {
+  const loading = loadedLines === null && !loadError;
+  const lines = loadedLines ?? [];
   const distance = formatDistance(t.miles);
-  const lastChecked = manifest.sources.find((m) => m.key === t.source)?.retrievedAt?.slice(0, 10) ?? null;
+  const lastChecked = manifest?.sources.find((m) => m.key === t.source)?.retrievedAt?.slice(0, 10) ?? null;
   const flags = t.flags ?? [];
   const warning = t.flags?.includes("sidewalk") || t.flags?.includes("motorized") || (t.quality && t.quality !== "ok" && t.quality !== "short") ? qualityWarning(t, parent) : null;
   const isRoute = t.kind === "route";
   const sections = t.sectionCount ?? 1;
   const hasLines = lines.length > 0;
+  // Until the record arrives, the list row says whether the trail has a mapped line.
+  const expectLines = hasLines || (loading && (Boolean(t.bounds) || (Boolean(t.geometryShard) && t.geometryShard !== "route" && t.source !== "resort") || Boolean(t.memberIds?.length)));
   const hasLocation = Math.abs(t.latitude) > 0.1 || Math.abs(t.longitude) > 0.1;
   const browse = new URLSearchParams({
     ...(t.country === "US" || t.country === "CA" ? { country: t.country } : { country: "intl" }),
@@ -55,6 +68,8 @@ export function CatalogTrailDetail({
     ...(t.region && !isRoute && !t.region.includes("·") && (t.country === "US" || t.country === "CA") ? { region: t.region } : {}),
   });
   const difficulty = trailDifficulty(t);
+  // The official or Wikipedia text when there is one; otherwise a description written from the trail's data.
+  const sourceText = t.wiki?.extract ?? t.osm?.description ?? (t.source === "resort" ? t.note : undefined) ?? (isRoute ? (t.note ?? "A through-hike guide. Confirm distance, permits and current conditions with the trail association or land manager.") : undefined);
   const permits = permitLinks(t);
 
   return (
@@ -62,7 +77,7 @@ export function CatalogTrailDetail({
       <Link className="catalog-link" href={`/explore/trails/catalog?${browse}`}>
         ← Browse {isRoute ? "through-hikes" : (t.region ?? countryName(t.country))}
       </Link>
-      <CatalogTrailHero trail={t} difficulty={difficulty} distance={distance.primary} hasLines={hasLines} />
+      <CatalogTrailHero trail={t} difficulty={difficulty} distance={distance.primary} hasLines={expectLines} />
       {t.peakCategory && (
         <p className="trail-notes">
           <span className="catalog-badge">{t.peakCategory === "14er" ? "14er · 14,000+ ft peak" : t.peakCategory === "8000m" ? "8,000 m peak" : "Seven Summits"}</span>
@@ -96,7 +111,7 @@ export function CatalogTrailDetail({
         </p>
       )}
       <div className="trail-intro-row">
-        <TrailHighlights trail={t} hasLine={hasLines} />
+        <TrailHighlights trail={t} hasLine={expectLines} />
         {hasLocation && (
           <LocationMap
             className="trail-locator"
@@ -108,7 +123,14 @@ export function CatalogTrailDetail({
       </div>
       <section className="catalog-about" aria-label="About this trail">
         {/* The official or Wikipedia text when there is one; otherwise a summary written from the measured facts. */}
-        <p>{t.wiki?.extract ?? t.osm?.description ?? (t.source === "resort" && t.note ? t.note : isRoute ? (t.note ?? "A through-hike guide. Confirm distance, permits and current conditions with the trail association or land manager.") : describeTrail(t, { difficulty, time: estimatedTime({ miles: t.miles, gainFt: t.gainFt ?? null, lossFt: t.lossFt, steepestGradePct: t.steepestGradePct, routeType: t.routeType, difficulty, multiDay: Boolean(t.peakCategory) }) }))}</p>
+        {sourceText ? (
+          <p>{sourceText}</p>
+        ) : loading && t.wiki ? (
+          // List rows leave out the Wikipedia text; wait for it rather than swapping paragraphs.
+          <SkeletonLines count={3} label="Loading description" />
+        ) : (
+          <TrailDescription trail={t} difficulty={difficulty} hasLine={expectLines} time={estimatedTime({ miles: t.miles, gainFt: t.gainFt ?? null, lossFt: t.lossFt, steepestGradePct: t.steepestGradePct, routeType: t.routeType, difficulty, multiDay: Boolean(t.peakCategory) })} />
+        )}
         {t.wiki?.extract && <p className="catalog-muted">From <a href={t.wiki.url} target="_blank" rel="noopener noreferrer">Wikipedia</a> (CC BY-SA 4.0).</p>}
       </section>
       {t.sections && t.sections.length > 0 && (
@@ -126,8 +148,19 @@ export function CatalogTrailDetail({
           </ol>
         </section>
       )}
-      <h2 className="trail-heading">{hasLines ? "Map" : "Approximate location"}</h2>
-      {hasLines && !isRoute ? (
+      {loadError && <p className="trail-callout trail-callout--warn" role="status">{loadError}</p>}
+      <h2 className="trail-heading">{hasLines || loading ? "Map" : "Approximate location"}</h2>
+      {loading ? (
+        <>
+          <div className="trail-skeleton trail-skeleton--map" role="status" aria-label="Loading map" />
+          {expectLines && (
+            <section className="trail-elevation" aria-label="Elevation profile">
+              <h2>Elevation profile</h2>
+              <div className="trail-skeleton trail-skeleton--chart" aria-hidden />
+            </section>
+          )}
+        </>
+      ) : hasLines && !isRoute ? (
         <TrailMapAndDirections name={t.name} trailId={t.id} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }}>
           <TrailElevationSection trailId={t.id} stored={t} difficulty={difficulty} />
         </TrailMapAndDirections>
@@ -143,6 +176,7 @@ export function CatalogTrailDetail({
           {hasLines && <TrailElevationSection trailId={t.id} stored={t} difficulty={difficulty} />}
         </>
       )}
+      {loading ? <SecondarySkeleton /> : <>
       {hasLocation && (
         <details className="trail-more">
           <summary><span>Weather</span><small>7-day forecast near the trail</small></summary>
@@ -174,8 +208,10 @@ export function CatalogTrailDetail({
           <CatalogPhotos trailId={t.id} />
         </details>
       )}
+      </>}
       <TrailReviews trailId={t.id} name={t.name} />
-      <details className="trail-more">
+      <TrailReportProblem trailId={t.id} name={t.name} />
+      {manifest && <details className="trail-more">
         <summary><span>About this data</span><small>Sources, checks and licences</small></summary>
         <dl className="catalog-source-details">
           <div>
@@ -298,7 +334,48 @@ export function CatalogTrailDetail({
           )}
           Region is estimated from a point on the trail. Snapshot {manifest.generatedAt.slice(0, 10)} · ID {t.sourceId}.
         </p>
-      </details>
+      </details>}
+    </article>
+  );
+}
+
+/** Grey placeholder lines while text loads. */
+function SkeletonLines({ count, label }: { count: number; label?: string }) {
+  return (
+    <div className="trail-skeleton-lines" role={label ? "status" : undefined} aria-label={label} aria-hidden={label ? undefined : true}>
+      {Array.from({ length: count }, (_, i) => <span key={i} className="trail-skeleton trail-skeleton--line" style={{ width: i === count - 1 ? "62%" : "100%" }} />)}
+    </div>
+  );
+}
+
+/** Placeholders for the collapsible sections (weather, along the trail, trip planning, photos). */
+function SecondarySkeleton() {
+  return (
+    <div className="trail-skeleton-sections" aria-hidden>
+      {[0, 1, 2, 3].map((i) => <div key={i} className="trail-skeleton trail-skeleton--row" />)}
+    </div>
+  );
+}
+
+/**
+ * The trail page's layout before anything is known (a link opened cold): back link, title, stats bar, description,
+ * map and sections, in grey.
+ */
+export function TrailDetailSkeleton() {
+  return (
+    <article className="catalog-shell catalog-detail trail-detail-skeleton" aria-busy="true">
+      <p className="sr-only" role="status">Loading trail…</p>
+      <span className="trail-skeleton trail-skeleton--link" aria-hidden />
+      <div className="trail-skeleton trail-skeleton--hero" aria-hidden />
+      <span className="trail-skeleton trail-skeleton--title" aria-hidden />
+      <span className="trail-skeleton trail-skeleton--subtitle" aria-hidden />
+      <div className="trail-skeleton-stats" aria-hidden>
+        {[0, 1, 2, 3, 4].map((i) => <span key={i} className="trail-skeleton trail-skeleton--stat" />)}
+      </div>
+      <SkeletonLines count={3} />
+      <div className="trail-skeleton trail-skeleton--map" aria-hidden />
+      <div className="trail-skeleton trail-skeleton--chart" aria-hidden />
+      <SecondarySkeleton />
     </article>
   );
 }

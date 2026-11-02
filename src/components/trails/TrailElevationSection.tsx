@@ -1,4 +1,5 @@
 "use client";
+import { cachedJson } from "@/lib/trail-catalog/client-cache";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { friendlyError } from "@/lib/errors";
@@ -34,11 +35,11 @@ function step(span: number, count: number) {
 export function TrailElevationSection({ trailId, stored, difficulty }: { trailId: string; stored?: StoredElevation; difficulty?: string }) {
   const [load, setLoad] = useState<Load>({ state: "loading" });
   useEffect(() => {
-    const controller = new AbortController();
-    fetch(`/api/trail-catalog/${encodeURIComponent(trailId)}/elevation`, { signal: controller.signal })
-      .then(async (r) => { const data = await r.json(); if (!r.ok) throw new Error(data.error ?? "Elevation couldn’t be loaded."); setLoad({ state: "ready", data }); })
-      .catch((e: Error) => { if (e.name !== "AbortError") setLoad({ state: "error", message: friendlyError(e, "Elevation couldn’t be loaded right now.") }); });
-    return () => controller.abort();
+    let live = true;
+    cachedJson<ElevationProfile>(`/api/trail-catalog/${encodeURIComponent(trailId)}/elevation`)
+      .then((data) => { if (live) setLoad({ state: "ready", data }); })
+      .catch((e: Error) => { if (live) setLoad({ state: "error", message: friendlyError(e, "Elevation couldn’t be loaded right now.") }); });
+    return () => { live = false; };
   }, [trailId]);
 
   return (

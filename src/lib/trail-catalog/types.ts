@@ -189,6 +189,10 @@ export interface CatalogFilters {
   uniqueNames?: boolean;
   /** Include fragments (pieces of longer trails, unnamed stubs, connectors). Default excludes them. */
   includeFragments?: boolean;
+  /** "Show all mapped segments": keep trails with no mapped line, no length or under 0.3 mi in lists. */
+  allSegments?: boolean;
+  /** Lists ("Trails near me", search) set this to leave out those stubs unless allSegments is on. */
+  hideStubs?: boolean;
   /** Only trails a given ski resort lists (e.g. "Vail"). */
   resort?: string;
   sourceType?: import("./agencies").SourceType;

@@ -160,6 +160,10 @@ input,textarea { caret-color: var(--accent); }
 .fieldbook-sync--offline .fieldbook-sync-dot { background: #e0b04a; }
 .fieldbook-sync--error .fieldbook-sync-dot { background: #e5675a; }
 .fieldbook-sync--guest .fieldbook-sync-dot { background: transparent; border: 1px solid var(--sage); }
+/* Guests: the badge is a sign-in link. */
+.fieldbook-sync-link { text-decoration: none; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.fieldbook-sync-link:hover .fieldbook-nav-label, .fieldbook-sync-link:focus-visible .fieldbook-nav-label { text-decoration: underline; text-underline-offset: 3px; }
+.fieldbook-sync-link .fieldbook-sync-dot { border-color: var(--accent); }
 @keyframes fieldbook-sync-pulse { from { opacity: .35; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .fieldbook-sync--syncing .fieldbook-sync-dot { animation: none; } }
 @media(min-width:768px) {
@@ -624,6 +628,13 @@ html { scroll-padding-block:20px 100px; }
 .guest-save-banner p { flex: 1; margin: 0; font-size: 14px; }
 .guest-save-close { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: transparent; color: var(--sage); cursor: pointer; }
 @media (max-width: 767px) { .guest-save-banner { bottom: 92px; flex-wrap: wrap; } }
+/* First guest save: what an account gives. */
+.guest-save-banner--save { align-items: flex-start; }
+.guest-save-copy { flex: 1; min-width: 0; }
+.guest-save-copy ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--sage); }
+.guest-save-copy li + li { margin-top: 2px; }
+.guest-save-actions { display: flex; flex-direction: column; gap: 8px; align-self: center; }
+@media (max-width: 767px) { .guest-save-actions { flex-direction: row; width: 100%; } .guest-save-banner--save .guest-save-close { position: absolute; top: 6px; right: 6px; } .guest-save-banner--save { padding-top: 14px; } .guest-save-banner--save .guest-save-copy { padding-right: 32px; } }
 
 /* Data sources & licences page */
 .data-sources > p { max-width: 70ch; line-height: 1.6; color: var(--sage); }
@@ -732,6 +743,8 @@ html { scroll-padding-block:20px 100px; }
 .trail-card { cursor: pointer; border: 1px solid var(--border); box-shadow: var(--card-shadow); }
 .trail-card:hover { box-shadow: var(--card-shadow), 0 0 0 1px #a8e58f33, 0 24px 50px -24px #34d39955; }
 @media (hover: none) { .trail-card-directions { opacity: 1 !important; transform: none !important; } }
+/* "Why this trail" tag on Trails near me cards. */
+.trail-card-tag { position: absolute; left: 12px; top: 12px; z-index: 10; max-width: calc(100% - 72px); margin: 0; padding: 4px 10px; border-radius: 999px; background: #0b1a10d9; color: #eef3e9; font-size: 12px; font-weight: 650; line-height: 1.4; letter-spacing: 0.01em; box-shadow: 0 2px 8px #00000040; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-trail-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); gap: 20px; }
 .home-trail-cards .trail-card { max-width: none; }
 .trail-intro-row { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 16px 24px; margin-bottom: 1.6rem; }

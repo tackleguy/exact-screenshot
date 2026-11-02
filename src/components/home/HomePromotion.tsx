@@ -23,6 +23,9 @@ import { Compass, Crosshair, Map as MapIcon, Mountain, Route as RouteIcon, Tent 
 import { HykedLogo } from "@/components/brand/HykedLogo";
 import { CountUp } from "@/components/ui/count-up";
 import { motion } from "framer-motion";
+import { pickNearbyTrails, type NearbyPick } from "@/lib/trail-catalog/nearby-picks";
+import { loadTrailDetail, rememberTrails } from "@/lib/trail-catalog/client-cache";
+import { shortTrailName } from "@/lib/trail-catalog/naming";
 
 const photo = typeof discovery === "string" ? discovery : discovery.src;
 /** Famous long-distance trails: Hyked guides first, then worldwide classics found by search. */
@@ -64,17 +67,20 @@ const destinations = [
  * within 3 seconds, otherwise a hiking region guessed from their time zone.
  */
 function useNearby() {
-  const [state, setState] = useState<{ trails: CatalogTrail[]; place: string | null; status: "loading" | "ready" }>({ trails: [], place: null, status: "loading" });
+  const [state, setState] = useState<{ picks: NearbyPick[]; place: string | null; status: "loading" | "ready" }>({ picks: [], place: null, status: "loading" });
   useEffect(() => {
     let live = true;
     void locate(3000).then((at) => {
       const region = at ? null : timezoneRegion();
       const [lng, lat] = at ?? region!.center;
-      const p = new URLSearchParams({ lat: lat.toFixed(3), lng: lng.toFixed(3), radiusKm: at ? "50" : "120", limit: "4" });
+      // A wider pool than the four cards, so they can be chosen by quality and difficulty rather than distance.
+      const p = new URLSearchParams({ lat: lat.toFixed(3), lng: lng.toFixed(3), radiusKm: at ? "50" : "120", limit: "36" });
       return fetch(`/api/trail-catalog?${p}`).then((r) => (r.ok ? r.json() : null)).then((d: { trails?: CatalogTrail[] } | null) => {
-        if (live) setState({ trails: d?.trails ?? [], place: region?.label ?? null, status: "ready" });
+        const pool = d?.trails ?? [];
+        rememberTrails(pool);
+        if (live) setState({ picks: pickNearbyTrails(pool, { origin: { lat, lng, exact: Boolean(at) } }), place: region?.label ?? null, status: "ready" });
       });
-    }).catch(() => { if (live) setState({ trails: [], place: null, status: "ready" }); });
+    }).catch(() => { if (live) setState({ picks: [], place: null, status: "ready" }); });
     return () => { live = false; };
   }, []);
   return state;
@@ -142,10 +148,10 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
       </>
     )}
     <section className="home-destinations">
-      <div className="home-section-heading"><div><p className="section-label">{nearby.trails.length ? (nearby.place ? `IN ${nearby.place.toUpperCase()}` : "NEAR YOU") : "FIND YOUR NEXT ESCAPE"}</p><h2>{nearby.trails.length ? "Trails near me" : "Somewhere worth going."}</h2></div><Link href="/explore/trails/catalog" className="fieldbook-text-link">Browse trails <ArrowUpRight size={16} aria-hidden /></Link></div>
-      {nearby.trails.length ? (
+      <div className="home-section-heading"><div><p className="section-label">{nearby.picks.length ? (nearby.place ? `IN ${nearby.place.toUpperCase()}` : "NEAR YOU") : "FIND YOUR NEXT ESCAPE"}</p><h2>{nearby.picks.length ? "Trails near me" : "Somewhere worth going."}</h2></div><Link href="/explore/trails/catalog" className="fieldbook-text-link">Browse trails <ArrowUpRight size={16} aria-hidden /></Link></div>
+      {nearby.picks.length ? (
         <div className="home-trail-cards">
-          {nearby.trails.map((t, i) => {
+          {nearby.picks.map(({ trail: t, reason }, i) => {
             const level = trailDifficulty(t);
             const open = () => router.push(`/explore/trails/${encodeURIComponent(t.id)}`);
             return (
@@ -153,12 +159,15 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
                 <TrailCard
                   role="link"
                   tabIndex={0}
-                  aria-label={`${t.name}: ${DIFFICULTY_LABELS[level]}, ${fmtMiles(t.miles) ?? "distance unknown"}`}
+                  aria-label={`${t.name}: ${reason}. ${DIFFICULTY_LABELS[level]}, ${fmtMiles(t.miles) ?? "distance unknown"}`}
                   onClick={open}
+                  // Start loading the full record on hover or touch, so the map is ready when the page opens.
+                  onPointerEnter={() => void loadTrailDetail(t.id).catch(() => undefined)}
                   onKeyDown={(e) => { if (e.key === "Enter") open(); }}
                   imageUrl={trailSatellite(t)}
                   mapImageUrl={trailThumbnail(t, 160, 80)}
-                  title={t.name}
+                  title={shortTrailName(t.name)}
+                  tag={reason}
                   location={join([t.park ?? t.forest, t.region]) ?? countryName(t.country)}
                   difficulty={DIFFICULTY_LABELS[level]}
                   creators={join([here ? `${formatMeters(metersBetween(here, [t.longitude, t.latitude]))} away` : null, t.manager]) ?? "Mapped trail"}

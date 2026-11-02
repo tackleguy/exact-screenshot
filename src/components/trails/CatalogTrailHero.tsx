@@ -1,4 +1,5 @@
 "use client";
+import { cachedJson } from "@/lib/trail-catalog/client-cache";
 
 import { TrailStats } from "./TrailStats";
 import { SaveHeart } from "./SaveHeart";
@@ -47,7 +48,7 @@ export function CatalogTrailHero({ trail: t, difficulty, hasLines }: { trail: Ca
     });
     // Trails the data build measured carry their climb; others measure it here (for the time estimate only — the
     // difficulty always comes from the stored measures, so it matches the list, the map and the page title).
-    if (hasLines && !Number.isFinite(t.gainFt)) fetch(`/api/trail-catalog/${encodeURIComponent(t.id)}/elevation`).then((r) => (r.ok ? r.json() : null)).then((e) => { if (live && Number.isFinite(e?.gainFt)) setGainFor({ id: t.id, gainFt: effortClimbFt(e, t.routeType) ?? e.gainFt }); }).catch(() => undefined);
+    if (hasLines && !Number.isFinite(t.gainFt)) cachedJson<{ gainFt: number; lossFt: number }>(`/api/trail-catalog/${encodeURIComponent(t.id)}/elevation`).then((e) => { if (live && Number.isFinite(e?.gainFt)) setGainFor({ id: t.id, gainFt: effortClimbFt(e, t.routeType) ?? e.gainFt }); }).catch(() => undefined);
     return () => { live = false; };
   }, [t.id, t.gainFt, t.routeType, hasLines]);
   const strip = photos?.id === t.id ? photos.list : [];
@@ -78,7 +79,8 @@ export function CatalogTrailHero({ trail: t, difficulty, hasLines }: { trail: Ca
         <div className="trail-hero-text">
           <span className={`trail-chip ${CHIP[level] ?? ""}`}>{DIFFICULTY_LABELS[level] ?? level}</span>
           {badge && <span className={`trail-confidence trail-confidence--${badge.tier}`} title={badge.detail}>{badge.label}</span>}
-          <h1>{t.name}</h1>
+          {/* A rebuilt name's place ("— Angeles National Forest") is set smaller; the line below also names it. */}
+          <h1>{t.name.includes(" — ") ? <>{t.name.split(" — ")[0]} <span className="trail-name-context">— {t.name.split(" — ").slice(1).join(" — ")}</span></> : t.name}</h1>
           <p>{join([t.park ?? t.forest, t.region, countryName(t.country)])}</p>
           {available && <p className="trail-hero-rating"><Stars value={average} /> <span>{count ? `${average!.toFixed(1)} (${count})` : "No ratings yet"}</span></p>}
         </div>

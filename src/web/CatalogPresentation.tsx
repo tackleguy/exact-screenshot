@@ -1,4 +1,7 @@
 import Link from "next/link";
+import RowLink from "./compat/link";
+import { shortTrailName } from "@/lib/trail-catalog/naming";
+import { loadTrailDetail } from "@/lib/trail-catalog/client-cache";
 import type { CatalogManifest, CatalogTrail, CatalogMapResult } from "@/lib/trail-catalog/types";
 import { parseCatalogFilters } from "@/lib/trail-catalog/search";
 import { headlineCount, countryName, displayMiles, trailPlace, trailSacScale } from "@/lib/trail-catalog/types";
@@ -46,6 +49,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
     activity !== "hike" && activity !== "all" && CATALOG_ACTIVITY_LABELS[activity],
     filters.uniqueNames && "Unique names",
     filters.includeFragments && "Partial segments",
+    filters.allSegments && !filters.includeFragments && "All mapped segments",
     filters.region,
     filters.minMiles !== undefined && filters.maxMiles !== undefined
       ? `${filters.minMiles}–${filters.maxMiles} mi`
@@ -208,6 +212,10 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                 Verified by a park or agency
               </label>
               <label className="catalog-checkbox">
+                <input type="checkbox" name="allSegments" value="true" defaultChecked={params.get("allSegments") === "true"} />
+                Show all mapped segments <small className="catalog-muted">(pieces under 0.3 mi and trails without a mapped line)</small>
+              </label>
+              <label className="catalog-checkbox">
                 <input
                   type="checkbox"
                   name="includeFragments"
@@ -258,11 +266,13 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
               <ul className="catalog-list">
                 {trails.map((t, i) => (
                   <motion.li key={t.id} className="catalog-list-item" {...staggerItem(i)}>
-                    <Link href={`/explore/trails/${encodeURIComponent(t.id)}`} prefetch={false} className="catalog-row">
+                    {/* The row travels with the click so the trail page draws at once (router state). */}
+                    <RowLink href={`/explore/trails/${encodeURIComponent(t.id)}`} state={{ trail: t }} className="catalog-row" onPointerEnter={() => void loadTrailDetail(t.id).catch(() => undefined)} onFocus={() => void loadTrailDetail(t.id).catch(() => undefined)}>
                       {/* eslint-disable-next-line @next/next/no-img-element -- remote static map picture */}
                       <img className="catalog-row-thumb" src={trailThumbnail(t)} alt="" loading="lazy" width={80} height={60} />
                       <div className="catalog-row-name">
-                        <h2>{t.name}</h2>
+                        {/* The place suffix of a rebuilt name ("— Angeles National Forest") is on the line below. */}
+                        <h2>{shortTrailName(t.name)}</h2>
                         <span className="catalog-badges">
                           {t.peakCategory && (
                             <span className="catalog-badge" style={{ background: "#7c3aed", color: "#fff", fontWeight: "bold" }}>
@@ -289,7 +299,7 @@ export function CatalogPresentation({ params, result, mapData }: { params: URLSe
                         {displayMiles(t.miles)}
                       </span>
                       <NavIcon name="chevron" />
-                    </Link>
+                    </RowLink>
                     <SaveHeart trailId={t.id} name={t.name} className="save-heart--card catalog-row-heart" />
                   </motion.li>
                 ))}

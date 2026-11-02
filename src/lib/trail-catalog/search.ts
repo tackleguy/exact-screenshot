@@ -18,6 +18,19 @@ import { trailSacScale } from "./types";
 /** Names that say "this is not a trail" (a driveway or parking lot mapped as a path); listed only with partial segments. */
 export const NOT_A_TRAIL_NAME = /^(driveway|private( drive| driveway| road| property)?|parking( lot| area| access)?|service (road|drive)|access (road|drive)|fire lane|alley|sidewalk|gate|path|trail|footpath|connector|spur|shortcut|no name|none)$/i;
 
+/** Shortest trail a list ("Trails near me", search) shows unless "Show all mapped segments" is on. */
+export const MIN_LIST_MILES = 0.3;
+const CURATED_SOURCES = new Set(["guide", "route-aggregate", "peak"]);
+/**
+ * A mapped piece too thin to present as a hike: no mapped line, no length, or under 0.3 mi. Through-hikes,
+ * curated guides, peaks and through-hike sections are never stubs.
+ */
+export function isListStub(r: Pick<CatalogTrail, "kind" | "source" | "miles" | "geometryShard" | "bounds" | "peakCategory" | "partOfRoute">) {
+  if (r.kind === "route" || CURATED_SOURCES.has(r.source) || r.peakCategory || r.partOfRoute) return false;
+  const mapped = Boolean(r.bounds) || (Boolean(r.geometryShard) && r.geometryShard !== "route" && r.source !== "resort");
+  return !mapped || r.miles === null || !Number.isFinite(r.miles) || r.miles < MIN_LIST_MILES;
+}
+
 export const normalize = (value: string) =>
   value
     .normalize("NFKD")
@@ -76,6 +89,8 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     if (!approved && !filters.includeFragments && activity !== "all" && r.flags?.includes("motorized")) return false;
     // The managing agency says hiking isn't an allowed use here.
     if (!approved && !filters.includeFragments && (activity === "hike" || activity === "walk" || activity === "backpack" || activity === "run") && r.flags?.includes("no-hiking")) return false;
+    // Lists leave out unmapped, unmeasured and very short pieces unless "Show all mapped segments" is on.
+    if (!approved && filters.hideStubs && !filters.allSegments && !filters.includeFragments && isListStub(r)) return false;
     if (filters.resort && normalize(r.skiResort ?? "") !== normalize(filters.resort)) return false;
     if (filters.sourceType && r.sourceType !== filters.sourceType) return false;
     if (filters.kind && r.kind !== filters.kind) return false;
@@ -211,6 +226,7 @@ export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
     kind,
     uniqueNames: params.get("uniqueNames") === "true",
     includeFragments: params.get("includeFragments") === "true",
+    allSegments: params.get("allSegments") === "true",
     resort: params.get("resort")?.slice(0, 100) || undefined,
     sourceType: (params.get("sourceType")?.toUpperCase().replace(/[^A-Z_]/g, "") || undefined) as CatalogFilters["sourceType"],
     lat: number("lat", -90, 90),

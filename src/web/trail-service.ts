@@ -18,6 +18,7 @@ import { planTownDays } from "@/lib/trip/town-days";
 import { tripGpx, tripPacketHtml, waterCsv, type PackItem, type TripBundle } from "@/lib/trip/packet";
 import { MIN_MAPPED_SHARE, mappedShare, planningMiles, townDayOptions, unplannable } from "@/lib/trip/planning";
 import { catalogGpx } from "@/lib/trail-catalog/gpx";
+import { withDisplayName } from "@/lib/trail-catalog/naming";
 import { readableTrailName, MAP_TRAIL_LIMIT, TRAIL_CARD_LIMIT, localTrailsVisible } from "@/lib/trail-catalog/discovery";
 import { sectionOf } from "@/lib/trail-catalog/activity";
 import { TrailheadIndex, trailEnds, type TrailheadCache } from "@/lib/trail-catalog/access";
@@ -125,7 +126,7 @@ async function cells(refs: string[], m: Metadata, fetcher: typeof fetch) {
   ).flat();
   // A long trail is listed in every cell its line crosses; keep one copy.
   const seen = new Set<string>();
-  return rows.filter((t) => t.confidence !== "REJECTED" && !seen.has(t.id) && Boolean(seen.add(t.id))).map((t) => ({ ...t, name: readableTrailName(t.name, t.id) }));
+  return rows.filter((t) => t.confidence !== "REJECTED" && !seen.has(t.id) && Boolean(seen.add(t.id))).map((t) => withDisplayName({ ...t, name: readableTrailName(t.name, t.id) }));
 }
 
 let curatedPromise: Promise<{ lines: Record<string, Lines>; links: Record<string, string> }> | undefined;
@@ -197,7 +198,7 @@ async function pageOfRows(m: Metadata, ids: string[], f: ReturnType<typeof parse
 async function rowsById(m: Metadata, ids: string[], fetcher: typeof fetch) {
   const files = await rowFiles(m, ids, fetcher);
   const all = Object.assign({}, ...files) as Record<string, CatalogTrail | string>;
-  return ids.flatMap((id) => { const r = all[id]; return r && typeof r === "object" ? [{ ...r, name: readableTrailName(r.name, r.id) }] : []; });
+  return ids.flatMap((id) => { const r = all[id]; return r && typeof r === "object" ? [withDisplayName({ ...r, name: readableTrailName(r.name, r.id) })] : []; });
 }
 
 function getCuratedExtraTrails(): CatalogTrail[] {
@@ -266,13 +267,19 @@ async function select(params: URLSearchParams, fetcher: typeof fetch): Promise<{
   return { rows: [...curated, ...overview.filter((r) => !seen.has(r.id))], manifest: m };
 }
 
+/**
+ * A trail's full record with its line, nearest trailhead and the manifest. With `geometry: false` only the record
+ * (one small rows file): the trail page's first paint for a link opened cold, before the line and trailheads load.
+ */
 async function detail(
   id: string,
   fetcher: typeof fetch,
+  geometry = true,
 ): Promise<{ trail: CatalogTrail; lines: Lines; manifest: Metadata } | null> {
   const m = await meta(fetcher);
   // Curated guides draw the real line of the trail they were matched to at build time, or no line at all.
   const guide = async (trail: CatalogTrail) => {
+    if (!geometry) return { trail, lines: [] as Lines, manifest: m };
     const c = await curated(m, fetcher);
     const linked = c.links[trail.id];
     return { trail: linked ? { ...trail, linkedTrailId: linked } : trail, lines: (c.lines[trail.id] ?? []) as Lines, manifest: m };
@@ -301,8 +308,9 @@ async function detail(
   // 4. Full records by id (merged records redirect to the whole trail)
   const where = (await rowFiles(m, [id], fetcher))[0][id];
   if (!where) return null;
-  if (typeof where === "string") return where.startsWith("r:") && where.slice(2) !== id ? detail(where.slice(2), fetcher) : null;
-  return withLines({ ...where, name: readableTrailName(where.name, where.id) }, m, fetcher);
+  if (typeof where === "string") return where.startsWith("r:") && where.slice(2) !== id ? detail(where.slice(2), fetcher, geometry) : null;
+  if (!geometry) return { trail: withDisplayName({ ...where, name: readableTrailName(where.name, where.id) }), lines: [], manifest: m };
+  return withLines(withDisplayName({ ...where, name: readableTrailName(where.name, where.id) }), m, fetcher);
 }
 
 /** A catalog trail with its mapped line and nearest trailhead. */
@@ -564,7 +572,8 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       const bbox = f.bbox;
       const local = bbox ? { ...f, lat: (bbox[1] + bbox[3]) / 2, lng: (bbox[0] + bbox[2]) / 2, radiusKm: 1000 } : f;
       // The map draws every trail in view (same-name trails are separate trails); lists show one per name.
-      const result = filterCatalog(rows, { ...local, limit: suffix.length ? MAP_TRAIL_LIMIT : f.limit ?? TRAIL_CARD_LIMIT, uniqueNames: !suffix.length });
+      // Lists ("Trails near me", search) hide unmapped and very short pieces; the map still draws them.
+      const result = filterCatalog(rows, { ...local, limit: suffix.length ? MAP_TRAIL_LIMIT : f.limit ?? TRAIL_CARD_LIMIT, uniqueNames: !suffix.length, hideStubs: !suffix.length && !f.resort && !f.collection });
 
       if (suffix[0] === "points") {
         const trails: (string | number | null)[][] = result.trails.map((t) => [
@@ -623,6 +632,11 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
       return Response.json({ ...result, manifest, ...(queryMatches && queryMatches > result.total ? { queryMatches } : {}) });
     }
 
+    // The record alone (no line or trailhead): a fast first paint for the trail page.
+    if (suffix[1] === "summary") {
+      const s = await detail(decodeURIComponent(suffix[0]), fetcher, false);
+      return s ? Response.json({ trail: s.trail }) : Response.json({ error: "This trail is not in the current source catalog." }, { status: 404 });
+    }
     const d = await detail(decodeURIComponent(suffix[0]), fetcher);
     if (!d) return Response.json({ error: "This trail is not in the current source catalog." }, { status: 404 });
     if (!suffix[1]) return Response.json(d);
