@@ -6,6 +6,7 @@ import { ArrowUpRight, Search } from "lucide-react";
 import { countryName, headlineCount, type CatalogManifest, type CatalogTrail } from "@/lib/trail-catalog/types";
 import { join, miles as fmtMiles } from "@/lib/display";
 import discovery from "@/assets/trail-discovery.jpg";
+import heroPeak from "@/assets/hero-peak.jpg";
 import { TRAIL_SECTIONS } from "@/lib/trail-catalog/activity";
 import { SectionIcon } from "@/components/explore/SectionIcon";
 import { locate, timezoneRegion, useKnownPosition } from "@/lib/start-location";
@@ -20,7 +21,6 @@ import { SaveHeart } from "@/components/trails/SaveHeart";
 import { metersBetween } from "@/lib/geo/line";
 import { formatDistance, formatElevation, formatMeters } from "@/lib/units";
 import { Compass, Crosshair, Map as MapIcon, Mountain, Route as RouteIcon, Tent } from "lucide-react";
-import { HykedLogo } from "@/components/brand/HykedLogo";
 import { CountUp } from "@/components/ui/count-up";
 import { motion } from "framer-motion";
 import { pickNearbyTrails, type NearbyPick } from "@/lib/trail-catalog/nearby-picks";
@@ -28,6 +28,7 @@ import { loadTrailDetail, rememberTrails } from "@/lib/trail-catalog/client-cach
 import { shortTrailName } from "@/lib/trail-catalog/naming";
 
 const photo = typeof discovery === "string" ? discovery : discovery.src;
+const peak = typeof heroPeak === "string" ? heroPeak : heroPeak.src;
 /** Famous long-distance trails: Hyked guides first, then worldwide classics found by search. */
 /** What Hyked does, for visitors who haven't signed up yet: each card is a real feature and opens it. */
 const FEATURES = [
@@ -100,28 +101,36 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
   const manifest = useCatalogCount();
   const [photoFailed, setPhotoFailed] = useState(false);
   return <div className="home-promotion">
-    <header className={`discovery-hero${photoFailed ? " discovery-hero--no-photo" : ""}${signedIn ? " discovery-hero--member" : ""}`}>
+    {signedIn ? (
+    <header className={`discovery-hero${photoFailed ? " discovery-hero--no-photo" : ""} discovery-hero--member`}>
       {!photoFailed && <img src={photo} alt="Hikers on an alpine trail above a turquoise mountain lake" width={1920} height={1088} className="discovery-hero-image" fetchPriority="high" onError={() => setPhotoFailed(true)} />}
       <div className="discovery-hero-content">
         <h1 className="sr-only">Hyked</h1>
-        {!signedIn && <HykedLogo animated className="discovery-logo" />}
-        <p className="discovery-kicker">{signedIn ? "Welcome back" : "Hike · Ride · Run · Ski"}</p>
-        <p className="discovery-headline">{signedIn ? <>Where to next?</> : <>Your next great day<br />starts on a trail.</>}</p>
+        <p className="discovery-kicker">Welcome back</p>
+        <p className="discovery-headline">Where to next?</p>
         <form action="/explore/trails/catalog" className="discovery-search" role="search"><Search size={20} aria-hidden /><label htmlFor="discovery-query" className="sr-only">Search trails</label><input id="discovery-query" name="q" type="search" placeholder="Search by city, park or trail name" /><button type="submit" className="btn-primary" aria-label="Search trails"><ArrowUpRight size={22} aria-hidden /></button></form>
         <nav className="discovery-chips" aria-label="Quick filters">
           <Link href="/explore/trails" className="discovery-chip discovery-chip--solid">Near me</Link>
           {TRAIL_SECTIONS.slice(0, 4).map((s) => <Link key={s.key} href={`/explore/trails?activity=${s.activity}`} className="discovery-chip">{s.label}</Link>)}
           <Link href="/explore/ski" className="discovery-chip">Ski areas</Link>
         </nav>
-        {!signedIn && (
-          <div className="discovery-ctas">
-            <Link href="/signup" className="btn-primary">Join Hyked — it’s free <ArrowUpRight size={18} aria-hidden /></Link>
-            <Link href="/explore/trails" className="btn-ghost">Explore the map</Link>
-          </div>
-        )}
         {manifest && <p className="discovery-proof">{headlineCount(manifest).toLocaleString("en-US")} trails in {Object.keys(manifest.countries ?? {}).length || 2} countries</p>}
       </div>
     </header>
+    ) : (
+      // Signed out: one photograph and one message, nothing else competing for attention.
+      <header className="pitch-hero">
+        <img src={peak} alt="" width={1500} height={1125} className="pitch-hero-image" fetchPriority="high" />
+        <div className="pitch-hero-content">
+          <h1>Find your next summit.</h1>
+          <p>{manifest ? `${(headlineCount(manifest) / 1e6).toFixed(1)} million trails` : "Over a million trails"}, precise GPS and trip planning. Free.</p>
+          <div className="pitch-hero-actions">
+            <Link href="/signup" className="btn-primary">Join Hyked <ArrowUpRight size={18} aria-hidden /></Link>
+            <Link href="/explore/trails" className="pitch-hero-link">Explore the map</Link>
+          </div>
+        </div>
+      </header>
+    )}
     {!signedIn && (
       <>
         <Reveal className="home-stats" aria-label="Hyked in numbers">
