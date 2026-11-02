@@ -19,9 +19,28 @@ import { googleMapsDirectionsUrl } from "@/lib/trail-catalog/access";
 import { SaveHeart } from "@/components/trails/SaveHeart";
 import { metersBetween } from "@/lib/geo/line";
 import { formatDistance, formatElevation, formatMeters } from "@/lib/units";
+import { Compass, Crosshair, Map as MapIcon, Mountain, Route as RouteIcon, Tent } from "lucide-react";
+import { HykedLogo } from "@/components/brand/HykedLogo";
+import { CountUp } from "@/components/ui/count-up";
+import { motion } from "framer-motion";
 
 const photo = typeof discovery === "string" ? discovery : discovery.src;
 /** Famous long-distance trails: Hyked guides first, then worldwide classics found by search. */
+/** What Hyked does, for visitors who haven't signed up yet: each card is a real feature and opens it. */
+const FEATURES = [
+  { icon: MapIcon, title: "Every trail, mapped", body: "Search over a million hiking, biking, riding and ski trails worldwide, rated by measured length and climb.", href: "/explore/trails/catalog", cta: "Browse trails" },
+  { icon: Crosshair, title: "Precise GPS recording", body: "Filtered, smoothed tracking aims for 5 m, snaps to the trail, and keeps going while you check the map.", href: "/record", cta: "Start recording" },
+  { icon: Tent, title: "Backpacking mode", body: "Campsites, water and towns by mile, what's next from where you are, and where to get permits.", href: "/explore/trails/route-jmt", cta: "See an example" },
+  { icon: Mountain, title: "3D terrain", body: "Tilt into the mountains on satellite imagery and fly the whole trail before you go.", href: "/explore/trails?lat=37.745&lng=-119.596&z=12", cta: "Open the map" },
+  { icon: RouteIcon, title: "Go anywhere", body: "Plan point to point through up to five stops: on trails, by road, or with flights for the long legs.", href: "/explore/trails", cta: "Build a route" },
+  { icon: Compass, title: "Plan & pack", body: "Turn a trail into a trip: days, town stops, water, and a packing list from your own gear.", href: "/plan", cta: "Plan a trip" },
+];
+const STEPS = [
+  { n: "01", title: "Find it", body: "Search a place or open the map. Every trail shows its distance, climb, time and difficulty." },
+  { n: "02", title: "Plan it", body: "Check the elevation, weather, water and permits, then save it or plan a multi-day trip." },
+  { n: "03", title: "Hike it", body: "Tap Start trail. Hyked records your route, measures your climb, and shows what's coming up ahead." },
+];
+
 const LONG_TRAILS = [
   { name: "Appalachian Trail", detail: "Georgia to Maine · 2,190 mi", href: "/explore/trails/route-at" },
   { name: "Pacific Crest Trail", detail: "Mexico to Canada · 2,650 mi", href: "/explore/trails/route-pct" },
@@ -79,6 +98,7 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
       {!photoFailed && <img src={photo} alt="Hikers on an alpine trail above a turquoise mountain lake" width={1920} height={1088} className="discovery-hero-image" fetchPriority="high" onError={() => setPhotoFailed(true)} />}
       <div className="discovery-hero-content">
         <h1 className="sr-only">Hyked</h1>
+        {!signedIn && <HykedLogo animated className="discovery-logo" />}
         <p className="discovery-kicker">{signedIn ? "Welcome back" : "Hike · Ride · Run · Ski"}</p>
         <p className="discovery-headline">{signedIn ? <>Where to next?</> : <>Your next great day<br />starts on a trail.</>}</p>
         <form action="/explore/trails/catalog" className="discovery-search" role="search"><Search size={20} aria-hidden /><label htmlFor="discovery-query" className="sr-only">Search trails</label><input id="discovery-query" name="q" type="search" placeholder="Search by city, park or trail name" /><button type="submit" className="btn-primary" aria-label="Search trails"><ArrowUpRight size={22} aria-hidden /></button></form>
@@ -87,9 +107,40 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
           {TRAIL_SECTIONS.slice(0, 4).map((s) => <Link key={s.key} href={`/explore/trails?activity=${s.activity}`} className="discovery-chip">{s.label}</Link>)}
           <Link href="/explore/ski" className="discovery-chip">Ski areas</Link>
         </nav>
+        {!signedIn && (
+          <div className="discovery-ctas">
+            <Link href="/signup" className="btn-primary">Join Hyked — it’s free <ArrowUpRight size={18} aria-hidden /></Link>
+            <Link href="/explore/trails" className="btn-ghost">Explore the map</Link>
+          </div>
+        )}
         {manifest && <p className="discovery-proof">{headlineCount(manifest).toLocaleString("en-US")} trails in {Object.keys(manifest.countries ?? {}).length || 2} countries</p>}
       </div>
     </header>
+    {!signedIn && (
+      <>
+        <Reveal className="home-stats" aria-label="Hyked in numbers">
+          <div><strong>{manifest ? <CountUp value={headlineCount(manifest)} /> : "1M+"}</strong><span>trails mapped</span></div>
+          <div><strong>{manifest ? <CountUp value={Object.keys(manifest.countries ?? {}).length || 2} /> : "200+"}</strong><span>countries</span></div>
+          <div><strong><CountUp value={5} format={(n) => `${Math.round(n)} m`} /></strong><span>GPS precision target</span></div>
+          <div><strong>Free</strong><span>to explore and record</span></div>
+        </Reveal>
+        <section className="home-features" aria-labelledby="home-features-heading">
+          <div className="home-section-heading"><div><p className="section-label">WHY HYKED</p><h2 id="home-features-heading">Everything for the trail, in one place.</h2></div></div>
+          <div className="home-feature-grid">
+            {FEATURES.map((f, i) => (
+              <Reveal key={f.title} delay={(i % 3) * 0.08}>
+                <Link href={f.href} className="home-feature">
+                  <span className="home-feature-icon" aria-hidden="true"><f.icon size={22} /></span>
+                  <h3>{f.title}</h3>
+                  <p>{f.body}</p>
+                  <span className="home-feature-cta">{f.cta} <ArrowUpRight size={15} aria-hidden /></span>
+                </Link>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+      </>
+    )}
     <section className="home-destinations">
       <div className="home-section-heading"><div><p className="section-label">{nearby.trails.length ? (nearby.place ? `IN ${nearby.place.toUpperCase()}` : "NEAR YOU") : "FIND YOUR NEXT ESCAPE"}</p><h2>{nearby.trails.length ? "Trails near me" : "Somewhere worth going."}</h2></div><Link href="/explore/trails/catalog" className="fieldbook-text-link">Browse trails <ArrowUpRight size={16} aria-hidden /></Link></div>
       {nearby.trails.length ? (
@@ -164,6 +215,18 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
         {LONG_TRAILS.map((t) => <Link key={t.name} href={t.href} className="home-long"><strong>{t.name}</strong><small>{t.detail}</small><ArrowUpRight size={18} aria-hidden /></Link>)}
       </Reveal>
     </section>
+    {!signedIn && (
+      <section className="home-steps" aria-labelledby="home-steps-heading">
+        <div className="home-section-heading"><div><p className="section-label">HOW IT WORKS</p><h2 id="home-steps-heading">From couch to summit in three steps.</h2></div></div>
+        <ol className="home-step-list">
+          {STEPS.map((step, i) => (
+            <motion.li key={step.n} className="home-step" initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "0px 0px -10% 0px" }} transition={{ duration: 0.5, delay: i * 0.1, ease: [0.2, 0.8, 0.2, 1] }}>
+              <span>{step.n}</span><h3>{step.title}</h3><p>{step.body}</p>
+            </motion.li>
+          ))}
+        </ol>
+      </section>
+    )}
     <Reveal><section className="home-invitation"><h2>Make the next one yours.</h2><Link href={signedIn ? "/explore/trails" : "/signup"} className="btn-primary">{signedIn ? "Find your next trail" : "Join Hyked"}<ArrowUpRight size={18} aria-hidden /></Link>{!signedIn && <p>Already part of the adventure? <Link href="/login">Sign in</Link></p>}</section></Reveal>
   </div>;
 }

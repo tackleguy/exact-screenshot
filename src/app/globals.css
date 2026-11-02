@@ -789,3 +789,52 @@ html { scroll-padding-block:20px 100px; }
   .discovery-headline { font-size: 34px !important; }
   .discovery-search { width: 100%; max-width: 100%; box-sizing: border-box; }
 }
+/* The Hyked mark (components/brand/HykedLogo.tsx) beside the name: a wide mountain line in the accent colour. */
+.fieldbook-brand .fieldbook-logo { flex: 0 0 auto; width: 42px; height: 19px; color: var(--accent); filter: drop-shadow(0 0 10px #a8e58f40); }
+.app-shell--collapsed .fieldbook-brand .fieldbook-logo { width: 34px; height: 16px; }
+
+/* ---- Signed-out homepage: the pitch ---- */
+/* The logo draws itself in: ridge first, then the trail (pathLength="1" on each line). */
+.hyked-logo-draw { stroke-dasharray: 1; stroke-dashoffset: 1; animation: hyked-draw 1.4s cubic-bezier(.65,0,.35,1) forwards; }
+@keyframes hyked-draw { to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) { .hyked-logo-draw { animation: none; stroke-dashoffset: 0; } }
+.discovery-logo { display: block; width: clamp(110px, 16vw, 168px); height: auto; margin: 0 auto 18px; color: #ffffff; filter: drop-shadow(0 6px 24px #000a) drop-shadow(0 0 22px #a8e58f55); }
+.discovery-ctas { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 22px; }
+.discovery-ctas .btn-primary { min-height: 50px; padding-inline: 26px; border-radius: 999px; font-size: 15px; }
+.discovery-ctas .btn-ghost { min-height: 50px; padding-inline: 24px; border-radius: 999px; color: #fff; border-color: #ffffff4d; background: #ffffff14; }
+
+/* Numbers strip, overlapping the bottom of the hero. */
+.home-stats { position: relative; z-index: 2; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; width: min(1100px, calc(100% - 32px)); margin: -46px auto 8px; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-2xl); background: var(--border); box-shadow: var(--card-shadow), 0 30px 60px -30px #000; }
+.home-stats > div { display: grid; gap: 4px; padding: 22px 20px; text-align: center; background: linear-gradient(180deg, var(--surface-elevated), var(--surface)); }
+.home-stats strong { font-size: clamp(24px, 3.2vw, 34px); font-weight: 800; letter-spacing: -0.02em; background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.home-stats > div > span { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--sage); }
+
+/* Feature cards. */
+.home-feature-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.home-feature { display: grid; align-content: start; gap: 10px; height: 100%; padding: 22px; border: 1px solid var(--border); border-radius: 18px; background: linear-gradient(160deg, color-mix(in srgb, var(--surface-elevated) 94%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)); color: var(--cream); text-decoration: none; box-shadow: var(--card-shadow); transition: transform 220ms cubic-bezier(.2,.8,.2,1), border-color 200ms ease-out, box-shadow 220ms ease-out; }
+.home-feature:hover { transform: translateY(-4px); border-color: #a8e58f66; box-shadow: var(--card-shadow), 0 22px 44px -24px #34d399aa; }
+.home-feature-icon { display: inline-grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; color: var(--accent); background: radial-gradient(circle at 30% 30%, #a8e58f33, #2dd4bf14 70%); box-shadow: 0 0 22px -8px #34d399; }
+.home-feature h3 { margin: 6px 0 0; font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+.home-feature p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--sage); }
+.home-feature-cta { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 13px; font-weight: 600; color: var(--accent); }
+
+/* How it works. */
+.home-step-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; counter-reset: none; }
+.home-step { position: relative; padding: 24px 22px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); }
+.home-step > span { display: block; font: 700 13px/1 var(--font-mono, monospace); letter-spacing: 0.14em; background: var(--accent-gradient); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.home-step h3 { margin: 14px 0 6px; font-size: 20px; font-weight: 700; }
+.home-step p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--sage); }
+.home-features, .home-steps { max-width: 1160px; margin: 0 auto; padding: 44px 32px; }
+@media (max-width: 767px) { .home-features, .home-steps { padding: 32px 20px; } }
+
+@media (max-width: 860px) {
+  .home-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .home-step-list { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .home-feature-grid { grid-template-columns: 1fr; }
+  .home-stats { margin-top: -30px; }
+  .discovery-ctas .btn-primary, .discovery-ctas .btn-ghost { flex: 1 1 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .home-feature:hover { transform: none; } }
