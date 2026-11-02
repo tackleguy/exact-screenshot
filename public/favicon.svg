@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14" fill="#0e1612"/>
+  <svg x="5" y="13" width="54" height="34" viewBox="268 278 1000 444" fill="none" stroke="#a8e58f">
+    <defs><clipPath id="b"><rect x="250" y="265" width="1040" height="452"/></clipPath></defs>
+    <g clip-path="url(#b)">
+      <polyline points="281,726 501,486 565,546 759,302 871,448 933,402 1083,579 1100,552 1255,726" stroke-width="44" stroke-linejoin="miter" stroke-miterlimit="10"/>
+      <path d="M849 438 C 800 455, 754 468, 762 485 C 770 499, 850 510, 893 522 C 930 533, 922 552, 878 567 C 800 592, 640 618, 575 648 C 520 674, 510 700, 515 730" stroke-width="26"/>
+      <path d="M575 650 C 526 672, 509 696, 515 730" stroke-width="38"/>
+    </g>
+  </svg>
+</svg>

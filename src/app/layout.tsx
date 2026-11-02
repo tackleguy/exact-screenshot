@@ -16,6 +16,7 @@ export const metadata: Metadata = {
   title: "Hyked — Trails, Maps & Adventure",
   description:
     "Your unified outdoor operating system for trail discovery, maps, and adventure planning.",
+  icons: { icon: "/favicon.svg", apple: "/favicon.svg" },
 };
 
 export default function RootLayout({

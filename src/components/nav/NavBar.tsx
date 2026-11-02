@@ -1,6 +1,7 @@
 "use client";
 
 import { setUnits, useUnits } from "@/lib/units";
+import { HykedLogo } from "@/components/brand/HykedLogo";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -274,7 +275,7 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
     <>
       <header className="fieldbook-mobile-header">
         <Link href="/" className="fieldbook-brand">
-          <NavIcon name="mountain" />
+          <HykedLogo className="fieldbook-logo" strokeScale={1.6} />
           Hyked
         </Link>
         <div className="fieldbook-mobile-actions">
@@ -309,7 +310,7 @@ export function NavBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: 
             aria-label="Hyked"
             title={collapsed ? "Hyked" : undefined}
           >
-            <NavIcon name="mountain" />
+            <HykedLogo className="fieldbook-logo" strokeScale={1.6} />
             <span className="fieldbook-nav-label">Hyked</span>
           </Link>
           <nav className="fieldbook-destinations" aria-label="Main destinations">
