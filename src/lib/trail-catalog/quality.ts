@@ -17,7 +17,7 @@ export const QUALITY_RULES = Object.fromEntries(Object.entries(defaults).filter(
  *   but left out of default search and map results so it is not presented as a full hike.
  */
 export type QualityStatus = "ok" | "short" | "review" | "fragment";
-/** "network" is the older label for several unjoined pieces; it reads as "Trail segment". */
+/** "segment": a few pieces with gaps ("In sections"); "network": a path system of many pieces ("Trail network"). */
 export type RouteType = "loop" | "out-and-back" | "point-to-point" | "segment" | "network";
 
 export const QUALITY_FLAGS = {
@@ -320,8 +320,8 @@ export const ROUTE_TYPE_LABELS: Record<RouteType, string> = {
   loop: "Loop",
   "out-and-back": "Out & back",
   "point-to-point": "Point to point",
-  segment: "Trail segment",
-  network: "Trail segment",
+  segment: "In sections",
+  network: "Trail network",
 };
 
 export const QUALITY_STATUS_LABELS: Record<QualityStatus, string> = {

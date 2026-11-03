@@ -717,6 +717,7 @@ export async function trailService(request: Request, fetcher: typeof fetch): Pro
 
     return Response.json({ error: "Action not supported." }, { status: 404 });
   } catch (error) {
+    console.error("[trail-service]", error);
     return Response.json({ error: friendlyError(error, "Trail data could not load. Try again in a moment.") }, { status: 503 });
   }
 }

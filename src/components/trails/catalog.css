@@ -28,7 +28,7 @@
 .catalog-map-toggle > button { min-height: 44px; cursor: pointer; }
 .catalog-map-toggle .catalog-muted { margin-bottom: 12px; }
 .catalog-map-canvas { height: 384px; border-radius: 12px; overflow: hidden; background: var(--surface); }
-.catalog-map-marker { display: flex; flex-direction: column; align-items: center; gap: 3px; color: #141814; max-width: 130px; text-align: center; font: 600 12px/1.3 var(--font-inter),sans-serif; }
+.catalog-map-marker { display: flex; flex-direction: column; align-items: center; gap: 3px; color: #0a1424; max-width: 130px; text-align: center; font: 600 12px/1.3 var(--font-inter),sans-serif; }
 .catalog-map-marker > span:last-child { background: #f5f0e6; border-radius: 4px; padding: 3px 6px; box-shadow: 0 2px 5px #0003; overflow: hidden; text-overflow: ellipsis; max-width: 130px; white-space: nowrap; }
 .catalog-map-dot { height: 14px; width: 14px; border: 2px solid #f5f0e6; border-radius: 50%; background: #235834; }
 .catalog-list { list-style: none; padding: 0; }
@@ -152,7 +152,7 @@
 .catalog-map-canvas .maplibregl-ctrl-attrib { font-size:12px; color:#18251f; background:#ffffffed; }
 .catalog-cluster { min-width:44px; min-height:44px; padding:8px; border-radius:50%; border:2px solid var(--cream); background:var(--accent); color:var(--on-accent); font-size:14px; font-weight:600; font-variant-numeric:tabular-nums; box-shadow:var(--overlay-shadow); }
 .catalog-cluster:hover { background:var(--accent-dim); }
-.catalog-trail-pin { width:36px; height:36px; border-radius:50%; border:3px solid white; background:var(--accent); box-shadow:0 2px 5px #173f3540; }
+.catalog-trail-pin { width:36px; height:36px; border-radius:50%; border:3px solid white; background:var(--accent); box-shadow:0 2px 5px #15294a40; }
 .catalog-trail-pin::after { content:""; display:block; width:8px; height:8px; background:white; border-radius:50%; margin:auto; }
 .catalog-map-canvas :is(button,a,canvas):focus-visible { outline:3px solid #18251f; outline-offset:3px; }
 .catalog-map-error { padding:16px; margin-top:12px; background:var(--surface-muted); border-radius:8px; }
@@ -246,11 +246,11 @@
 .trail-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 @media (max-width: 640px) { .trail-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } .trail-stats > div:nth-child(3) { border-left: 0; } .trail-stats > div:nth-child(n+3) { border-top: 1px solid var(--border); } }
 /* No trail photo: a quiet evergreen band instead of a stock image that isn't this trail. */
-.trail-hero-photo--satellite { min-height: clamp(180px, 26vw, 300px); background-color: #1d2a22; }
-.trail-hero-photo--none { min-height: clamp(150px, 20vw, 220px); background: linear-gradient(160deg, var(--accent-dim, #173f35), var(--accent, #245b47)); }
+.trail-hero-photo--satellite { min-height: clamp(180px, 26vw, 300px); background-color: #16263f; }
+.trail-hero-photo--none { min-height: clamp(150px, 20vw, 220px); background: linear-gradient(160deg, var(--accent-dim, #15294a), var(--accent, #245b47)); }
 .catalog-about { margin: 16px 0 0; max-width: 70ch; }
 .catalog-about p { margin: 0 0 8px; line-height: 1.6; }
-.trail-confidence { display: inline-flex; align-self: flex-start; margin: 6px 0 4px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgb(255 255 255 / 0.92); color: #173f35; }
+.trail-confidence { display: inline-flex; align-self: flex-start; margin: 6px 0 4px; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgb(255 255 255 / 0.92); color: #15294a; }
 .trail-confidence--mapped { color: #5a4310; }
 .trail-confidence--guide { color: #3a3f8f; }
 .trail-stat-note { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--sage); }
@@ -344,7 +344,7 @@
 .catalog-map-live { width: 18px; height: 18px; border-radius: 50%; background: #2f7fd8; border: 3px solid #fff; box-shadow: 0 0 0 6px rgb(47 127 216 / 0.3); }
 
 /* Trail page: photo strip, rating, sticky actions, highlights, reviews */
-.trail-hero-photo--strip { background: #1d2a22; }
+.trail-hero-photo--strip { background: #16263f; }
 .trail-hero-strip { position: absolute; inset: 0; display: grid; gap: 3px; }
 .trail-hero-strip--2 { grid-template-columns: 2fr 1fr; }
 .trail-hero-strip--3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; }
@@ -406,3 +406,4 @@
 
 /* The place part of a rebuilt trail name, set smaller in the page heading. */
 .trail-name-context { display: block; margin-top: 4px; font-size: 0.5em; font-weight: 600; line-height: 1.25; opacity: 0.85; }
+.trail-gaps-note { margin: 8px 0 0; font-size: 13px; color: var(--sage); }

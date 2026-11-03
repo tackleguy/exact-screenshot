@@ -23,7 +23,7 @@ import { formatMeters } from "@/lib/units";
 
 /** Same colours as the map's difficulty legend (kept here so the list doesn't load the map code). */
 const DIFFICULTY_COLORS: Record<string, string> = { e: "#2f9e5b", m: "#2f7fd8", h: "#d8452f", x: "#1d1d1d" };
-const ROUTE_SHAPES: Record<string, string> = { loop: "Loop", "out-and-back": "Out & back", "point-to-point": "Point to point", segment: "Trail segment" };
+const ROUTE_SHAPES: Record<string, string> = { loop: "Loop", "out-and-back": "Out & back", "point-to-point": "Point to point", segment: "In sections", network: "Trail network" };
 const LENGTHS = [["", "Any length"], ["-3", "Under 3 mi"], ["3-8", "3 – 8 mi"], ["8-15", "8 – 15 mi"], ["15-", "Over 15 mi"]] as const;
 
 export interface CatalogResult { trails: CatalogTrail[]; total: number; page: number; pages: number; limit: number; manifest: CatalogManifest; /** Name/place matches when more matched than were ranked and loaded. */ queryMatches?: number }

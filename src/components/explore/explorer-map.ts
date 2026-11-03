@@ -310,7 +310,7 @@ export function installOverlay(map: maplibreTypes.Map, data: OverlayData) {
   const ground: maplibregl.FilterSpecification = ["!", ["in", ["get", "mode"], ["literal", ["flight", "gap"]]]];
   map.addLayer({ id: "hy-route-casing", type: "line", source: "hy-route", filter: ground, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#1a1405", "line-width": 10, "line-opacity": 0.6 } });
   map.addLayer({ id: "hy-route", type: "line", source: "hy-route", filter: ground, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": ["match", ["get", "mode"], "drive", "#2f7fd8", routeColor], "line-width": 6 } });
-  map.addLayer({ id: "hy-route-air", type: "line", source: "hy-route", filter: ["in", ["get", "mode"], ["literal", ["flight", "gap"]]], layout: { "line-cap": "round" }, paint: { "line-color": ["match", ["get", "mode"], "flight", "#7c3aed", "#94a3b8"], "line-width": 4, "line-dasharray": [1.5, 1.5] } });
+  map.addLayer({ id: "hy-route-air", type: "line", source: "hy-route", filter: ["in", ["get", "mode"], ["literal", ["flight", "gap"]]], layout: { "line-cap": "round" }, paint: { "line-color": ["match", ["get", "mode"], "flight", "#b9e8c0", "#94a3b8"], "line-width": 4, "line-dasharray": [1.5, 1.5] } });
   map.addSource("hy-drive", { type: "geojson", data: data.drive });
   map.addSource("hy-selected", { type: "geojson", data: data.selected });
   map.addSource("hy-grid", { type: "geojson", data: data.grid });
