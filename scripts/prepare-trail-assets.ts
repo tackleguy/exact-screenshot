@@ -207,7 +207,6 @@ async function main() {
       if (needsReview) { t.quality = "review"; t.flags = [...new Set([...(t.flags ?? []), "needs-review" as const])]; tally.review++; }
       const type = t.kind === "segment" ? routeTypeById.get(t.id) : undefined;
       if (type && type !== t.routeType) { t.routeType = type; tally.routeTypes++; }
-      if (t.routeType === "network") t.routeType = "segment";
       t.bounds = boundsById.get(t.id) ?? t.bounds;
       rate(t);
     }

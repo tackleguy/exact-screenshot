@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { bridgeTrailGaps, trailGaps, type BridgedLine } from "@/lib/routing/bridge";
 import { CatalogMapView } from "./CatalogMapView";
 import type { MapPin } from "./CatalogMapViewGl";
 import {
@@ -30,7 +31,7 @@ function duration(seconds: number) {
 }
 
 /** The trail map, then `children` (the elevation profile), then directions folded away until opened. */
-export function TrailMapAndDirections({ name, trailId, lines, trailhead, landManager, children }: { name: string; trailId?: string; miles?: number | null; lines: Lines; trailhead?: AccessPoint; landManager?: { name: string | null; url: string | null }; children?: ReactNode }) {
+export function TrailMapAndDirections({ name, trailId, lines, trailhead, landManager, children, gapsExplained = false }: { name: string; trailId?: string; miles?: number | null; /** The page already warns about gaps in the line (don't say it twice). */ gapsExplained?: boolean; lines: Lines; trailhead?: AccessPoint; landManager?: { name: string | null; url: string | null }; children?: ReactNode }) {
   const [startIndex, setStartIndex] = useState(0);
   const [origin, setOrigin] = useState<Origin | null>(null);
   const [route, setRoute] = useState<Route | null>(null);
@@ -38,6 +39,16 @@ export function TrailMapAndDirections({ name, trailId, lines, trailhead, landMan
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [places, setPlaces] = useState<{ id: string; name: string; latitude: number; longitude: number }[]>([]);
+  // Gaps in the mapped line, joined along real mapped paths where there are some (src/lib/routing/bridge.ts).
+  const gapCount = useMemo(() => trailGaps(lines).length, [lines]);
+  const [bridged, setBridged] = useState<{ lines: Lines; result: BridgedLine } | null>(null);
+  useEffect(() => {
+    if (!gapCount) return;
+    const controller = new AbortController();
+    bridgeTrailGaps(lines, { signal: controller.signal }).then((result) => { if (!controller.signal.aborted) setBridged({ lines, result }); }).catch(() => undefined);
+    return () => controller.abort();
+  }, [lines, gapCount]);
+  const joined = bridged?.lines === lines ? bridged.result : null;
 
   // Start options: the mapped OSM trailhead (found at catalog build time), then the trail's two ends.
   const options = useMemo<AccessPoint[]>(() => {
@@ -106,7 +117,13 @@ export function TrailMapAndDirections({ name, trailId, lines, trailhead, landMan
 
   return (
     <>
-      <CatalogMapView lines={lines} route={route?.line} pins={pins} name={name} trailId={trailId} />
+      <CatalogMapView lines={lines} links={joined?.links} route={route?.line} pins={pins} name={name} trailId={trailId} />
+      {joined && (joined.links.length > 0 || (joined.sections > 1 && !gapsExplained)) && (
+        <p className="trail-gaps-note">
+          {joined.links.length > 0 && <>{joined.links.length === 1 ? "One gap in the mapped line is" : `${joined.links.length} gaps in the mapped line are`} joined along connecting paths (dashed). </>}
+          {joined.sections > 1 && !gapsExplained && <>The trail is mapped in {joined.sections} sections; the map data doesn’t connect {joined.sections === 2 ? "them" : "all of them"}, so check the route on the ground.</>}
+        </p>
+      )}
       {children}
       <details className="trail-more catalog-directions">
         <summary><span>Getting there</span><small>Trailhead, parking and driving directions</small></summary>

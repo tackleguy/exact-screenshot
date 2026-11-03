@@ -114,7 +114,7 @@ export function matchingCatalogRows(rows: CatalogTrail[], filters: CatalogFilter
     if (filters.maxMiles !== undefined && (r.miles === null || r.miles > filters.maxMiles)) return false;
     // Reported difficulty when the source gives one, otherwise the same estimate the trail page shows.
     if (difficulties && !difficulties.has(trailDifficulty(r))) return false;
-    if (filters.routeType && r.routeType !== filters.routeType && !(filters.routeType === "segment" && r.routeType === "network")) return false;
+    if (filters.routeType && r.routeType !== filters.routeType) return false;
     if (filters.dogFriendly && r.dogs !== true) return false;
     if (filters.verified && r.tier !== "verified") return false;
     if (
@@ -219,7 +219,7 @@ export function parseCatalogFilters(params: URLSearchParams): CatalogFilters {
     minMiles: number("minMiles", 0, 10000) ?? lengthPreset(params.get("length"))[0],
     maxMiles: number("maxMiles", 0, 10000) ?? lengthPreset(params.get("length"))[1],
     difficulty: params.get("difficulty")?.slice(0, 40) || undefined,
-    routeType: (["loop", "out-and-back", "point-to-point", "segment"] as const).find((t) => t === (params.get("routeType") === "network" ? "segment" : params.get("routeType"))),
+    routeType: (["loop", "out-and-back", "point-to-point", "segment", "network"] as const).find((t) => t === params.get("routeType")),
     dogFriendly: params.get("dogFriendly") === "true",
     includeWinter: params.get("includeWinter") === "true" || activity === "ski" || activity === "sled",
     activity,

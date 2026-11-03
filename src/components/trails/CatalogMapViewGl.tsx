@@ -51,6 +51,7 @@ const readBasemap = (): Basemap => {
 export function CatalogMapView({
   trails = NO_TRAILS,
   lines = NO_LINES,
+  links = NO_LINES,
   route,
   pins = NO_PINS,
   name,
@@ -60,6 +61,8 @@ export function CatalogMapView({
 }: {
   trails?: CatalogTrail[];
   lines?: [number, number][][];
+  /** Mapped paths joining gaps in the trail's line (src/lib/routing/bridge.ts), drawn thinner and dashed. */
+  links?: [number, number][][];
   /** Driving route to the start, [lng, lat] pairs; the map fits it when present. */
   route?: [number, number][];
   pins?: MapPin[];
@@ -86,8 +89,8 @@ export function CatalogMapView({
   const before3d = useRef<Basemap | null>(null);
   const [ready, setReady] = useState(false);
   const router = useRouter();
-  const data = useRef({ lines, route, name });
-  useEffect(() => { data.current = { lines, route, name }; }, [lines, route, name]);
+  const data = useRef({ lines, route, name, links });
+  useEffect(() => { data.current = { lines, route, name, links }; }, [lines, route, name, links]);
 
   // Trail and route layers, added again after every style change.
   const install = (map: maplibreTypes.Map) => {
@@ -97,6 +100,10 @@ export function CatalogMapView({
       map.addLayer({ id: "trail-casing", type: "line", source: "trail", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffffff", "line-width": ["interpolate", ["linear"], ["zoom"], 8, 4, 14, 8], "line-opacity": 0.9 } });
       map.addLayer({ id: "trail-line", type: "line", source: "trail", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": TRAIL_COLOR, "line-width": ["interpolate", ["linear"], ["zoom"], 8, 2.5, 14, 5] } });
       map.addLayer({ id: "trail-label", type: "symbol", source: "trail", minzoom: 11, layout: { "symbol-placement": "line", "text-field": ["get", "name"], "text-font": ["Noto Sans Bold"], "text-size": 13, "symbol-spacing": 350 }, paint: { "text-color": "#14532d", "text-halo-color": "#ffffff", "text-halo-width": 2 } });
+    }
+    if (!map.getSource("trail-links")) {
+      map.addSource("trail-links", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: data.current.links } } });
+      map.addLayer({ id: "trail-links", type: "line", source: "trail-links", layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": TRAIL_COLOR, "line-width": ["interpolate", ["linear"], ["zoom"], 8, 1.5, 14, 3.5], "line-dasharray": [1.5, 1.5], "line-opacity": 0.9 } }, map.getLayer("trail-casing") ? "trail-casing" : undefined);
     }
     if (!map.getSource("drive")) {
       map.addSource("drive", { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: rt && rt.length > 1 ? rt : [] } } });
@@ -178,6 +185,13 @@ export function CatalogMapView({
       else map.fitBounds(bounds, { padding: 40, maxZoom: 15, duration: 0 });
     }
   }, [ready, lines, route, pins, trails, name, router]);
+
+  // Connecting paths arrive after the map is drawn; they are added without moving the view.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    (map.getSource("trail-links") as maplibreTypes.GeoJSONSource | undefined)?.setData({ type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates: links } });
+  }, [ready, links]);
 
   // Style changes keep the view and re-add the trail.
   const first = useRef(true);

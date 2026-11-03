@@ -46,7 +46,23 @@ export function tidyTrailName(name: string) {
 
 export const hasTrailWord = (name: string) => TRAIL_WORD.test(name) || name.split(/\s+/).some((w) => TRAIL_SUFFIX.test(w));
 
-type NameContext = Pick<CatalogTrail, "id" | "name" | "country" | "region" | "kind" | "source" | "park" | "forest" | "blmArea" | "skiResort" | "manager" | "wiki" | "peakCategory" | "partOfRoute" | "originalName">;
+type NameContext = Pick<CatalogTrail, "id" | "name" | "country" | "region" | "kind" | "source" | "park" | "forest" | "blmArea" | "skiResort" | "manager" | "wiki" | "peakCategory" | "partOfRoute" | "originalName"> & Partial<Pick<CatalogTrail, "routeType">>;
+
+/**
+ * A name for a trail the source left unnamed, from what the data says about it: its shape and where it is
+ * ("Loop in Griffith Park", "Trail in Angeles National Forest", "Paths in Riverside Park"). Never invents a name
+ * the trail doesn't have on the ground; the trail page still shows the source called it unnamed.
+ */
+export function describedName(t: NameContext): string | null {
+  const manager = t.manager && !GENERIC_MANAGER.test(t.manager.trim()) && !GIS_PUBLISHER.test(t.manager) ? t.manager.trim() : null;
+  const blm = t.blmArea && !/^blm\s+[a-z]{2}$/i.test(t.blmArea.trim()) ? t.blmArea.trim() : null;
+  // Some sources put the place inside the placeholder: "Unnamed (Pedlar Wma) 2".
+  const inName = /^unnamed\b[^(]*\(([^)]+)\)/i.exec(t.name)?.[1]?.trim().replace(/\bWma\b/g, "WMA").replace(/\bSp\b/g, "State Park");
+  const place = t.park?.trim() || t.forest?.trim() || blm || t.skiResort?.trim() || (inName && /\p{L}/u.test(inName) ? inName : null) || manager || t.region?.trim() || (t.country ? countryName(t.country) : null);
+  if (!place) return null;
+  const kind = t.routeType === "loop" ? "Loop" : t.routeType === "network" ? "Paths" : ENGLISH.has(t.country) ? "Trail" : "Path";
+  return `${kind} in ${place}`;
+}
 
 /** Where the trail is, for a name suffix: its park, forest, BLM area or resort, else its state or country. */
 function contextOf(t: NameContext, name: string): string | null {
@@ -85,7 +101,8 @@ export function nameProblem(t: NameContext): "single-word" | "no-trail-word" | "
  */
 export function displayTrailName(t: NameContext): string {
   const raw = t.name.trim();
-  if (!raw || /^unnamed/i.test(raw) || NOT_A_TRAIL_NAME.test(raw)) return raw;
+  if (!raw || /^unnamed/i.test(raw)) return describedName(t) ?? raw;
+  if (NOT_A_TRAIL_NAME.test(raw)) return raw;
   const tidy = tidyTrailName(raw);
   // A Wikipedia-matched trail takes its article title when that is the fuller name ("Wonderland" → "Wonderland Trail").
   const title = t.wiki?.title?.replace(/\s*\([^)]*\)\s*$/, "").trim();

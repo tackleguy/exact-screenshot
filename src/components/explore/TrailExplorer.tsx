@@ -69,7 +69,8 @@ const ROUTE_TYPES = [
   { key: "loop", label: "Loop" },
   { key: "out-and-back", label: "Out & back" },
   { key: "point-to-point", label: "Point to point" },
-  { key: "segment", label: "Trail segment" },
+  { key: "segment", label: "In sections" },
+  { key: "network", label: "Trail network" },
 ] as const;
 const SUB_ACTIVITIES: Record<TrailSectionKey, CatalogActivity[]> = {
   foot: ["hike", "walk", "backpack", "run"],

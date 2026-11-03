@@ -28,14 +28,19 @@ test("junk segments: driveway/road/parking/sidewalk names, and stubs under 0.15 
   assert.ok(!isJunkSegment({ ...base, name: "Mist Trail" }));
 });
 
-test("route type comes from the line: loop, out & back, point to point, or a trail segment", () => {
+test("route type comes from the line: loop, out & back, point to point, in sections, or a network", () => {
   const east = (n: number, y = 37) => Array.from({ length: n }, (_, i) => [-119 + i * 0.001, y] as [number, number]);
   assert.equal(routeTypeFromLines([east(30)]), "point-to-point");
   const square: [number, number][] = [[-119, 37], [-118.99, 37], [-118.99, 37.01], [-119, 37.01], [-119, 37.0005]];
   assert.equal(routeTypeFromLines([square]), "loop");
   const out = east(40);
   assert.equal(routeTypeFromLines([[...out, ...[...out].reverse().slice(1).map(([x, y]) => [x, y + 0.0001] as [number, number])]]), "out-and-back");
+  // Pieces far apart are "in sections"; a gap of a couple hundred meters still reads as one path.
   assert.equal(routeTypeFromLines([east(10), east(10, 37.5)]), "segment");
+  const line = east(30); // pieces 0–11 and 14–29: a ~270 m gap
+  assert.equal(routeTypeFromLines([line.slice(0, 12), line.slice(14)]), "point-to-point");
+  // Many separate pieces: a park's path network.
+  assert.equal(routeTypeFromLines(Array.from({ length: 8 }, (_, i) => east(5, 37 + i * 0.02))), "network");
 });
 
 test("near-duplicates: names match without park, trail and loop words; overlap is measured on the lines", () => {

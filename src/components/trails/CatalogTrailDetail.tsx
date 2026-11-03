@@ -161,7 +161,7 @@ export function CatalogTrailDetail({
           )}
         </>
       ) : hasLines && !isRoute ? (
-        <TrailMapAndDirections name={t.name} trailId={t.id} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }}>
+        <TrailMapAndDirections name={t.name} trailId={t.id} gapsExplained={Boolean(warning && t.flags?.includes("disconnected"))} lines={lines} trailhead={t.trailhead?.kind === "trail-end" ? undefined : t.trailhead} landManager={{ name: t.park ?? t.forest ?? t.manager, url: t.officialUrl ?? (t.source !== "osm" ? t.sourceUrl : null) }}>
           <TrailElevationSection trailId={t.id} stored={t} difficulty={difficulty} />
         </TrailMapAndDirections>
       ) : (
@@ -287,7 +287,7 @@ export function CatalogTrailDetail({
           {t.originalName && (
             <div>
               <dt>Name in source</dt>
-              <dd>{t.originalName}</dd>
+              <dd>{/^unnamed/i.test(t.originalName) ? "Not named in the source; the name describes its shape and place" : t.originalName}</dd>
             </div>
           )}
           {t.quality && (

@@ -20,7 +20,11 @@ test("complete names, curated guides and placeholders are kept", () => {
   assert.equal(name({ name: "Crawford Path" }), "Crawford Path");
   assert.equal(name({ name: "Barker Fire Road" }), "Barker Fire Road");
   assert.equal(name({ name: "Pacific Crest", kind: "route" }), "Pacific Crest");
-  assert.equal(name({ name: "Unnamed trail · abc123" }), "Unnamed trail · abc123");
+  // Unnamed trails are described by their shape and place, never given an invented name.
+  assert.equal(name({ name: "Unnamed trail · abc123" }), "Trail in California");
+  assert.equal(name({ name: "Unnamed trail · abc123", park: "Griffith Park", routeType: "loop" }), "Loop in Griffith Park");
+  assert.equal(name({ name: "Unnamed trail", country: "DE", region: "Bayern" }), "Path in Bayern");
+  assert.equal(name({ name: "Unnamed (Pedlar Wma) 2", region: "West Virginia" }), "Trail in Pedlar WMA");
   assert.equal(name({ name: "Path" }), "Path");
   // Outside English-speaking countries no English word is added.
   assert.equal(name({ name: "Hude", country: "DE", region: "Niedersachsen" }), "Hude — Niedersachsen");

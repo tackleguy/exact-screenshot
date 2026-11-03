@@ -55,18 +55,29 @@ export function isJunkSegment(t: Pick<CatalogTrail, "name" | "miles" | "kind" | 
   return t.miles !== null && t.miles < JUNK_MIN_MILES && !t.partOfRoute && t.routeType !== "loop";
 }
 
-/** Route type from the line: loop, out & back, point to point, or a trail segment when it can't be told. */
-export function routeTypeFromLines(lines: LngLat[][]): "loop" | "out-and-back" | "point-to-point" | "segment" {
+/** Gaps up to this long are mapping slop between pieces of one path (a missing junction, a road crossing). */
+export const SMALL_GAP_M = 300;
+/** This many separate pieces (after joining small gaps) make a network of paths rather than one trail. */
+const NETWORK_PIECES = 6;
+
+/**
+ * Route type from the line: loop, out & back or point to point when the pieces form one path (gaps up to 300 m
+ * count as joined); "segment" ("In sections") when a few pieces are separated by bigger gaps; "network" ("Trail
+ * network") for a park's path system of many pieces.
+ */
+export function routeTypeFromLines(lines: LngLat[][]): "loop" | "out-and-back" | "point-to-point" | "segment" | "network" {
   const usable = lines.filter((l) => l.length >= 2);
   // Chaining is quadratic in the number of pieces; a relation mapped as hundreds of ways is a network, not one path.
-  if (usable.length > 150) return "segment";
+  if (usable.length > 150) return "network";
   const pieces = chainLines(usable);
   if (!pieces.length) return "segment";
-  // Pieces only count as one path when each starts where the last ended (within 50 m).
+  let separate = 1;
   for (let i = 1; i < pieces.length; i++) {
     const end = pieces[i - 1][pieces[i - 1].length - 1];
-    if (metersBetween(end, pieces[i][0]) > 50) return "segment";
+    if (metersBetween(end, pieces[i][0]) > SMALL_GAP_M) separate++;
   }
+  if (separate >= NETWORK_PIECES) return "network";
+  if (separate > 1) return "segment";
   const path = pieces.flat();
   if (path.length < 2) return "segment";
   // A line drawn out and back also ends where it started, so retracing is checked before closing.
