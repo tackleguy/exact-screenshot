@@ -71,16 +71,20 @@ function useNearby() {
   const [state, setState] = useState<{ picks: NearbyPick[]; place: string | null; status: "loading" | "ready" }>({ picks: [], place: null, status: "loading" });
   useEffect(() => {
     let live = true;
-    void locate(3000).then((at) => {
+    void locate(3000).then(async (at) => {
       const region = at ? null : timezoneRegion();
-      const [lng, lat] = at ?? region!.center;
-      // A wider pool than the four cards, so they can be chosen by quality and difficulty rather than distance.
+      let [lng, lat] = at ?? region!.center;
+      let place = region?.label ?? null;
       const p = new URLSearchParams({ lat: lat.toFixed(3), lng: lng.toFixed(3), radiusKm: at ? "50" : "120", limit: "36" });
-      return fetch(`/api/trail-catalog?${p}`).then((r) => (r.ok ? r.json() : null)).then((d: { trails?: CatalogTrail[] } | null) => {
-        const pool = d?.trails ?? [];
-        rememberTrails(pool);
-        if (live) setState({ picks: pickNearbyTrails(pool, { origin: { lat, lng, exact: Boolean(at) } }), place: region?.label ?? null, status: "ready" });
-      });
+      let d = await fetch(`/api/trail-catalog?${p}`).then((r) => (r.ok ? r.json() : null)) as { trails?: CatalogTrail[] } | null;
+      if (!at && !(d?.trails?.length)) {
+        lng = -119.596; lat = 37.745; place = "Yosemite & the Sierra";
+        const fb = new URLSearchParams({ lat: lat.toFixed(3), lng: lng.toFixed(3), radiusKm: "120", limit: "36" });
+        d = await fetch(`/api/trail-catalog?${fb}`).then((r) => (r.ok ? r.json() : null)) as { trails?: CatalogTrail[] } | null;
+      }
+      const pool = d?.trails ?? [];
+      rememberTrails(pool);
+      if (live) setState({ picks: pickNearbyTrails(pool, { origin: { lat, lng, exact: Boolean(at) } }), place, status: "ready" });
     }).catch(() => { if (live) setState({ picks: [], place: null, status: "ready" }); });
     return () => { live = false; };
   }, []);

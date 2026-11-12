@@ -71,7 +71,13 @@ async function asset<T>(file: string, fetcher: typeof fetch): Promise<T> {
   let hit = cache.get(file);
   if (!hit) {
     hit = (async () => {
-      const res = await fetcher(`/trail-data/${file}`);
+      let res = await fetcher(`/trail-data/${file}`);
+      for (let attempt = 0; res.status === 503 && res.headers.get("retry-after") !== null && attempt < 45; attempt++) {
+        const retrySec = Number(res.headers.get("retry-after"));
+        const delayMs = Number.isFinite(retrySec) && retrySec > 0 ? Math.min(2000, Math.max(10, retrySec * 1000)) : 1500;
+        await new Promise((r) => setTimeout(r, delayMs));
+        res = await fetcher(`/trail-data/${file}`);
+      }
       if (!res.ok) throw new Error("Trail data could not load. Please try again.");
       const contentType = res.headers.get("content-type") ?? "";
       if (/text\/html/i.test(contentType)) {

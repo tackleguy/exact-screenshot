@@ -72,3 +72,38 @@ test("trailService rejects SPA HTML fallback responses without caching corrupt e
   const secondJson = (await second.json()) as { trails: { id: string }[] };
   assert.ok(secondJson.trails.some((t) => t.id === "nps-test-1"));
 });
+
+test("trailService waits and retries when dev server returns 503 Retry-After during asset prep", async () => {
+  let attempts = 0;
+  const mockFetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/trail-data/snapshot-9999999999999/clusters.json.gz")) {
+      attempts++;
+      if (attempts < 3) {
+        return new Response(JSON.stringify({ preparing: true }), {
+          status: 503,
+          headers: { "Content-Type": "application/json", "Retry-After": "0.01" },
+        });
+      }
+      const clusters = {
+        sections: {
+          foot: {
+            "4": [[-119.5, 37.7, 42, 30, -120, 37, -119, 38]],
+          },
+        },
+      };
+      return new Response(gzipSync(JSON.stringify(clusters)), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    return new Response("Not found", { status: 404 });
+  }) as typeof fetch;
+
+  const response = await trailService(new Request("https://site.example/api/trail-catalog/clusters?zoom=4"), mockFetch);
+  assert.equal(response.status, 200);
+  assert.equal(attempts, 3);
+  const body = (await response.json()) as { total: number; verified: number };
+  assert.equal(body.total, 42);
+  assert.equal(body.verified, 30);
+});

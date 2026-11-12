@@ -48,10 +48,12 @@ export function cleanTrailName(raw: string): { name: string; needsReview: boolea
 const JUNK_NAME = /^(driveway|private drive(way)?|road|service road|access road|parking( lot| area)?|parking access|sidewalk)$/i;
 export const JUNK_MIN_MILES = 0.15;
 
+export const isJunkName = (name: string) => JUNK_NAME.test(name.trim());
+
 /** True for segments that are not hikes: junk names, or under 0.15 mi unless part of a named route or a loop. */
 export function isJunkSegment(t: Pick<CatalogTrail, "name" | "miles" | "kind" | "partOfRoute" | "routeType">): boolean {
   if (t.kind === "route") return false;
-  if (JUNK_NAME.test(t.name.trim())) return true;
+  if (isJunkName(t.name)) return true;
   return t.miles !== null && t.miles < JUNK_MIN_MILES && !t.partOfRoute && t.routeType !== "loop";
 }
 
@@ -139,40 +141,48 @@ export function dedupeKey(t: Pick<CatalogTrail, "name" | "park" | "forest">): st
   return t.name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().split(/[^a-z0-9]+/).filter((w) => w && !/^(trail|trails|loop|path|the)$/.test(w) && !place.has(w)).join(" ");
 }
 
-/** Share of the shorter line's points lying within 30 m of the longer line's points. */
-export function overlapShare(shorter: LngLat[][], longer: LngLat[][]): number {
-  let ptsLen = 0, firstLat = 0, hasFirst = false;
-  for (let i = 0; i < shorter.length; i++) {
-    const line = shorter[i];
-    if (!hasFirst && line.length > 0) { firstLat = line[0][1]; hasFirst = true; }
-    ptsLen += line.length;
-  }
-  if (!ptsLen) return 0;
-  const k = Math.cos((firstLat * Math.PI) / 180) * 111_320, ky = 110_540, cell = 30;
-  const grid = new Set<number>();
-  for (let i = 0; i < longer.length; i++) {
-    const line = longer[i];
+/** Packs line coordinates into a single flat [lng0, lat0, lng1, lat1, ...] Float64Array for low-memory overlap checks. */
+export function packLinesFlat(lines: LngLat[][]): Float64Array {
+  let pts = 0;
+  for (let i = 0; i < lines.length; i++) pts += lines[i].length;
+  const out = new Float64Array(pts * 2);
+  let o = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     for (let j = 0; j < line.length; j++) {
-      grid.add(gridCellKey(Math.floor((line[j][0] * k) / cell), Math.floor((line[j][1] * ky) / cell)));
+      out[o++] = line[j][0];
+      out[o++] = line[j][1];
     }
+  }
+  return out;
+}
+
+/** Share of the shorter flat coordinate array lying within 30 m of the longer flat coordinate array. */
+export function overlapShareFlat(shorter: Float64Array, longer: Float64Array): number {
+  const ptsLen = shorter.length >>> 1;
+  const longerLen = longer.length >>> 1;
+  if (!ptsLen || !longerLen) return 0;
+  const k = Math.cos((shorter[1] * Math.PI) / 180) * 111_320, ky = 110_540, cell = 30;
+  const grid = new Set<number>();
+  for (let m = 0; m < longer.length; m += 2) {
+    grid.add(gridCellKey(Math.floor((longer[m] * k) / cell), Math.floor((longer[m + 1] * ky) / cell)));
   }
   if (!grid.size) return 0;
   const step = Math.max(1, Math.floor(ptsLen / 500));
-  let near = 0, n = 0, nextIdx = 0, seen = 0;
-  for (let i = 0; i < shorter.length; i++) {
-    const line = shorter[i];
-    while (nextIdx - seen < line.length) {
-      const p = line[nextIdx - seen];
-      n++;
-      const cx = Math.floor((p[0] * k) / cell), cy = Math.floor((p[1] * ky) / cell);
-      let hit = false;
-      for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) hit = grid.has(gridCellKey(cx + dx, cy + dy));
-      if (hit) near++;
-      nextIdx += step;
-    }
-    seen += line.length;
+  let near = 0, n = 0;
+  for (let idx = 0; idx < ptsLen; idx += step) {
+    n++;
+    const cx = Math.floor((shorter[idx * 2] * k) / cell), cy = Math.floor((shorter[idx * 2 + 1] * ky) / cell);
+    let hit = false;
+    for (let dx = -1; dx <= 1 && !hit; dx++) for (let dy = -1; dy <= 1 && !hit; dy++) hit = grid.has(gridCellKey(cx + dx, cy + dy));
+    if (hit) near++;
   }
   return near / n;
+}
+
+/** Share of the shorter line's points lying within 30 m of the longer line's points. */
+export function overlapShare(shorter: LngLat[][], longer: LngLat[][]): number {
+  return overlapShareFlat(packLinesFlat(shorter), packLinesFlat(longer));
 }
 
 /** Score for "best-documented first": a real name, a real length (1 mi or more), a measured climb, agency-verified. */

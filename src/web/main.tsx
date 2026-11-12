@@ -83,15 +83,25 @@ function Catalog() {
     return params.toString();
   }, [search, needsOrigin, origin]);
   const waiting = needsOrigin && !origin;
+  const [usedFallbackOrigin, setUsedFallbackOrigin] = useState(false);
   useEffect(() => {
     if (waiting) return;
     const controller = new AbortController();
     Promise.all([
       fetch(`/api/trail-catalog?${query}`, { signal: controller.signal }).then(async res => { const data = await res.json(); if (!res.ok) throw new Error(data.error); return data as CatalogResult; }),
       fetch(`/api/trail-catalog/map?${query}`, { signal: controller.signal }).then(res => res.ok ? res.json() : undefined).catch(() => undefined),
-    ]).then(([result, map]) => { if (!controller.signal.aborted) { rememberTrails(result.trails); setState({ result, map, for: query }); } }).catch(error => { if (!controller.signal.aborted) setState({ error: friendlyError(error, "Trails couldn’t load right now. Try again in a moment."), for: query }); });
+    ]).then(([result, map]) => {
+      if (controller.signal.aborted) return;
+      if (needsOrigin && origin?.region && !usedFallbackOrigin && result.trails.length === 0) {
+        setUsedFallbackOrigin(true);
+        setOrigin({ lat: 37.745, lng: -119.596, region: "Yosemite & California" });
+        return;
+      }
+      rememberTrails(result.trails);
+      setState({ result, map, for: query });
+    }).catch(error => { if (!controller.signal.aborted) setState({ error: friendlyError(error, "Trails couldn’t load right now. Try again in a moment."), for: query }); });
     return () => controller.abort();
-  }, [query, waiting]);
+  }, [query, waiting, needsOrigin, origin?.region, usedFallbackOrigin]);
   if (state.for === query && state.error) return <Status title="Trail catalog unavailable">{state.error}</Status>;
   if (waiting || state.for !== query || !state.result) return <Status title={waiting ? "Finding trails near you…" : "Loading trails…"} />;
   return <>

@@ -18,16 +18,17 @@
  * or a fragment). Everything here is generated, so public/trail-data, public/sitemaps, public/sitemap.xml and
  * public/robots.txt are not committed.
  */
+import { createReadStream } from "node:fs";
 import { appendFile, copyFile, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { gunzip, gzip } from "node:zlib";
+import { createGunzip, gunzip, gzip } from "node:zlib";
 import { promisify } from "node:util";
 import path from "node:path";
 import { createHash } from "node:crypto";
-import { buildThroughHikeOverlay } from "../src/lib/trail-catalog/through-hikes";
-import { buildResortOverlay } from "../src/lib/trail-catalog/resorts";
+import { buildThroughHikeOverlay, THROUGH_HIKE_PATTERNS } from "../src/lib/trail-catalog/through-hikes";
+import { buildResortOverlay, type ResortTrailSource } from "../src/lib/trail-catalog/resorts";
 import { normalizeSeason, titleCaseName } from "../src/lib/trail-catalog/agencies";
 import { computeDifficulty, effortClimbFt } from "../src/lib/trail-difficulty";
-import { cleanTrailName, dedupeKey, isJunkSegment, overlapShare, routeTypeFromLines } from "../src/lib/trail-catalog/cleanup";
+import { cleanTrailName, dedupeKey, isJunkName, isJunkSegment, overlapShareFlat, packLinesFlat, routeTypeFromLines } from "../src/lib/trail-catalog/cleanup";
 import { sectionOf, trailActivities } from "../src/lib/trail-catalog/activity";
 import { countryName, type CatalogTrail } from "../src/lib/trail-catalog/types";
 import { pinCell, regionSlug, rowShard, searchKey, SEARCH_STOPWORDS } from "../src/lib/trail-catalog/static-data";
@@ -43,7 +44,8 @@ const SITEMAP_URLS = 45_000;
 /** Trails in each region or country search file. */
 const REGION_TOP = 1500;
 const IO_CONCURRENCY = 24;
-const ZLIB_CONCURRENCY = 8;
+const ZLIB_CONCURRENCY = 4;
+const GEO_CONCURRENCY = 4;
 const BUCKETS = 32;
 const FLUSH_BYTES = 16 * 1024 * 1024;
 
@@ -52,6 +54,61 @@ const zipped = (value: unknown) => gzipAsync(JSON.stringify(value), { level: 1 }
 const zippedText = (text: string) => gzipAsync(text, { level: 1 });
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+
+/** Stream-gunzips a top-level JSON array of objects while verifying its compressed SHA-256. */
+async function streamGzipJsonArray<T>(filePath: string, expectedSha256: string, onItem: (item: T) => void): Promise<void> {
+  const hash = createHash("sha256");
+  const gunzipStream = createGunzip();
+  gunzipStream.setEncoding("utf8");
+  const fileStream = createReadStream(filePath);
+  fileStream.on("data", (chunk: Buffer | string) => hash.update(chunk));
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let carry = "";
+
+  await new Promise<void>((resolve, reject) => {
+    fileStream.on("error", reject);
+    gunzipStream.on("error", reject);
+    gunzipStream.on("data", (chunk: string) => {
+      try {
+        let objStart = depth > 0 ? 0 : -1;
+        for (let i = 0; i < chunk.length; i++) {
+          const code = chunk.charCodeAt(i);
+          if (inString) {
+            if (escaped) escaped = false;
+            else if (code === 92) escaped = true;
+            else if (code === 34) inString = false;
+          } else if (code === 34) {
+            inString = true;
+          } else if (code === 123) {
+            if (depth === 0) objStart = i;
+            depth++;
+          } else if (code === 125) {
+            depth--;
+            if (depth === 0) {
+              const json = carry ? carry + chunk.slice(objStart, i + 1) : chunk.slice(objStart, i + 1);
+              carry = "";
+              objStart = -1;
+              onItem(JSON.parse(json) as T);
+            }
+          }
+        }
+        if (depth > 0 && objStart >= 0) carry += chunk.slice(objStart);
+      } catch (err) {
+        reject(err);
+      }
+    });
+    gunzipStream.on("end", () => {
+      if (depth !== 0 || carry.length > 0) reject(new Error("Truncated JSON stream"));
+      else resolve();
+    });
+    fileStream.pipe(gunzipStream);
+  });
+
+  if (hash.digest("hex") !== expectedSha256) throw new Error("Trail checksum mismatch");
+}
 
 async function mapPool<T>(items: readonly T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
   let cursor = 0;
@@ -115,13 +172,13 @@ async function isAlreadyPrepared(directory: string, includeWorld: boolean): Prom
     if (cur.directory !== directory) return false;
     const built = JSON.parse(await readFile(path.join(outRoot, directory, "manifest.json"), "utf8")) as {
       total?: number;
-      worldCells?: Record<string, string[]>;
+      searchCountries?: string[];
       cells?: string[];
     };
     await stat(path.join(outRoot, directory, "clusters.json.gz"));
     await stat(path.join(outRoot, directory, "overview.json.gz"));
-    const hasWorld = Object.keys(built.worldCells ?? {}).length > 0;
-    return Boolean(built.total && built.cells?.length) && hasWorld === includeWorld;
+    const hasFullWorld = (built.searchCountries?.length ?? 0) > 2;
+    return Boolean(built.total && built.cells?.length) && hasFullWorld === includeWorld;
   } catch {
     return false;
   }
@@ -145,38 +202,65 @@ async function main() {
   if (!/^snapshot-\d+$/.test(pointer.directory)) throw new Error("Invalid trail snapshot");
   const source = path.join(root, pointer.directory);
   const manifest = JSON.parse(await readFile(path.join(source, "manifest.json"), "utf8"));
-  const hasWorldDir = Boolean(manifest.world?.files && Object.keys(manifest.world.files).length > 0);
-  // Worldwide trails are included by default so international & AK/HI trails render everywhere; set TRAIL_WORLD=0 to opt out.
-  const includeWorld = hasWorldDir && process.env.TRAIL_WORLD !== "0";
+  const allWorldFiles = (manifest.world?.files ?? {}) as Record<string, { rows: number; sha256: string }>;
+  const hasWorldDir = Object.keys(allWorldFiles).length > 0;
+  // Build U.S. (including AK/HI), Canada, and curated global peaks/routes by default so Lovable preview/publish stays fast and under container limits; set TRAIL_WORLD=1 for all 232 countries.
+  const includeWorld = hasWorldDir && process.env.TRAIL_WORLD === "1";
 
   if (process.argv.includes("--if-ready") && process.env.FORCE_TRAIL_PREP !== "1" && (await isAlreadyPrepared(pointer.directory, includeWorld))) {
     await ensureSeoRootFiles();
     return;
   }
 
-  const raw = await readFile(path.join(source, "index.json.gz"));
-  if (sha(raw) !== manifest.indexSha256) throw new Error("Trail checksum mismatch");
-  const sections: CatalogTrail[] = JSON.parse((await gunzipAsync(raw)).toString());
-  for (const row of sections) { row.name = titleCaseName(row.name); row.season = normalizeSeason(row.season); }
-  const routes = buildThroughHikeOverlay(sections);
-  const resorts = buildResortOverlay(JSON.parse(await readFile(path.join(root, "resort-trails.json"), "utf8")).resorts, sections);
-  const redirects: Record<string, string> = Object.fromEntries(sections.filter((t) => t.mergedInto).map((t) => [t.id, t.mergedInto!]));
-  // Measured elevation (pipeline/steps/elevation.ts): [gainFt, lossFt, minFt, maxFt, steepestGradePct] by trail id.
-  let elevation: Record<string, [number, number, number, number, number | null]> = await readFile(path.join(source, "elevation.json.gz")).then(async (b) => JSON.parse((await gunzipAsync(b)).toString())).catch(() => ({}));
-  /** Stores the measured climb and the one difficulty rating (src/lib/trail-difficulty.ts) on a trail. */
-  const rate = (t: CatalogTrail) => {
-    const e = elevation[t.id];
-    if (e) {
-      const climb = effortClimbFt({ gainFt: e[0], lossFt: e[1] }, t.routeType);
-      t.gainFt = climb;
-      t.lossFt = climb === e[0] ? e[1] : e[0];
-      t.minElevFt = e[2]; t.maxElevFt = e[3]; t.steepestGradePct = e[4];
+  const resortSources: ResortTrailSource[] = JSON.parse(await readFile(path.join(root, "resort-trails.json"), "utf8")).resorts;
+  const shownSections: CatalogTrail[] = [];
+  const overlayStubs: CatalogTrail[] = [];
+  const redirects: Record<string, string> = {};
+
+  await streamGzipJsonArray<CatalogTrail>(path.join(source, "index.json.gz"), manifest.indexSha256, (row) => {
+    row.name = titleCaseName(row.name);
+    row.season = normalizeSeason(row.season);
+    if (row.mergedInto) redirects[row.id] = row.mergedInto;
+    if (shown(row)) {
+      shownSections.push(row);
+      return;
     }
-    if (t.reportedDifficulty === undefined) t.reportedDifficulty = t.difficulty ?? null;
-    t.difficulty = computeDifficulty({ lengthMi: t.miles, gainFt: t.gainFt, steepestGradePct: t.steepestGradePct, maxElevFt: t.maxElevFt }) ?? t.difficulty;
-  };
-  const rows = [...sections.filter(shown), ...routes, ...resorts];
-  sections.length = 0;
+    const matchesThruHike = row.kind !== "route" && THROUGH_HIKE_PATTERNS.some((p) => p.country === row.country && p.match.test(row.name));
+    const nearResort = row.country === "US" && resortSources.some((rs) => Math.abs(rs.baseLatitude - row.latitude) <= 0.15 && Math.abs(rs.baseLongitude - row.longitude) <= 0.2);
+    if (matchesThruHike || nearResort) {
+      overlayStubs.push({
+        id: row.id,
+        name: row.name,
+        country: row.country,
+        region: null,
+        kind: row.kind,
+        miles: row.miles,
+        distanceBasis: row.distanceBasis,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        difficulty: null,
+        dogs: null,
+        source: row.source,
+        sourceId: row.sourceId,
+        sourceUrl: "",
+        officialUrl: null,
+        sourceDate: null,
+        manager: null,
+        surface: null,
+        season: null,
+        geometryShard: row.geometryShard,
+        sectionCount: row.sectionCount,
+      });
+    }
+  });
+
+  const allForOverlay = [...shownSections, ...overlayStubs];
+  const routes = buildThroughHikeOverlay(allForOverlay);
+  const resorts = buildResortOverlay(resortSources, allForOverlay);
+  allForOverlay.length = 0;
+  overlayStubs.length = 0;
+  const rows = [...shownSections, ...routes, ...resorts];
+  shownSections.length = 0;
 
   await rm(path.resolve("public/trail-data"), { recursive: true, force: true });
   const output = path.resolve("public/trail-data", pointer.directory);
@@ -185,7 +269,7 @@ async function main() {
   await mkdir(path.join(output, "rows"), { recursive: true });
   await mkdir(tmpDir, { recursive: true });
 
-  // Stream full records and search entries into 32 disk buckets so peak V8 heap stays bounded across 1.2M+ trails.
+  // Stream full records and search entries into 32 disk buckets so peak V8 heap stays bounded.
   const rowBufs: string[][] = Array.from({ length: BUCKETS }, () => []);
   const qBufs: string[][] = Array.from({ length: BUCKETS }, () => []);
   let rowBufBytes = 0, qBufBytes = 0;
@@ -266,20 +350,72 @@ async function main() {
   const trailUrls: string[] = [];
   const pageOf = (t: CatalogTrail) => { if (t.kind === "segment" || t.source === "route-aggregate") trailUrls.push(`/explore/trails/${encodeURIComponent(t.id)}`); };
 
-  // Lines of shown U.S./Canada trails only.
+  // Clean names up front so near-duplicate candidate groups are known before the single geometry pass.
+  const tally = { renamed: 0, review: 0, routeTypes: 0, dropped: 0, merged: 0 };
+  const cleanNamesOn = (list: CatalogTrail[]) => {
+    for (const t of list) {
+      const { name, needsReview } = cleanTrailName(t.name);
+      if (name !== t.name) { t.name = name; tally.renamed++; }
+      if (t.sections) for (const sec of t.sections) sec.name = cleanTrailName(sec.name).name;
+      if (t.partOfRoute) t.partOfRoute = { ...t.partOfRoute, name: cleanTrailName(t.partOfRoute.name).name };
+      if (needsReview) { t.quality = "review"; t.flags = [...new Set([...(t.flags ?? []), "needs-review" as const])]; tally.review++; }
+    }
+  };
+  cleanNamesOn(rows);
+
+  const preGroups = new Map<string, string[]>();
+  for (const t of rows) {
+    if (t.kind !== "segment" || t.partOfRoute || isJunkName(t.name)) continue;
+    const key = dedupeKey(t);
+    if (key) {
+      const gk = `${t.country}|${key}`;
+      let g = preGroups.get(gk);
+      if (!g) { g = []; preGroups.set(gk, g); }
+      g.push(t.id);
+    }
+  }
+  const candidateIds = new Set<string>();
+  for (const ids of preGroups.values()) {
+    if (ids.length >= 2 && ids.length <= 60) for (const id of ids) candidateIds.add(id);
+  }
+  preGroups.clear();
+
+  // Lines of shown U.S./Canada trails, plus Alaska/Hawaii (always) or all world shards (TRAIL_WORLD=1).
   const wanted = new Map<string, Set<string>>();
   for (const t of rows) if (t.geometryShard !== "route" && t.source !== "resort") (wanted.get(t.geometryShard) ?? wanted.set(t.geometryShard, new Set()).get(t.geometryShard)!).add(t.id);
 
-  // ---- geometry: U.S./Canada lines of shown trails, merged with the worldwide lines of the same 1° cell ----
+  const worldEntries = includeWorld
+    ? Object.entries(allWorldFiles)
+    : Object.entries(allWorldFiles).filter(([code]) => code === "US-AK" || code === "US-HI");
+
+  const existingWorldGeom = new Set((await readdir(path.join(source, "world")).catch(() => [] as string[])).filter((f) => /^geometry-.+\.json\.gz$/.test(f)));
+  const worldWantedIds = new Set<string>();
+  let worldGeometry: Set<string>;
+  if (includeWorld) {
+    worldGeometry = existingWorldGeom;
+  } else {
+    worldGeometry = new Set<string>();
+    for (const [code] of worldEntries) {
+      const buf = await readFile(path.join(source, "world", `index-${code}.json.gz`)).catch(() => null);
+      if (!buf) continue;
+      const parsed = JSON.parse((await gunzipAsync(buf)).toString()) as { rows?: CatalogTrail[] };
+      for (const r of parsed.rows ?? []) {
+        worldWantedIds.add(r.id);
+        const fname = `geometry-${r.geometryShard}.json.gz`;
+        if (existingWorldGeom.has(fname)) worldGeometry.add(fname);
+      }
+    }
+  }
+  existingWorldGeom.clear();
+
   const boundsById = new Map<string, [number, number, number, number]>();
   const routeTypeById = new Map<string, CatalogTrail["routeType"]>();
-  const worldGeometry = new Set(!includeWorld ? [] : (await readdir(path.join(source, "world")).catch(() => [] as string[])).filter((f) => /^geometry-.+\.json\.gz$/.test(f)));
+  const flatById = new Map<string, Float64Array>();
   const geometryCells = [...new Set([...wanted.keys(), ...[...worldGeometry].map((f) => f.slice(9, -8))])];
 
-  await mapPool(geometryCells, ZLIB_CONCURRENCY, async (shard) => {
+  await mapPool(geometryCells, GEO_CONCURRENCY, async (shard) => {
     const ids = wanted.get(shard);
     const hasWorldShard = worldGeometry.has(`geometry-${shard}.json.gz`);
-    // World-only cells were already filtered, deduplicated, and route-typed in pipeline/steps/world.ts: copy as-is.
     if (!ids && hasWorldShard) {
       await copyFile(path.join(source, "world", `geometry-${shard}.json.gz`), path.join(output, `geometry-${shard}.json.gz`));
       return;
@@ -301,6 +437,7 @@ async function main() {
         keptCount++;
         boundsById.set(id, extent(lines));
         routeTypeById.set(id, routeTypeFromLines(lines));
+        if (candidateIds.has(id)) flatById.set(id, packLinesFlat(lines));
       }
     }
     if (hasWorldShard) {
@@ -314,92 +451,78 @@ async function main() {
     }
   });
   wanted.clear();
+  candidateIds.clear();
 
-  // ---- cleanup (src/lib/trail-catalog/cleanup.ts): names, route type from the line, rating, junk, near-duplicates ----
-  const tally = { renamed: 0, review: 0, routeTypes: 0, dropped: 0, merged: 0 };
-  const overlaps = (a: [number, number, number, number], b: [number, number, number, number]) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
-  const cleanup = async (list: CatalogTrail[], dedupeLines: boolean) => {
-    for (const t of list) {
-      const { name, needsReview } = cleanTrailName(t.name);
-      if (name !== t.name) { t.name = name; tally.renamed++; }
-      // Section lists and "part of" links carry copies of other trails' names.
-      if (t.sections) for (const sec of t.sections) sec.name = cleanTrailName(sec.name).name;
-      if (t.partOfRoute) t.partOfRoute = { ...t.partOfRoute, name: cleanTrailName(t.partOfRoute.name).name };
-      if (needsReview) { t.quality = "review"; t.flags = [...new Set([...(t.flags ?? []), "needs-review" as const])]; tally.review++; }
-      const type = t.kind === "segment" ? routeTypeById.get(t.id) : undefined;
-      if (type && type !== t.routeType) { t.routeType = type; tally.routeTypes++; }
-      t.bounds = boundsById.get(t.id) ?? t.bounds;
-      rate(t);
-    }
-    const kept = list.filter((t) => !isJunkSegment(t));
-    tally.dropped += list.length - kept.length;
-    if (!dedupeLines) return kept;
-
-    // The same trail mapped twice under slightly different names ("Valley Loop Trail" and "Yosemite Valley Loop
-    // Trail"): when the lines overlap by more than 60%, the shorter becomes a segment of the longer.
-    const groups = new Map<string, CatalogTrail[]>();
-    for (const t of kept) {
-      if (t.kind !== "segment" || t.partOfRoute || !t.bounds) continue;
-      const key = dedupeKey(t);
-      if (key) (groups.get(`${t.country}|${key}`) ?? groups.set(`${t.country}|${key}`, []).get(`${t.country}|${key}`)!).push(t);
-    }
-    const candidateGroups: CatalogTrail[][] = [];
-    const neededByShard = new Map<string, Set<string>>();
-    const needLine = (t: CatalogTrail) => {
-      if (!t.geometryShard || t.geometryShard === "route") return;
-      (neededByShard.get(t.geometryShard) ?? neededByShard.set(t.geometryShard, new Set()).get(t.geometryShard)!).add(t.id);
-    };
-    for (const group of groups.values()) {
-      if (group.length < 2 || group.length > 60) continue;
-      group.sort((a, b) => (b.miles ?? 0) - (a.miles ?? 0));
-      let hasPair = false;
-      for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) {
-        if (overlaps(group[i].bounds!, group[j].bounds!)) {
-          needLine(group[i]);
-          needLine(group[j]);
-          hasPair = true;
-        }
-      }
-      if (hasPair) candidateGroups.push(group);
-    }
-    // Load each needed geometry shard once so deduplication never re-gunzips the same shard across groups.
-    const linesById = new Map<string, [number, number][][]>();
-    await mapPool([...neededByShard.entries()], ZLIB_CONCURRENCY, async ([shard, ids]) => {
-      const cell = await readFile(path.join(output, `geometry-${shard}.json.gz`)).then(async (b) => JSON.parse((await gunzipAsync(b)).toString()) as Record<string, [number, number][][]>).catch(() => ({} as Record<string, [number, number][][]>));
-      for (const id of ids) if (cell[id]) linesById.set(id, cell[id]);
-    });
-    for (const group of candidateGroups) {
-      for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) {
-        const long = group[i], short = group[j];
-        if (long.partOfRoute || short.partOfRoute || !overlaps(long.bounds!, short.bounds!)) continue;
-        const a = linesById.get(short.id), b = linesById.get(long.id);
-        if (!a || !b || overlapShare(a, b) <= 0.6) continue;
-        short.partOfRoute = { id: long.id, name: long.name, totalMiles: long.miles ?? 0 };
-        if ((long.sections?.length ?? 0) < 120) long.sections = [...(long.sections ?? []), { id: short.id, name: short.name, miles: short.miles ?? 0, difficulty: short.difficulty ?? null }];
-        tally.merged++;
-      }
-    }
-    linesById.clear();
-    return kept;
-  };
-
-  // ---- U.S. and Canada: trails by 2° cell; a trail is listed in every cell its line passes through ----
-  const naRows = await cleanup(rows, true);
-  rows.length = 0;
-  const cells = new Map<string, CatalogTrail[]>();
-  for (const row of naRows) {
-    const b = boundsById.get(row.id);
-    if (b) row.bounds = b;
-    for (const key of cellKeysOf(row)) (cells.get(key) ?? cells.set(key, []).get(key)!).push(row);
+  for (const t of rows) {
+    const type = t.kind === "segment" ? routeTypeById.get(t.id) : undefined;
+    if (type && type !== t.routeType) { t.routeType = type; tally.routeTypes++; }
+    t.bounds = boundsById.get(t.id) ?? t.bounds;
   }
   boundsById.clear();
   routeTypeById.clear();
-  await mapPool([...cells.entries()], ZLIB_CONCURRENCY, async ([key, trails]) => {
-    await writeFile(path.join(output, `cell-${key}.json.gz`), await zipped(trails.map(slim)));
-  });
-  const naCellKeys = [...cells.keys()];
-  cells.clear();
 
+  const naRows = rows.filter((t) => !isJunkSegment(t));
+  tally.dropped += rows.length - naRows.length;
+  rows.length = 0;
+
+  // Deduplicate overlapping same-name trails using compact Float64Arrays captured during the single geometry pass.
+  const overlaps = (a: [number, number, number, number], b: [number, number, number, number]) => a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3];
+  const groups = new Map<string, CatalogTrail[]>();
+  for (const t of naRows) {
+    if (t.kind !== "segment" || t.partOfRoute || !t.bounds) continue;
+    const key = dedupeKey(t);
+    if (key) (groups.get(`${t.country}|${key}`) ?? groups.set(`${t.country}|${key}`, []).get(`${t.country}|${key}`)!).push(t);
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2 || group.length > 60) continue;
+    group.sort((a, b) => (b.miles ?? 0) - (a.miles ?? 0));
+    for (let i = 0; i < group.length; i++) for (let j = i + 1; j < group.length; j++) {
+      const long = group[i], short = group[j];
+      if (long.partOfRoute || short.partOfRoute || !overlaps(long.bounds!, short.bounds!)) continue;
+      const a = flatById.get(short.id), b = flatById.get(long.id);
+      if (!a || !b || overlapShareFlat(a, b) <= 0.6) continue;
+      short.partOfRoute = { id: long.id, name: long.name, totalMiles: long.miles ?? 0 };
+      if ((long.sections?.length ?? 0) < 120) long.sections = [...(long.sections ?? []), { id: short.id, name: short.name, miles: short.miles ?? 0, difficulty: short.difficulty ?? null }];
+      tally.merged++;
+    }
+  }
+  groups.clear();
+  flatById.clear();
+
+  // Load measured elevation only after sections and geometry maps are freed so peak heap stays well under 1 GB.
+  let elevation: Record<string, [number, number, number, number, number | null]> = await readFile(path.join(source, "elevation.json.gz")).then(async (b) => JSON.parse((await gunzipAsync(b)).toString())).catch(() => ({}));
+  const rate = (t: CatalogTrail) => {
+    const e = elevation[t.id];
+    if (e) {
+      const climb = effortClimbFt({ gainFt: e[0], lossFt: e[1] }, t.routeType);
+      t.gainFt = climb;
+      t.lossFt = climb === e[0] ? e[1] : e[0];
+      t.minElevFt = e[2]; t.maxElevFt = e[3]; t.steepestGradePct = e[4];
+    }
+    if (t.reportedDifficulty === undefined) t.reportedDifficulty = t.difficulty ?? null;
+    t.difficulty = computeDifficulty({ lengthMi: t.miles, gainFt: t.gainFt, steepestGradePct: t.steepestGradePct, maxElevFt: t.maxElevFt }) ?? t.difficulty;
+  };
+  const ratedById = new Map<string, CatalogTrail["difficulty"]>();
+  for (const t of naRows) {
+    rate(t);
+    ratedById.set(t.id, t.difficulty);
+  }
+  for (const t of naRows) {
+    if (t.sections) for (const sec of t.sections) sec.difficulty = ratedById.get(sec.id) ?? sec.difficulty ?? null;
+  }
+  ratedById.clear();
+  if (!worldEntries.length) {
+    elevation = {};
+  } else if (!includeWorld) {
+    const keptElevation: typeof elevation = {};
+    for (const id of worldWantedIds) {
+      if (elevation[id]) keptElevation[id] = elevation[id];
+    }
+    elevation = keptElevation;
+  }
+  worldWantedIds.clear();
+
+  // ---- U.S. and Canada: index full records first, then slim in-place and write 2° cells ----
   for (const t of naRows) {
     index(t);
     count(t);
@@ -408,18 +531,29 @@ async function main() {
     if (qBufBytes >= FLUSH_BYTES) await flushQ();
   }
   const naRowCount = naRows.length;
-  naRows.length = 0;
-  elevation = {};
   for (const [from, to] of Object.entries(redirects)) setRecord(from, JSON.stringify(`r:${to}`));
   await flushRows();
   await flushQ();
 
-  // ---- worldwide, 2 countries at a time so large countries never stack in heap ----
-  const world = !includeWorld ? undefined : manifest.world as { files: Record<string, { rows: number; sha256: string }> } | undefined;
+  const cells = new Map<string, CatalogTrail[]>();
+  for (let i = 0; i < naRows.length; i++) {
+    const slimmed = slim(naRows[i]);
+    naRows[i] = slimmed;
+    for (const key of cellKeysOf(slimmed)) (cells.get(key) ?? cells.set(key, []).get(key)!).push(slimmed);
+  }
+  naRows.length = 0;
+  const naCellKeys = [...cells.keys()];
+  await mapPool(naCellKeys, ZLIB_CONCURRENCY, async (key) => {
+    const trails = cells.get(key)!;
+    cells.delete(key);
+    await writeFile(path.join(output, `cell-${key}.json.gz`), await zipped(trails));
+  });
+  cells.clear();
+
+  // ---- Alaska/Hawaii (always) + worldwide countries (when TRAIL_WORLD=1), 2 at a time ----
   const worldCells: Record<string, string[]> = {};
   const countriesWithTrails: string[] = [];
   let worldRows = 0;
-  const worldEntries = Object.entries(world?.files ?? {});
   for (let c = 0; c < worldEntries.length; c += 2) {
     const batch = worldEntries.slice(c, c + 2);
     const loaded = await Promise.all(batch.map(async ([code, info]) => {
@@ -427,7 +561,11 @@ async function main() {
       if (sha(buf) !== info.sha256) throw new Error(`Trail checksum mismatch (${code})`);
       const data = JSON.parse((await gunzipAsync(buf)).toString()) as { rows: CatalogTrail[]; redirects: Record<string, string> };
       for (const t of data.rows) t.name = titleCaseName(t.name);
-      data.rows = await cleanup(data.rows, false);
+      cleanNamesOn(data.rows);
+      for (const t of data.rows) rate(t);
+      const before = data.rows.length;
+      data.rows = data.rows.filter((t) => !isJunkSegment(t));
+      tally.dropped += before - data.rows.length;
       return { code, data };
     }));
     const cellWrites: [string, CatalogTrail[]][] = [];
@@ -455,6 +593,7 @@ async function main() {
     if (rowBufBytes >= FLUSH_BYTES) await flushRows();
     if (qBufBytes >= FLUSH_BYTES) await flushQ();
   }
+  elevation = {};
   await flushRows();
   await flushQ();
   // ---- indexes (written one disk bucket at a time so heap stays small) ----

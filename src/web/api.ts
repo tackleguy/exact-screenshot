@@ -61,6 +61,8 @@ async function accountActivities(request: Request): Promise<Response> {
 
 export function installApiBridge() {
   const original = window.fetch.bind(window);
+  let apiBlockedUntil = 0;
+
   window.fetch = async (input, init) => {
     const url = input instanceof Request ? input.url : String(input);
     const target = apiTarget(url, window.location.origin, apiOrigin);
@@ -96,14 +98,33 @@ export function installApiBridge() {
 
     // 4. Trail Service (Catalog, Peaks, Thru-Hikes, Sections, Elevation, Water, Towns, GPX)
     // 5. Directions, ski areas and quick search, straight from their public services.
+    const hasLocalHandler = isTrailServicePath(reqUrl.pathname) || request.method === "GET";
     const local = () => (isTrailServicePath(reqUrl.pathname) ? trailService(request, original) : staticApi(reqUrl, original));
-    if (!target) return local() ?? Response.json({ error: "This feature is unavailable right now. Please try again later." }, { status: 503 });
+    if (!target || (hasLocalHandler && Date.now() < apiBlockedUntil)) {
+      return local() ?? Response.json({ error: "This feature is unavailable right now. Please try again later." }, { status: 503 });
+    }
 
-    // A configured API server answers first; when it is down, the browser versions above still work.
+    // A configured API server answers first; when it is down, blocked (402/403), or returns HTML, browser handlers take over.
     const headers = new Headers(request.headers);
     const fallback = request.method === "GET" ? request.clone() : null;
-    const answer = await original(new Request(target, request), { headers }).catch(() => null);
-    if (answer && answer.status < 500 && answer.status !== 404) return answer;
+    const timeoutSignal = request.signal
+      ? AbortSignal.any([request.signal, AbortSignal.timeout(5000)])
+      : AbortSignal.timeout(5000);
+    const answer = await original(new Request(target, request), { headers, signal: timeoutSignal }).catch(() => null);
+    const contentType = answer?.headers.get("content-type") ?? "";
+    const blockedOrDown =
+      !answer ||
+      answer.status >= 500 ||
+      answer.status === 402 ||
+      answer.status === 403 ||
+      answer.status === 451 ||
+      (isTrailServicePath(reqUrl.pathname) && /text\/html/i.test(contentType));
+    if (blockedOrDown && !request.signal?.aborted) {
+      apiBlockedUntil = Date.now() + 60_000;
+    }
+    if (answer && !blockedOrDown && answer.status !== 404 && (answer.ok || !fallback || !isTrailServicePath(reqUrl.pathname))) {
+      return answer;
+    }
     return (fallback && (isTrailServicePath(reqUrl.pathname) ? trailService(fallback, original) : staticApi(reqUrl, original))) ?? answer ?? Response.json({ error: "This feature is unavailable right now. Please try again later." }, { status: 503 });
   };
 
@@ -115,14 +136,14 @@ export function installApiBridge() {
       const anchor = event.target.closest<HTMLAnchorElement>("a[href]");
       if (!anchor) return;
       const target = apiTarget(anchor.href, window.location.origin, apiOrigin);
-      if (target) {
+      if (target && Date.now() >= apiBlockedUntil && !isTrailServicePath(new URL(anchor.href).pathname)) {
         anchor.href = target;
-      } else if (target === "" && isTrailServicePath(new URL(anchor.href).pathname)) {
+      } else if (target !== null && isTrailServicePath(new URL(anchor.href).pathname)) {
         event.preventDefault();
-        void trailService(new Request(anchor.href), original).then(async (response) => {
+        void window.fetch(anchor.href).then(async (response) => {
           if (!response.ok) {
-            const data = await response.json();
-            window.alert(data.error);
+            const data = await response.json().catch(() => ({ error: "GPX download failed." }));
+            window.alert(data.error ?? "GPX download failed.");
             return;
           }
           const blob = await response.blob();
@@ -137,6 +158,8 @@ export function installApiBridge() {
           download.remove();
           setTimeout(() => URL.revokeObjectURL(url), 30_000);
         });
+      } else if (target) {
+        anchor.href = target;
       } else if (target === "") {
         event.preventDefault();
         window.alert("This feature is unavailable right now. Please try again later.");

@@ -1,28 +1,53 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 function trailStaticAssetsPlugin(root: string): Plugin {
   const publicDir = path.join(root, "public");
   const distDir = path.join(root, "dist");
-  let ensured = false;
-  const ensurePrepared = () => {
-    if (ensured) return;
-    ensured = true;
-    const mapReady = fs.existsSync(path.join(publicDir, "maplibre"));
-    const trailsReady = fs.existsSync(path.join(publicDir, "trail-data", "current.json"));
-    if (!mapReady) {
-      execFileSync(process.execPath, [path.join(root, "scripts/prepare-map-assets.mjs")], { cwd: root, stdio: "inherit" });
+  const currentJson = path.join(publicDir, "trail-data", "current.json");
+  let isBuild = false;
+  let mapEnsured = false;
+  let preparing = false;
+
+  const nodeBin = () => {
+    for (const candidate of ["/usr/bin/node", "/usr/local/bin/node"]) {
+      if (fs.existsSync(candidate)) return candidate;
     }
-    if (!trailsReady) {
-      const tsxCli = path.join(root, "node_modules/tsx/dist/cli.mjs");
-      if (fs.existsSync(tsxCli)) {
-        execFileSync(process.execPath, [tsxCli, path.join(root, "scripts/prepare-trail-assets.ts"), "--if-ready"], { cwd: root, stdio: "inherit" });
-      }
+    return process.execPath;
+  };
+
+  const ensureMapSync = () => {
+    if (mapEnsured) return;
+    mapEnsured = true;
+    if (!fs.existsSync(path.join(publicDir, "maplibre"))) {
+      execFileSync(nodeBin(), [path.join(root, "scripts/prepare-map-assets.mjs")], { cwd: root, stdio: "inherit" });
     }
   };
+
+  const ensureTrailsSync = () => {
+    if (fs.existsSync(currentJson)) return;
+    const tsxCli = path.join(root, "node_modules/tsx/dist/cli.mjs");
+    if (fs.existsSync(tsxCli)) {
+      execFileSync(nodeBin(), ["--max-old-space-size=1280", tsxCli, path.join(root, "scripts/prepare-trail-assets.ts"), "--if-ready"], { cwd: root, stdio: "inherit" });
+    }
+  };
+
+  const ensureTrailsAsync = () => {
+    if (preparing || fs.existsSync(currentJson)) return;
+    const tsxCli = path.join(root, "node_modules/tsx/dist/cli.mjs");
+    if (!fs.existsSync(tsxCli)) return;
+    preparing = true;
+    const child = spawn(nodeBin(), ["--max-old-space-size=1280", tsxCli, path.join(root, "scripts/prepare-trail-assets.ts"), "--if-ready"], {
+      cwd: root,
+      stdio: "inherit",
+    });
+    child.on("exit", () => { preparing = false; });
+    child.on("error", () => { preparing = false; });
+  };
+
   const makeMiddleware = (baseDirs: string[]) => (req: import("node:http").IncomingMessage, res: import("node:http").ServerResponse, next: () => void) => {
     const rawUrl = req.url?.split("?")[0] ?? "";
     if (!rawUrl.startsWith("/trail-data/") && !rawUrl.startsWith("/maplibre/")) {
@@ -60,17 +85,31 @@ function trailStaticAssetsPlugin(root: string): Plugin {
         // try next base dir
       }
     }
+    if (rawUrl.startsWith("/trail-data/") && (preparing || !fs.existsSync(currentJson))) {
+      ensureTrailsAsync();
+      res.statusCode = 503;
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Retry-After", "2");
+      res.end(JSON.stringify({ preparing: true, error: "Trail data is still being prepared." }));
+      return;
+    }
     res.statusCode = 404;
     res.setHeader("Content-Type", "application/json; charset=utf-8");
     res.end(JSON.stringify({ error: "Trail asset not found." }));
   };
   return {
     name: "hyked-trail-static-assets",
+    configResolved(config) {
+      isBuild = config.command === "build";
+    },
     buildStart() {
-      ensurePrepared();
+      ensureMapSync();
+      if (isBuild) ensureTrailsSync();
     },
     configureServer(server) {
-      ensurePrepared();
+      ensureMapSync();
+      ensureTrailsAsync();
       server.middlewares.use(makeMiddleware([publicDir]));
     },
     configurePreviewServer(server) {

@@ -198,7 +198,7 @@ async function readShard(directory: string, kind: "geometry" | "aliases", shard:
   if (!isShardKey(shard) || shard === "route") return {};
   if (kind === "geometry") {
     const key = `${directory}:${shard}`;
-    let hit = cellCache.get(key);
+    const hit = cellCache.get(key);
     if (hit) { cellCache.delete(key); cellCache.set(key, hit); return hit; }
     const next = readGeometryShardFile(directory, shard).catch((error) => {
       cellCache.delete(key);

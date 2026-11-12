@@ -377,14 +377,29 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
       geolocate.on("geolocate", (p) => rememberPosition([p.coords.longitude, p.coords.latitude]));
       geolocate.on("error", () => setLoadError("Location is off for this site. Allow it in your browser to see trails near you."));
       geolocateRef.current = geolocate;
-      map.on("style.load", () => { installOverlay(map, sourcesRef.current); installExtras(map, extrasRef.current); applySectionFilter(map, sectionRef.current); applyLayers(map, layersRef.current); });
-      map.on("load", () => {
+      let mapMarkedReady = false;
+      let styleReadyTimer: ReturnType<typeof setTimeout> | undefined;
+      const markReady = () => {
+        if (disposed || mapMarkedReady) return;
+        mapMarkedReady = true;
+        clearTimeout(styleReadyTimer);
         setReady(true);
         setMapInstance(map);
         refresh();
         // Start the compact attribution folded; the (i) button still opens it.
         containerRef.current?.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
+      };
+      map.on("style.load", () => {
+        installOverlay(map, sourcesRef.current);
+        installExtras(map, extrasRef.current);
+        applySectionFilter(map, sectionRef.current);
+        applyLayers(map, layersRef.current);
+        if (!mapMarkedReady) {
+          clearTimeout(styleReadyTimer);
+          styleReadyTimer = setTimeout(markReady, 1200);
+        }
       });
+      map.on("load", markReady);
       map.on("error", (e) => {
         const msg = e.error?.message ?? "";
         if (/style/i.test(msg)) setMapError("The map style didn’t load. Try Satellite from the layers button.");
