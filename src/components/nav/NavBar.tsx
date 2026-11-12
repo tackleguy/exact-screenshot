@@ -1,6 +1,7 @@
 "use client";
 
-import { setUnits, useUnits } from "@/lib/units";
+import { setUnits } from "@/lib/units";
+import { useUnits } from "@/lib/use-units";
 import { HykedLogo } from "@/components/brand/HykedLogo";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";

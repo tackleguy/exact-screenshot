@@ -23,7 +23,7 @@ import { difficultyColor, formatRating } from "@/lib/utils";
 import { computeDifficulty, DIFFICULTY_FORMULA } from "@/lib/trail-difficulty";
 import { buildTrailJsonLd } from "@/lib/seo/trail-jsonld";
 import type { GeoLineString } from "@/lib/types";
-import { getCatalogTrail } from "@/lib/trail-catalog/server";
+import { getCatalogTrail, isCatalogTrailId } from "@/lib/trail-catalog/server";
 import { CatalogTrailDetail } from "@/components/trails/CatalogTrailDetail";
 
 /** Dynamic params arrive percent-encoded, e.g. USGS ids with braces. */
@@ -41,7 +41,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const id = decodeId((await params).id);
-  if (/^(usgs|parks-canada|ontario|nps|usfs|blm|resort|route|osm)-/.test(id)) {
+  if (isCatalogTrailId(id)) {
     const record = await getCatalogTrail(id);
     const isRoute = record?.trail.kind === "route";
     return {
@@ -76,7 +76,7 @@ export default async function ExploreTrailDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const id = decodeId((await params).id);
-  if (/^(usgs|parks-canada|ontario|nps|usfs|blm|resort|route|osm)-/.test(id)) {
+  if (isCatalogTrailId(id)) {
     const record = await getCatalogTrail(id);
     if (!record) notFound();
     if (record.trail.id !== id) permanentRedirect(`/explore/trails/${encodeURIComponent(record.trail.id)}`);

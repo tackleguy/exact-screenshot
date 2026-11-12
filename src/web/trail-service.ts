@@ -73,17 +73,31 @@ async function asset<T>(file: string, fetcher: typeof fetch): Promise<T> {
     hit = (async () => {
       const res = await fetcher(`/trail-data/${file}`);
       if (!res.ok) throw new Error("Trail data could not load. Please try again.");
+      const contentType = res.headers.get("content-type") ?? "";
+      if (/text\/html/i.test(contentType)) {
+        throw new Error("Trail data is still being prepared. Reload in a moment.");
+      }
       if (file.endsWith(".gz")) {
         const bytes = new Uint8Array(await res.arrayBuffer());
+        if (!bytes.length || bytes[0] === 0x3c) {
+          throw new Error("Trail data is still being prepared. Reload in a moment.");
+        }
         // Hosts may already decompress .gz responses through Content-Encoding.
         const blob = new Blob([bytes]);
         const text =
           bytes[0] === 0x1f && bytes[1] === 0x8b
             ? await new Response(blob.stream().pipeThrough(new DecompressionStream("gzip"))).text()
             : await blob.text();
+        if (text.trimStart().startsWith("<")) {
+          throw new Error("Trail data is still being prepared. Reload in a moment.");
+        }
         return JSON.parse(text);
       }
-      return res.json();
+      const text = await res.text();
+      if (text.trimStart().startsWith("<")) {
+        throw new Error("Trail data is still being prepared. Reload in a moment.");
+      }
+      return JSON.parse(text);
     })().catch((error) => {
       cache.delete(file);
       throw error;
@@ -119,11 +133,15 @@ function cellKeysIn(m: Metadata, box: [number, number, number, number]) {
 /** Rows of the given cell files (refs from cellRefs or the search index). */
 async function cells(refs: string[], m: Metadata, fetcher: typeof fetch) {
   const known = (ref: string) => (ref.includes("~") ? (m.worldCells?.[cellKeyOf(ref)] ?? []).includes(ref.split("~")[1]) : m.cells.includes(ref));
-  const rows = (
-    await Promise.all(
-      [...new Set(refs)].filter(known).map((ref) => asset<CatalogTrail[]>(`${m.directory}/${cellFile(ref)}`, fetcher)),
-    )
-  ).flat();
+  const wanted = [...new Set(refs)].filter(known);
+  if (!wanted.length) return [];
+  const settled = await Promise.allSettled(
+    wanted.map((ref) => asset<CatalogTrail[]>(`${m.directory}/${cellFile(ref)}`, fetcher)),
+  );
+  const rows = settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  if (!rows.length && settled.every((r) => r.status === "rejected")) {
+    throw (settled[0] as PromiseRejectedResult).reason;
+  }
   // A long trail is listed in every cell its line crosses; keep one copy.
   const seen = new Set<string>();
   return rows.filter((t) => t.confidence !== "REJECTED" && !seen.has(t.id) && Boolean(seen.add(t.id))).map((t) => withDisplayName({ ...t, name: readableTrailName(t.name, t.id) }));

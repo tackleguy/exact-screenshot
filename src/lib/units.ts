@@ -3,11 +3,9 @@
  * duration on the site. The setting lives in localStorage ("hyked:units") and defaults from the browser language:
  * U.S. English (and Liberia, Myanmar) read imperial, everyone else metric.
  */
-import { useSyncExternalStore } from "react";
-
 export type Units = "imperial" | "metric";
 const KEY = "hyked:units";
-const EVENT = "hyked:units";
+export const UNITS_EVENT = "hyked:units";
 const MILE_M = 1609.344;
 const FOOT_M = 0.3048;
 const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -26,16 +24,7 @@ export function getUnits(): Units {
 
 export function setUnits(units: Units) {
   try { localStorage.setItem(KEY, units); } catch { /* storage unavailable */ }
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENT));
-}
-
-/** The current units; components re-render when the setting changes. */
-export function useUnits(): Units {
-  return useSyncExternalStore(
-    (onChange) => { window.addEventListener(EVENT, onChange); window.addEventListener("storage", onChange); return () => { window.removeEventListener(EVENT, onChange); window.removeEventListener("storage", onChange); }; },
-    getUnits,
-    () => "imperial",
-  );
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(UNITS_EVENT));
 }
 
 const thousands = (n: number) => Math.round(n).toLocaleString("en-US");

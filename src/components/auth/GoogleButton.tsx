@@ -1,8 +1,16 @@
 "use client";
 import { useState } from "react";
-import { signInWithGoogle } from "@/lib/account/auth";
+import { nextFromLocation, signInWithGoogle } from "@/lib/account/auth";
 
-export function GoogleButton({ next, label = "Continue with Google" }: { next: () => string; label?: string }) {
+export function GoogleButton({
+  next,
+  fallbackNext,
+  label = "Continue with Google",
+}: {
+  next?: string | (() => string);
+  fallbackNext?: string;
+  label?: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
@@ -13,7 +21,8 @@ export function GoogleButton({ next, label = "Continue with Google" }: { next: (
         className="btn-ghost flex w-full items-center justify-center gap-2 disabled:opacity-50"
         onClick={async () => {
           setBusy(true); setError(null);
-          const failure = await signInWithGoogle(next());
+          const dest = typeof next === "function" ? next() : next ?? nextFromLocation(fallbackNext);
+          const failure = await signInWithGoogle(dest);
           if (failure) { setError(failure); setBusy(false); }
         }}
       >

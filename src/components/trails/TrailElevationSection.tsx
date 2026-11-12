@@ -5,7 +5,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { friendlyError } from "@/lib/errors";
 import type { ElevationProfile } from "@/lib/trip/elevation";
 import { steepestGrade } from "@/lib/trip/grade";
-import { formatElevation, formatGrade, formatMeters, useUnits } from "@/lib/units";
+import { formatElevation, formatGrade, formatMeters } from "@/lib/units";
+import { useUnits } from "@/lib/use-units";
 import { emitTrailHover, onTrailHover } from "@/lib/trail-hover";
 import { DIFFICULTY_COLORS } from "@/lib/trail-difficulty";
 

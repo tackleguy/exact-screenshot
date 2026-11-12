@@ -2,7 +2,8 @@
 
 import { DIFFICULTY_FORMULA, DIFFICULTY_LABELS, type TrailDifficulty, DIFFICULTY_COLORS } from "@/lib/trail-difficulty";
 import { ROUTE_TYPE_LABELS, type RouteType } from "@/lib/trail-catalog/quality";
-import { formatDistance, formatDuration, formatDurationRange, formatElevation, hikingHours, splitDescent, useUnits } from "@/lib/units";
+import { formatDistance, formatDuration, formatDurationRange, formatElevation, hikingHours, splitDescent } from "@/lib/units";
+import { useUnits } from "@/lib/use-units";
 import "./trail-stats.css";
 
 export interface TrailStatsInput {
