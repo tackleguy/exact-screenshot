@@ -54,6 +54,12 @@ const zipped = (value: unknown) => gzipAsync(JSON.stringify(value), { level: 1 }
 const zippedText = (text: string) => gzipAsync(text, { level: 1 });
 const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
+/** With TRAIL_MEM_DEBUG=1, logs memory at each phase (rss, heap, ArrayBuffers/Buffers outside the heap). */
+const memProbe = (label: string) => {
+  if (process.env.TRAIL_MEM_DEBUG !== "1") return;
+  const m = process.memoryUsage(), mb = (n: number) => Math.round(n / 1e6);
+  console.log(`[mem] ${label}: rss ${mb(m.rss)} heap ${mb(m.heapUsed)} external ${mb(m.external)} arrayBuffers ${mb(m.arrayBuffers)}`);
+};
 
 /** Stream-gunzips a top-level JSON array of objects while verifying its compressed SHA-256. */
 async function streamGzipJsonArray<T>(filePath: string, expectedSha256: string, onItem: (item: T) => void): Promise<void> {
@@ -204,8 +210,10 @@ async function main() {
   const manifest = JSON.parse(await readFile(path.join(source, "manifest.json"), "utf8"));
   const allWorldFiles = (manifest.world?.files ?? {}) as Record<string, { rows: number; sha256: string }>;
   const hasWorldDir = Object.keys(allWorldFiles).length > 0;
-  // Build U.S. (including AK/HI), Canada, and curated global peaks/routes by default so Lovable preview/publish stays fast and under container limits; set TRAIL_WORLD=1 for all 232 countries.
-  const includeWorld = hasWorldDir && process.env.TRAIL_WORLD === "1";
+  // Worldwide trails (232 countries, ~1.18M trails in all) are built by default: read one country at a time (big ones
+  // alone), they take about two minutes and peak at the same memory as the U.S./Canada-only build (~1.9 GB RSS with
+  // --max-old-space-size=1280). Set TRAIL_WORLD=0 to build U.S. (including AK/HI), Canada and curated routes only.
+  const includeWorld = hasWorldDir && process.env.TRAIL_WORLD !== "0";
 
   if (process.argv.includes("--if-ready") && process.env.FORCE_TRAIL_PREP !== "1" && (await isAlreadyPrepared(pointer.directory, includeWorld))) {
     await ensureSeoRootFiles();
@@ -380,7 +388,8 @@ async function main() {
   }
   preGroups.clear();
 
-  // Lines of shown U.S./Canada trails, plus Alaska/Hawaii (always) or all world shards (TRAIL_WORLD=1).
+  memProbe("after index read");
+  // Lines of shown U.S./Canada trails, plus Alaska/Hawaii (always) and all world shards (unless TRAIL_WORLD=0).
   const wanted = new Map<string, Set<string>>();
   for (const t of rows) if (t.geometryShard !== "route" && t.source !== "resort") (wanted.get(t.geometryShard) ?? wanted.set(t.geometryShard, new Set()).get(t.geometryShard)!).add(t.id);
 
@@ -487,6 +496,7 @@ async function main() {
     }
   }
   groups.clear();
+  memProbe("before geometry clear");
   flatById.clear();
 
   // Load measured elevation only after sections and geometry maps are freed so peak heap stays well under 1 GB.
@@ -522,6 +532,7 @@ async function main() {
   }
   worldWantedIds.clear();
 
+  memProbe("after geometry");
   // ---- U.S. and Canada: index full records first, then slim in-place and write 2° cells ----
   for (const t of naRows) {
     index(t);
@@ -550,12 +561,20 @@ async function main() {
   });
   cells.clear();
 
-  // ---- Alaska/Hawaii (always) + worldwide countries (when TRAIL_WORLD=1), 2 at a time ----
+  memProbe("after NA cells");
+  // ---- Alaska/Hawaii (always) + worldwide countries (unless TRAIL_WORLD=0): small countries two at a time, big ones
+  // (Germany's index is 135 MB of JSON) on their own, so two large countries are never in memory together. ----
   const worldCells: Record<string, string[]> = {};
   const countriesWithTrails: string[] = [];
   let worldRows = 0;
-  for (let c = 0; c < worldEntries.length; c += 2) {
-    const batch = worldEntries.slice(c, c + 2);
+  const BIG_COUNTRY_ROWS = 15_000;
+  const worldBatches: (typeof worldEntries)[] = [];
+  for (const entry of worldEntries) {
+    const last = worldBatches[worldBatches.length - 1];
+    if (entry[1].rows < BIG_COUNTRY_ROWS && last && last.length === 1 && last[0][1].rows < BIG_COUNTRY_ROWS) last.push(entry);
+    else worldBatches.push([entry]);
+  }
+  for (const batch of worldBatches) {
     const loaded = await Promise.all(batch.map(async ([code, info]) => {
       const buf = await readFile(path.join(source, "world", `index-${code}.json.gz`));
       if (sha(buf) !== info.sha256) throw new Error(`Trail checksum mismatch (${code})`);
@@ -596,6 +615,7 @@ async function main() {
   elevation = {};
   await flushRows();
   await flushQ();
+  memProbe("after world");
   // ---- indexes (written one disk bucket at a time so heap stays small) ----
   const writeText = async (file: string, text: string) => writeFile(path.join(output, file), await zippedText(text));
   for (let b = 0; b < BUCKETS; b++) {
