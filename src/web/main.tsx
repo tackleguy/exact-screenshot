@@ -26,7 +26,8 @@ import { SkiAreaDetailPage } from "@/components/ski/SkiAreaDetailPage";
 import { GpsRecorder } from "@/components/gps/GpsRecorder";
 import { EstimatedRouteNote } from "@/components/activities/EstimatedRouteNote";
 import { routeEstimates } from "@/lib/route-provenance";
-import { friendlyError, isMissingTable } from "@/lib/errors";
+import { friendlyError } from "@/lib/errors";
+import { getLocalActivity, isLocalActivityId } from "@/lib/local-activities";
 import { ActivityListRow } from "@/components/activities/ActivityListRow";
 import { ActivityStats } from "@/components/activities/ActivityStats";
 import { RouteMiniMap } from "@/components/activities/RouteMiniMap";
@@ -196,16 +197,22 @@ function SavedTrails() { const { user } = useAccount(); return user ? <div class
 function SkiAreaDetail() { const { slug } = useParams(); return <SkiAreaDetailPage slug={slug ?? ""} />; }
 function Recorder() { const { search } = useLocation(); const params = new URLSearchParams(search); const type = params.get("type"); const activity: ActivityType = type === "run" || type === "bike" || type === "ski" ? type : "hike"; return <GpsRecorder activityType={activity} title={params.get("name")?.slice(0, 120) || `${activity.charAt(0).toUpperCase()}${activity.slice(1)}`} trailId={params.get("trail_id") ?? undefined} backpack={params.get("trip") === "backpack"} skiAreaId={params.get("resort_id") ?? undefined} skiAreaName={params.get("resort_name") ?? undefined} autoStart={Boolean(params.get("trail_id") || params.get("resort_id"))} />; }
 function ActivityFeed({ profile = false }: { profile?: boolean }) {
-  const { user } = useAccount(); const [activities, setActivities] = useState<Activity[]>([]); const [error, setError] = useState("");
-  useEffect(() => { const client = createClient(); if (!user || !client) return; let active = true; client.from("activities").select("*, trail:trails(*, park:parks(*))").eq("user_id", user.id).eq("status", "completed").order("started_at", { ascending: false }).limit(50).then(({ data, error }) => { if (active) { setActivities((data ?? []) as Activity[]); setError(error && !isMissingTable(error) ? friendlyError(error, "Your activities couldn’t load right now.") : ""); } }); return () => { active = false; }; }, [user?.id]);
-  return <section className="fieldbook-page"><h1>{profile ? user?.user_metadata?.first_name || "Your profile" : "Your outings"}</h1>{profile && <p>{user?.email}</p>}<Link className="btn-ghost" href="/record">Record an activity</Link>{error && <p className="catalog-muted" role="status">{error}</p>}<div className="mt-6">{activities.map(activity => <ActivityListRow key={activity.id} activity={activity} />)}{activities.length === 0 && !error && <p>No activities yet.</p>}</div></section>;
+  const { user } = useAccount(); const [state, setState] = useState<{ activities: Activity[]; onDevice: number; error: string } | null>(null);
+  // Account activities plus any kept on this device (guests, or hikes the account couldn't take yet).
+  useEffect(() => { let active = true; fetch("/api/activities").then(async (r) => { const d = await r.json(); if (active) setState({ activities: (d.activities ?? []) as Activity[], onDevice: d.onDevice ?? 0, error: r.ok ? "" : d.error ?? "" }); }).catch(() => { if (active) setState({ activities: [], onDevice: 0, error: "Your activities couldn’t load right now." }); }); return () => { active = false; }; }, [user?.id]);
+  const activities = state?.activities ?? [];
+  return <section className="fieldbook-page"><h1>{profile ? user?.user_metadata?.first_name || "Your profile" : "Your outings"}</h1>{profile && <p>{user?.email}</p>}<Link className="btn-ghost" href="/record">Record an activity</Link>{state?.error && <p className="catalog-muted" role="status">{state.error}</p>}{!user && activities.length > 0 && <p className="activity-device-note">These are saved on this device. <Link href="/signup?next=%2Factivity">Create a free account</Link> to keep them on every device.</p>}<div className="mt-6">{activities.map(activity => <ActivityListRow key={activity.id} activity={activity} />)}{state && activities.length === 0 && !state.error && <p>No activities yet. Record your first one and it shows up here.</p>}</div></section>;
 }
 function ActivityDetail() {
-  const { id } = useParams(); const [activity, setActivity] = useState<Activity | null>(null); const [error, setError] = useState("");
-  useEffect(() => { const client = createClient(); if (!client) return; let active = true; client.from("activities").select("*, trail:trails(*, park:parks(*))").eq("id", id).single().then(({ data, error }) => { if (active) { setActivity(data as Activity | null); setError(error ? "This activity isn’t available." : ""); } }); return () => { active = false; }; }, [id]);
-  if (error) return <Status title="Activity unavailable"><p>{error}</p><Link className="btn-ghost" href="/you">Your activities</Link></Status>;
+  const { id } = useParams(); const { user } = useAccount(); const [loaded, setLoaded] = useState<{ id?: string; activity: Activity | null; error: string } | null>(null);
+  const local = isLocalActivityId(id) ? getLocalActivity(id!) : null;
+  useEffect(() => { if (isLocalActivityId(id)) return; const client = createClient(); if (!client) return; let active = true; client.from("activities").select("*, trail:trails(*, park:parks(*))").eq("id", id).single().then(({ data, error }) => { if (active) setLoaded({ id, activity: data as Activity | null, error: error ? "This activity isn’t available." : "" }); }); return () => { active = false; }; }, [id]);
+  const fromAccount = loaded && loaded.id === id ? loaded : null;
+  const activity = isLocalActivityId(id) ? local : fromAccount?.activity ?? null;
+  const error = isLocalActivityId(id) ? (local ? "" : "This activity isn’t on this device any more.") : fromAccount?.error ?? "";
+  if (error) return <Status title="Activity unavailable"><p>{error}</p><Link className="btn-ghost" href="/activity">Your activities</Link></Status>;
   if (!activity) return <Status title="Loading activity…" />;
-  return <section className="fieldbook-page"><Link className="btn-ghost" href="/you">← Your activities</Link><h1>{activity.title}</h1><RouteMiniMap route={activity.route_geojson} className="h-80 w-full" /><EstimatedRouteNote route={activity.route_geojson} /><ActivityStats distanceM={Number(activity.distance_m)} durationSec={Number(activity.duration_sec)} elevationGainFt={Number(activity.elevation_gain_ft)} estimates={routeEstimates(activity.route_geojson)} /><p>{activity.notes}</p></section>;
+  return <section className="fieldbook-page"><Link className="btn-ghost" href="/activity">← Your activities</Link><h1>{activity.title}</h1>{isLocalActivityId(activity.id) && <p className="activity-device-note">{user ? "Saved on this device. It moves to your account automatically when the account can take it." : <>Nice work. This is saved on this device. <Link href={`/signup?next=${encodeURIComponent("/activity")}`}>Create a free account</Link> to keep it on every device.</>}</p>}<RouteMiniMap route={activity.route_geojson} className="h-80 w-full" /><EstimatedRouteNote route={activity.route_geojson} /><ActivityStats distanceM={Number(activity.distance_m)} durationSec={Number(activity.duration_sec)} elevationGainFt={Number(activity.elevation_gain_ft)} estimates={routeEstimates(activity.route_geojson)} /><p>{activity.notes}</p></section>;
 }
 /**
  * A file link (GPX, trip CSV, printable packet) opened directly or in a new tab. The static site has no server, so
@@ -243,8 +250,7 @@ function ActivityLog() {
   const { user, loading } = useAccount();
   usePageMeta({ title: "Activity log | Hyked", description: "Your recorded hikes, runs, rides and ski days." });
   if (loading) return <Status title="Loading your activity…" />;
-  if (user) return <ActivityFeed />;
-  return <Status title="Your activity log"><p>Hikes you record with Hyked are listed here once you sign in, on every device.</p><Link className="btn-primary" href="/login?next=%2Factivity">Sign in</Link> <Link className="btn-ghost" href="/record">Record a hike</Link></Status>;
+  return <ActivityFeed />;
 }
 function Home() {
   const { user } = useAccount();
@@ -264,8 +270,8 @@ function App() {
     <Route path="/" element={<Home />} /><Route path="/explore" element={<ExploreRedirect />} /><Route path="/my/trails/:id" element={<PersonalTrailRoute />} /><Route path="/shared/trails/:token" element={<PersonalTrailRoute shared />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<ExploreRedirect />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />
-    <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
-    <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/about/data" element={<DataSources />} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
+    <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<ManualRecordPage />} /><Route path="/record/live" element={<Recorder />} />
+    <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/about/data" element={<DataSources />} /><Route path="/activities/:id" element={<ActivityDetail />} />
     <Route path="/api/*" element={<ApiFile />} /><Route path="/parks/:id" element={<BackendPage />} /><Route path="/admin/*" element={<BackendPage />} /><Route path="*" element={<Status title="Page not found"><Link className="btn-ghost" href="/">Return to Hyked</Link></Status>} />
   </Routes></motion.div></AppShell></MotionConfig></>;
 }

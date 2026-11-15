@@ -871,3 +871,4 @@ html { scroll-padding-block:20px 100px; }
   .pitch-hero-content { padding: 32px 22px 88px; }
 }
 .pitch-hero h1, .pitch-hero p { text-shadow: 0 2px 24px #0a1424b3; }
+.activity-device-note { margin: 12px 0; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--surface-elevated); font-size: 14px; } .activity-device-note a { color: var(--accent); font-weight: 600; }

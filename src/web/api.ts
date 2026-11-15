@@ -4,14 +4,18 @@ import { apiTarget } from "./api-target";
 import { isTrailServicePath, trailService, tripPacket } from "./trail-service";
 import { fetchTrailWeather } from "@/lib/weather/forecast";
 import { staticApi } from "./static-api";
+import { listLocalActivities, removeLocalActivity, saveLocalActivity, toAccountRow } from "@/lib/local-activities";
 
 export const apiOrigin = (import.meta.env.VITE_HYKED_API_URL ?? "").replace(/\/+$/, "");
 
+/**
+ * Activities: saved to the account when signed in and the database takes them; otherwise kept on this device
+ * (src/lib/local-activities.ts), so guests can record and no recording is lost. Device activities move into the
+ * account on a later signed-in visit.
+ */
 async function accountActivities(request: Request): Promise<Response> {
   const client = createClient();
-  if (!client) return Response.json({ error: "Sign-in is unavailable right now." }, { status: 503 });
-  const { data: identity } = await client.auth.getUser();
-  if (!identity.user) return Response.json({ error: "Sign in to save activities." }, { status: 401 });
+  const user = client ? (await client.auth.getUser().catch(() => null))?.data.user ?? null : null;
   if (request.method === "POST") {
     const body = await request.json().catch(() => null);
     if (
@@ -24,37 +28,36 @@ async function accountActivities(request: Request): Promise<Response> {
     ) {
       return Response.json({ error: "Check the activity type, distance and duration." }, { status: 400 });
     }
-    const { data, error } = await client
-      .from("activities")
-      .insert({
-        user_id: identity.user.id,
-        status: "completed",
-        activity_type: body.activity_type,
-        title: body.title,
-        distance_m: body.distance_m,
-        duration_sec: body.duration_sec,
-        elevation_gain_ft: body.elevation_gain_ft,
-        route_geojson: body.route_geojson,
-        started_at: body.started_at,
-        ended_at: body.ended_at,
-        trail_id: body.trail_id ?? null,
-        ski_area_id: body.ski_area_id ?? null,
-        ski_area_name: body.ski_area_name ?? null,
-        notes: body.notes ?? null,
-      })
-      .select("*")
-      .single();
-    return Response.json(error ? { error: isMissingTable(error) ? "Saving activities isn’t available yet." : friendlyError(error, "Your activity couldn’t be saved. Try again.") } : { activity: data }, { status: error ? 400 : 201 });
+    if (client && user) {
+      const { data, error } = await client.from("activities").insert(toAccountRow({ ...body, elevation_gain_ft: body.elevation_gain_ft ?? 0, trail_id: body.trail_id ?? null, ski_area_id: body.ski_area_id ?? null, ski_area_name: body.ski_area_name ?? null, notes: body.notes ?? null }, user.id)).select("*").single();
+      if (!error && data) return Response.json({ activity: data }, { status: 201 });
+    }
+    const local = saveLocalActivity(body);
+    return local
+      ? Response.json({ activity: local, local: true }, { status: 201 })
+      : Response.json({ error: "This device is out of storage for recordings. Free some space and try again." }, { status: 507 });
   }
   if (request.method === "GET") {
-    const { data, error } = await client
-      .from("activities")
-      .select("*, trail:trails(*, park:parks(*))")
-      .eq("user_id", identity.user.id)
-      .eq("status", "completed")
-      .order("started_at", { ascending: false })
-      .limit(50);
-    return Response.json(error ? (isMissingTable(error) ? { activities: [] } : { error: friendlyError(error, "Your activities couldn’t load right now.") }) : { activities: data ?? [] }, { status: error && !isMissingTable(error) ? 400 : 200 });
+    let remote: unknown[] = [];
+    if (client && user) {
+      // Device activities move into the account first (stopping at the first one the database won't take).
+      for (const a of listLocalActivities().reverse()) {
+        const { error } = await client.from("activities").insert(toAccountRow(a, user.id));
+        if (error) break;
+        removeLocalActivity(a.id);
+      }
+      const { data, error } = await client
+        .from("activities")
+        .select("*, trail:trails(*, park:parks(*))")
+        .eq("user_id", user.id)
+        .eq("status", "completed")
+        .order("started_at", { ascending: false })
+        .limit(50);
+      if (error && !isMissingTable(error) && !listLocalActivities().length) return Response.json({ error: friendlyError(error, "Your activities couldn’t load right now.") }, { status: 400 });
+      remote = data ?? [];
+    }
+    const local = listLocalActivities();
+    return Response.json({ activities: [...local, ...remote].sort((x, y) => String((y as { started_at: string }).started_at).localeCompare(String((x as { started_at: string }).started_at))), onDevice: local.length });
   }
   return Response.json({ error: "This action is not supported." }, { status: 405 });
 }
