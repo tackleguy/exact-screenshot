@@ -36,6 +36,13 @@
       "when": 1792566656424,
       "tag": "0004_grant_ski_read_to_signed_in",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794730326317,
+      "tag": "0005_enable_trail_cloud_storage",
+      "breakpoints": true
     }
   ]
 }

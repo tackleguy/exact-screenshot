@@ -45,7 +45,10 @@ export function useUserTrails(userId: string) {
 
   const addTrail = async (trail: PackTrail) => {
     const supabase = createClient();
-    if (!supabase) return;
+    if (!supabase) {
+      setMessage("Sign in to save a trail.");
+      return false;
+    }
     const { data, error } = await supabase
       .from("user_trails")
       .insert({
@@ -63,10 +66,11 @@ export function useUserTrails(userId: string) {
       .single();
     if (error) {
       setMessage(friendlyError(error, "That change couldn’t be saved right now."));
-      return;
+      return false;
     }
     setTrails((prev) => [{ ...trail, id: String(data.id) }, ...prev]);
     setMessage("Trail added");
+    return true;
   };
 
   const deleteTrail = async (id: string) => {

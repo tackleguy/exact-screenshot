@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { PACK_TRAILS, type PackTrail } from "@/lib/gear";
 import { useUserTrails } from "@/hooks/useUserTrails";
+import { Button } from "@/components/ui/button";
 
 const DIFF_STYLES: Record<string, string> = {
   easy: "bg-accent/20 text-accent",
@@ -35,6 +36,7 @@ const inputClass =
 export function TrailDatabase({ userId }: { userId: string }) {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const { trails: userTrails, message, addTrail, deleteTrail } =
     useUserTrails(userId);
@@ -63,8 +65,10 @@ export function TrailDatabase({ userId }: { userId: string }) {
   );
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) return;
-    await addTrail({
+    if (!form.name.trim() || saving) return;
+    setSaving(true);
+    try {
+    const saved = await addTrail({
       name: form.name.trim(),
       location: form.location.trim(),
       distance: Number(form.distance) || 0,
@@ -77,8 +81,12 @@ export function TrailDatabase({ userId }: { userId: string }) {
         .map((t) => t.trim())
         .filter(Boolean),
     });
+    if (!saved) return;
     setForm(emptyForm);
     setShowModal(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -218,6 +226,7 @@ export function TrailDatabase({ userId }: { userId: string }) {
               </button>
             </div>
             <div className="space-y-3">
+              {message && <p role="status" className="text-sm text-sage">{message}</p>}
               <input
                 className={inputClass}
                 placeholder="Trail name *"
@@ -297,14 +306,14 @@ export function TrailDatabase({ userId }: { userId: string }) {
                 }
               />
             </div>
-            <button
+            <Button
               type="button"
               onClick={handleSubmit}
-              disabled={!form.name.trim()}
+              disabled={!form.name.trim() || saving}
               className="mt-5 w-full rounded-lg border border-accent/30 bg-accent/15 py-2.5 text-sm font-semibold text-accent transition hover:bg-accent/25 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Add Trail
-            </button>
+              {saving ? "Saving…" : "Add Trail"}
+            </Button>
           </div>
         </div>
       )}
