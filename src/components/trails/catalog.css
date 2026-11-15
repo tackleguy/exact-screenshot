@@ -407,3 +407,14 @@
 /* The place part of a rebuilt trail name, set smaller in the page heading. */
 .trail-name-context { display: block; margin-top: 4px; font-size: 0.5em; font-weight: 600; line-height: 1.25; opacity: 0.85; }
 .trail-gaps-note { margin: 8px 0 0; font-size: 13px; color: var(--sage); }
+/* 3D flyover: play/pause, scrubber, distance and speed along the bottom of the map; the marker that travels. */
+.flyover-bar { position: absolute; z-index: 3; left: 12px; right: 12px; bottom: 34px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 999px; background: color-mix(in srgb, #0a1424 82%, transparent); backdrop-filter: blur(10px); border: 1px solid #ffffff26; color: #fff; box-shadow: 0 10px 30px -12px #000; }
+.flyover-play { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); cursor: pointer; }
+.flyover-bar input[type="range"] { flex: 1; min-width: 0; height: 6px; appearance: none; border-radius: 999px; background: linear-gradient(90deg, #ffd23f var(--flyover, 0%), #ffffff40 var(--flyover, 0%)); cursor: pointer; }
+.flyover-bar input[type="range"]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px #0008; }
+.flyover-bar input[type="range"]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: #fff; box-shadow: 0 1px 4px #0008; }
+.flyover-distance { flex: none; font-size: 12.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.flyover-speed { flex: none; min-width: 40px; height: 30px; border: 1px solid #ffffff40; border-radius: 999px; background: transparent; color: #fff; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.flyover-marker { width: 18px; height: 18px; border-radius: 50%; background: #ffd23f; border: 3px solid #fff; box-shadow: 0 0 0 6px #ffd23f55, 0 2px 8px #0009; }
+@media (max-width: 560px) { .flyover-distance { display: none; } }
+.catalog-map-gl--3d .catalog-map-canvas { height: min(72vh, 680px); transition: height 300ms ease-out; }

@@ -7,7 +7,8 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useRouter } from "next/navigation";
 import type { CatalogTrail } from "@/lib/trail-catalog/types";
 import { BASEMAPS, explorerStyle, type Basemap } from "@/components/explore/explorer-map";
-import { cameraUpTrail, flyThrough, PITCH_3D, setThreeD, trailLine3d } from "@/components/explore/three-d";
+import { cameraUpTrail, createFlyover, PITCH_3D, setThreeD, trailLine3d, type Flyover, type FlyoverState } from "@/components/explore/three-d";
+import { formatMeters } from "@/lib/units";
 import "@/components/explore/explorer.css";
 import { chainLines, MILE_METERS, Route } from "@/lib/geo/line";
 import { emitTrailHover, onTrailHover } from "@/lib/trail-hover";
@@ -82,8 +83,10 @@ export function CatalogMapView({
   const [basemap, setBasemap] = useState<Basemap>(readBasemap);
   const [picker, setPicker] = useState(false);
   const [is3d, setIs3d] = useState(start3d);
-  const [flying, setFlying] = useState(false);
-  const stopFlight = useRef<(() => void) | null>(null);
+  // The flyover (3D only): created on first play, destroyed when 3D turns off or the style changes.
+  const [fly, setFly] = useState<FlyoverState | null>(null);
+  const flyover = useRef<Flyover | null>(null);
+  const endFlyover = () => { flyover.current?.destroy(); flyover.current = null; setFly(null); };
   const liveMarker = useRef<maplibreTypes.Marker | null>(null);
   // 3D switches to satellite imagery; the chosen style comes back (and stays remembered) when 3D is turned off.
   const before3d = useRef<Basemap | null>(null);
@@ -203,6 +206,7 @@ export function CatalogMapView({
     let live = true;
     void explorerStyle(basemap).then((style) => {
       if (!live) return;
+      endFlyover();
       map.setStyle(style, { diff: false });
       map.once("style.load", () => { if (is3d) { setThreeD(map, true); trailLine3d(map, true, TRAIL_IDS); } });
     });
@@ -214,13 +218,13 @@ export function CatalogMapView({
     if (!map || !ready) return;
     setThreeD(map, is3d);
     trailLine3d(map, is3d, TRAIL_IDS);
-    if (!is3d) { stopFlight.current?.(); return; }
+    if (!is3d) { endFlyover(); return; }
     const ls = data.current.lines;
     if (!ls.length || live) { map.easeTo({ pitch: PITCH_3D, duration: 900 }); return; }
     cameraUpTrail(map, ls, null, 40);
     // Then aim toward the highest point once the elevation profile is known (cached by the trail service).
     if (trailId) fetch(`/api/trail-catalog/${encodeURIComponent(trailId)}/elevation`).then((r) => (r.ok ? r.json() : null)).then((e: { profile?: [number, number][] } | null) => {
-      if (e?.profile?.length && mapRef.current === map && map.getPitch() > 30 && !stopFlight.current) cameraUpTrail(map, ls, e.profile, 40);
+      if (e?.profile?.length && mapRef.current === map && map.getPitch() > 30 && !flyover.current) cameraUpTrail(map, ls, e.profile, 40);
     }).catch(() => undefined);
     // The trail's lines are read when 3D turns on; later line updates don't re-aim the camera.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,20 +275,30 @@ export function CatalogMapView({
     setIs3d(!is3d);
   };
 
-  const fly = () => {
+  const lastMile = useRef(-1);
+  const startFlyover = (): Flyover | null => {
     const map = mapRef.current;
-    if (!map) return;
-    if (flying) { stopFlight.current?.(); return; }
-    setFlying(true);
-    stopFlight.current = flyThrough(map, data.current.lines, () => { setFlying(false); stopFlight.current = null; });
+    if (!map) return null;
+    flyover.current ??= createFlyover(map, maplibregl as unknown as typeof maplibreTypes, data.current.lines, (st) => {
+      setFly(st);
+      // The elevation chart's cursor follows the flyover (about ten updates a mile).
+      const mile = Math.round((st.meters / MILE_METERS) * 10) / 10;
+      if (trailId && mile !== lastMile.current) { lastMile.current = mile; emitTrailHover({ trailId, mile, from: "map" }); }
+    });
+    return flyover.current;
   };
+  const togglePlay = () => {
+    const f = startFlyover();
+    if (!f) return;
+    if (f.state.playing) f.pause(); else f.play();
+  };
+  useEffect(() => () => { flyover.current?.destroy(); }, []);
 
   return (
-    <div className="catalog-map-gl">
+    <div className={`catalog-map-gl${is3d ? " catalog-map-gl--3d" : ""}`}>
       <div ref={container} className="catalog-map-canvas" role="region" aria-label="Trail map" />
       <div className="catalog-map-tools">
         <button type="button" className="catalog-map-tool" aria-pressed={is3d} onClick={toggle3d}>3D</button>
-        {is3d && !live && lines.length > 0 && <button type="button" className="catalog-map-tool" aria-pressed={flying} onClick={fly}>{flying ? "Stop" : "Fly-through"}</button>}
         <button type="button" className="catalog-map-tool" aria-expanded={picker} onClick={() => setPicker((v) => !v)}>Map style</button>
         {picker && (
           <div className="hx-pop hx-pop--right hx-layers catalog-map-picker">
@@ -299,6 +313,23 @@ export function CatalogMapView({
           </div>
         )}
       </div>
+      {is3d && !live && lines.length > 0 && (
+        <div className="flyover-bar" role="group" aria-label="Trail flyover">
+          <button type="button" className="flyover-play" onClick={togglePlay} aria-label={fly?.playing ? "Pause flyover" : "Play flyover"}>
+            {fly?.playing
+              ? <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M7 5h4v14H7zM13 5h4v14h-4z" fill="currentColor" /></svg>
+              : <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" /></svg>}
+          </button>
+          <input
+            type="range" min={0} max={1000} value={Math.round((fly?.progress ?? 0) * 1000)} aria-label="Position along the trail"
+            aria-valuetext={fly ? `${formatMeters(fly.meters)} of ${formatMeters(fly.totalMeters)}` : "Start of the trail"}
+            style={{ "--flyover": `${(fly?.progress ?? 0) * 100}%` } as React.CSSProperties}
+            onChange={(e) => startFlyover()?.seek(Number(e.target.value) / 1000)}
+          />
+          <span className="flyover-distance">{fly ? `${formatMeters(fly.meters)} / ${formatMeters(fly.totalMeters)}` : "Flyover"}</span>
+          <button type="button" className="flyover-speed" onClick={() => { const f = startFlyover(); if (f) f.setSpeed(f.state.speed >= 4 ? 1 : f.state.speed * 2); }} aria-label={`Speed ${fly?.speed ?? 1} times. Change speed`}>{fly?.speed ?? 1}×</button>
+        </div>
+      )}
       {failed && (
         <p role="status" className="catalog-muted">
           The map couldn’t load. Check your connection, or download the GPX to see the trail in another app.

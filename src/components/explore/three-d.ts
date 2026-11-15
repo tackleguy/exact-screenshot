@@ -11,10 +11,10 @@ type LngLat = [number, number];
 export const TERRAIN_DEM = "terrain-dem";
 export const HILLSHADE_DEM = "hillshade-dem";
 export const PITCH_3D = 60;
-const MAX_3D_ZOOM = 13;
+const MAX_3D_ZOOM = 14.2;
 
-/** Terrain exaggeration: 1.5, easing to 1.3 above zoom 13 where the relief is already large on screen. */
-export const terrainExaggeration = (zoom: number) => (zoom > 13 ? 1.3 : 1.5);
+/** Terrain exaggeration: 1.35 from afar so relief reads, easing to a near-true 1.15 up close (like a real view). */
+export const terrainExaggeration = (zoom: number) => (zoom > 13 ? 1.15 : 1.35);
 
 /** Labels hidden in 3D (and contour labels below zoom 12): contour labels and minor-road names and shields. */
 const CLUTTER = /^(contour-labels|highway-name-path|highway-name-minor|highway-shield.*|road_shield_us|road_one_way_arrow.*)$/;
@@ -73,7 +73,7 @@ export function cameraUpTrail(map: maplibreTypes.Map, lines: LngLat[][], profile
   const cam = map.cameraForBounds([[w, s], [e, n]], { padding, bearing: b });
   if (!cam) { map.easeTo({ pitch: PITCH_3D, bearing: b, duration: 900 }); return; }
   // At 60° the far half of the frame shrinks; backing off ~0.7 zoom keeps the far end of the trail on screen.
-  // Capped at zoom 13 so the camera stays well above steep terrain (closer in, it can end up inside a cliff).
+  // Capped at zoom 14.2 so the camera stays above steep terrain (closer in, it can end up inside a cliff).
   map.easeTo({ center: cam.center, zoom: Math.min(MAX_3D_ZOOM, Math.max(1, (cam.zoom ?? map.getZoom()) - 0.7)), bearing: b, pitch: PITCH_3D, duration: 1200 });
 }
 
@@ -109,30 +109,100 @@ export function setThreeD(map: maplibreTypes.Map, on: boolean) {
   if (!on) map.easeTo({ pitch: 0, bearing: 0, duration: 600 });
 }
 
+export interface FlyoverState { playing: boolean; /** 0–1 along the trail. */ progress: number; meters: number; totalMeters: number; speed: number }
+export interface Flyover {
+  play(): void;
+  pause(): void;
+  /** Jump to a fraction of the trail (0–1); the camera follows whether playing or paused. */
+  seek(progress: number): void;
+  setSpeed(speed: number): void;
+  /** Stops and removes the marker and the travelled line. */
+  destroy(): void;
+  readonly state: FlyoverState;
+}
+
+/** Source and layer for the part of the trail the flyover has covered. */
+export const FLYOVER_SOURCE = "flyover-progress";
+
 /**
- * Flies the camera along the trail over `seconds` (default 20): requestAnimationFrame steps the camera along the
- * line, looking a little ahead, with the heading eased so switchbacks don't spin the view. Returns a stop function.
+ * A flyover of the trail: a marker travels the line at a steady ground speed while the camera chases it from
+ * behind and above, looking ahead, with the heading eased so switchbacks don't spin the view. The part already
+ * covered is drawn brighter. It can be played, paused, scrubbed and sped up; `onChange` reports each step.
+ * A full pass takes 25–75 s at 1× depending on the trail's length.
  */
-export function flyThrough(map: maplibreTypes.Map, lines: LngLat[][], onDone?: () => void, seconds = 20): () => void {
+export function createFlyover(map: maplibreTypes.Map, maplibre: typeof maplibreTypes, lines: LngLat[][], onChange: (s: FlyoverState) => void, beforeLayer?: string): Flyover | null {
   const route = new Route(chainLines(lines.filter((l) => l.length > 1)));
   const total = route.meters;
-  if (!total) { onDone?.(); return () => undefined; }
-  const lookAhead = Math.min(400, total / 8);
+  if (!total) return null;
+  const baseSeconds = Math.min(75, Math.max(25, total / 160));
+  const lookAhead = Math.min(350, Math.max(60, total / 10));
+  const zoom = total < 1500 ? 15.6 : total < 6000 ? 15 : total < 20000 ? 14.3 : 13.6;
+  const state: FlyoverState = { playing: false, progress: 0, meters: 0, totalMeters: total, speed: 1 };
   let heading = bearing(pointAt(route, 0), pointAt(route, lookAhead));
-  let frame = 0, stopped = false;
-  const started = performance.now();
-  const zoom = Math.min(14, Math.max(12, map.getZoom() + 0.5));
-  const step = (now: number) => {
-    if (stopped) return;
-    const t = Math.min(1, (now - started) / (seconds * 1000));
-    const here = pointAt(route, t * total);
-    const target = bearing(here, pointAt(route, Math.min(total, t * total + lookAhead)));
-    const delta = ((target - heading + 540) % 360) - 180;
-    heading = (heading + delta * 0.06 + 360) % 360;
-    map.easeTo({ center: here, bearing: heading, pitch: 65, zoom, duration: 0 });
-    if (t < 1) frame = requestAnimationFrame(step);
-    else { stopped = true; onDone?.(); }
+  let frame = 0, last = 0, lastLine = -1, dead = false;
+
+  const el = document.createElement("span");
+  el.className = "flyover-marker";
+  const marker = new maplibre.Marker({ element: el }).setLngLat(route.points[0]).addTo(map);
+  const ensureLayer = () => {
+    if (map.getSource(FLYOVER_SOURCE)) return;
+    map.addSource(FLYOVER_SOURCE, { type: "geojson", data: { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: [] } } });
+    map.addLayer({ id: FLYOVER_SOURCE, type: "line", source: FLYOVER_SOURCE, layout: { "line-cap": "round", "line-join": "round" }, paint: { "line-color": "#ffd23f", "line-width": 5 } }, beforeLayer && map.getLayer(beforeLayer) ? beforeLayer : undefined);
   };
-  frame = requestAnimationFrame(step);
-  return () => { if (!stopped) { stopped = true; cancelAnimationFrame(frame); onDone?.(); } };
+  /** The line from the start to `meters`, for the travelled highlight. */
+  const travelled = (meters: number): LngLat[] => {
+    const { points, along } = route;
+    let hi = 0;
+    while (hi < along.length && along[hi] <= meters) hi++;
+    return [...points.slice(0, hi), pointAt(route, meters)];
+  };
+  const render = (snap: boolean) => {
+    const at = state.progress * total;
+    const here = pointAt(route, at);
+    const target = bearing(here, pointAt(route, Math.min(total, at + lookAhead)));
+    const delta = ((target - heading + 540) % 360) - 180;
+    heading = (heading + delta * (snap ? 1 : 0.05) + 360) % 360;
+    marker.setLngLat(here);
+    // The camera looks at a point a little ahead of the marker, so the marker sits in the lower part of the frame.
+    map.jumpTo({ center: pointAt(route, Math.min(total, at + lookAhead * 0.35)), bearing: heading, pitch: 68, zoom });
+    const step = Math.floor(at / 15);
+    if (step !== lastLine || snap) {
+      lastLine = step;
+      ensureLayer();
+      (map.getSource(FLYOVER_SOURCE) as maplibreTypes.GeoJSONSource | undefined)?.setData({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: travelled(at) } });
+    }
+    state.meters = at;
+    onChange({ ...state });
+  };
+  const tick = (now: number) => {
+    if (dead || !state.playing) return;
+    const dt = Math.min(0.3, (now - last) / 1000); // slow devices still keep pace
+    last = now;
+    state.progress = Math.min(1, state.progress + (dt * state.speed) / baseSeconds);
+    if (state.progress >= 1) state.playing = false;
+    render(false);
+    if (state.playing) frame = requestAnimationFrame(tick);
+  };
+  return {
+    state,
+    play() {
+      if (dead || state.playing) return;
+      if (state.progress >= 1) { state.progress = 0; heading = bearing(pointAt(route, 0), pointAt(route, lookAhead)); }
+      state.playing = true;
+      last = performance.now();
+      frame = requestAnimationFrame(tick);
+      onChange({ ...state });
+    },
+    pause() { state.playing = false; cancelAnimationFrame(frame); onChange({ ...state }); },
+    seek(progress) { state.progress = Math.min(1, Math.max(0, progress)); render(true); },
+    setSpeed(speed) { state.speed = speed; onChange({ ...state }); },
+    destroy() {
+      dead = true;
+      state.playing = false;
+      cancelAnimationFrame(frame);
+      marker.remove();
+      if (map.getLayer(FLYOVER_SOURCE)) map.removeLayer(FLYOVER_SOURCE);
+      if (map.getSource(FLYOVER_SOURCE)) map.removeSource(FLYOVER_SOURCE);
+    },
+  };
 }
