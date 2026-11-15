@@ -86,7 +86,8 @@ export function CatalogMapView({
   // The flyover (3D only): created on first play, destroyed when 3D turns off or the style changes.
   const [fly, setFly] = useState<FlyoverState | null>(null);
   const flyover = useRef<Flyover | null>(null);
-  const endFlyover = () => { flyover.current?.destroy(); flyover.current = null; setFly(null); };
+  // Effects only tear the flyover down; its on-screen state is reset by the buttons that cause it (3D, map style).
+  const endFlyover = () => { flyover.current?.destroy(); flyover.current = null; };
   const liveMarker = useRef<maplibreTypes.Marker | null>(null);
   // 3D switches to satellite imagery; the chosen style comes back (and stays remembered) when 3D is turned off.
   const before3d = useRef<Basemap | null>(null);
@@ -272,6 +273,7 @@ export function CatalogMapView({
   const toggle3d = () => {
     if (!is3d && basemap !== "satellite" && basemap !== "hybrid") { before3d.current = basemap; setBasemap("satellite"); }
     if (is3d && before3d.current) { const back = before3d.current; before3d.current = null; setBasemap(back); }
+    setFly(null);
     setIs3d(!is3d);
   };
 
@@ -304,7 +306,7 @@ export function CatalogMapView({
           <div className="hx-pop hx-pop--right hx-layers catalog-map-picker">
             <div className="hx-layer-grid" role="group" aria-label="Map style">
               {BASEMAPS.map(({ key, label, hint }) => (
-                <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} title={hint} onClick={() => { setBasemap(key); setPicker(false); }}>
+                <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} title={hint} onClick={() => { setFly(null); setBasemap(key); setPicker(false); }}>
                   <span className="hx-layer-swatch" aria-hidden="true" />
                   <span className="hx-layer-name">{label}</span>
                 </button>
