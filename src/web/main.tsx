@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
+import { lazy, StrictMode, Suspense, useEffect, useLayoutEffect, useMemo, useState, type ReactNode } from "react";
 import { useUnits } from "@/lib/use-units";
 import { locate, timezoneRegion } from "@/lib/start-location";
 import { createRoot } from "react-dom/client";
@@ -7,30 +7,18 @@ import Link from "./compat/link";
 import { AppShell } from "@/components/nav/AppShell";
 import { GuestSaveBanner } from "@/components/nav/GuestSaveBanner";
 import { HomePromotion } from "@/components/home/HomePromotion";
-import { TrailExplorer } from "@/components/explore/TrailExplorer";
-import { PersonalTrailPage } from "@/components/route-builder/PersonalTrailPage";
 import { OsmTrailRedirect } from "./OsmTrailRedirect";
 import { CatalogTrailDetail, TrailDetailSkeleton } from "@/components/trails/CatalogTrailDetail";
 import { cachedJson, cachedTrailDetail, loadTrailDetail, rememberTrails, trailSummary, type TrailDetailData } from "@/lib/trail-catalog/client-cache";
 import { CatalogPresentation, type CatalogResult } from "./CatalogPresentation";
-import { CommunityTrails } from "./CommunityTrails";
-import { GearPageClient } from "@/components/gear/GearPageClient";
-import { LocalGear } from "@/components/gear/LocalGear";
-import { PlannerStart } from "@/components/assistant/PlannerStart";
 import { AuthCallback } from "@/components/auth/AuthCallback";
 import { rowToGear } from "@/lib/account/planner-cloud";
-import { TrailDatabase } from "@/components/pack-trails/TrailDatabase";
-import { SkiMapClient } from "@/components/ski/SkiMapClient";
-import { SkiAreasPage } from "@/components/ski/SkiAreasPage";
-import { SkiAreaDetailPage } from "@/components/ski/SkiAreaDetailPage";
-import { GpsRecorder } from "@/components/gps/GpsRecorder";
 import { EstimatedRouteNote } from "@/components/activities/EstimatedRouteNote";
 import { routeEstimates } from "@/lib/route-provenance";
 import { friendlyError } from "@/lib/errors";
 import { getLocalActivity, isLocalActivityId } from "@/lib/local-activities";
 import { ActivityListRow } from "@/components/activities/ActivityListRow";
 import { ActivityStats } from "@/components/activities/ActivityStats";
-import { RouteMiniMap } from "@/components/activities/RouteMiniMap";
 import LoginPage from "@/app/login/page";
 import SignupPage from "@/app/signup/page";
 import RecordPage from "@/app/record/page";
@@ -44,13 +32,29 @@ import { CATALOG_ACTIVITIES, type CatalogActivity } from "@/lib/trail-catalog/ac
 import mountainNight from "@/assets/mountain-night.jpg";
 import { apiOrigin, installApiBridge } from "./api";
 import { RouteMeta, trailPageMeta, usePageMeta } from "./seo";
-import { DataSources } from "@/components/about/DataSources";
 import { useAccount } from "./session";
 import { MotionConfig, motion } from "framer-motion";
 import "@/app/globals.css";
 import "./web.css";
+
+// Pages beyond the home page and trail pages load on demand, so the first visit downloads far less code.
+const TrailExplorer = lazy(() => import("@/components/explore/TrailExplorer").then((m) => ({ default: m.TrailExplorer })));
+const PersonalTrailPage = lazy(() => import("@/components/route-builder/PersonalTrailPage").then((m) => ({ default: m.PersonalTrailPage })));
+const CommunityTrails = lazy(() => import("./CommunityTrails").then((m) => ({ default: m.CommunityTrails })));
+const GearPageClient = lazy(() => import("@/components/gear/GearPageClient").then((m) => ({ default: m.GearPageClient })));
+const LocalGear = lazy(() => import("@/components/gear/LocalGear").then((m) => ({ default: m.LocalGear })));
+const PlannerStart = lazy(() => import("@/components/assistant/PlannerStart").then((m) => ({ default: m.PlannerStart })));
+const TrailDatabase = lazy(() => import("@/components/pack-trails/TrailDatabase").then((m) => ({ default: m.TrailDatabase })));
+const SkiMapClient = lazy(() => import("@/components/ski/SkiMapClient").then((m) => ({ default: m.SkiMapClient })));
+const SkiAreasPage = lazy(() => import("@/components/ski/SkiAreasPage").then((m) => ({ default: m.SkiAreasPage })));
+const SkiAreaDetailPage = lazy(() => import("@/components/ski/SkiAreaDetailPage").then((m) => ({ default: m.SkiAreaDetailPage })));
+const GpsRecorder = lazy(() => import("@/components/gps/GpsRecorder").then((m) => ({ default: m.GpsRecorder })));
+const DataSources = lazy(() => import("@/components/about/DataSources").then((m) => ({ default: m.DataSources })));
+const RouteMiniMap = lazy(() => import("@/components/activities/RouteMiniMap").then((m) => ({ default: m.RouteMiniMap })));
 const mountainUrl = typeof mountainNight === "string" ? mountainNight : mountainNight.src;
 
+/** Shown for the moment a page's code is loading. */
+function PageLoading() { return <section className="fieldbook-page" aria-busy="true"><p className="catalog-muted" role="status">Loading…</p></section>; }
 function Status({ title, children }: { title: string; children?: ReactNode }) { return <section className="fieldbook-page"><h1>{title}</h1><div role="status" className="fieldbook-status">{children}</div></section>; }
 function RequireAccount({ children }: { children: ReactNode }) {
   const { user, loading } = useAccount(); const location = useLocation();
@@ -266,14 +270,14 @@ function App() {
   // back and forward keep the position the browser restores.
   const navigationType = useNavigationType();
   useLayoutEffect(() => { if (navigationType !== "POP") window.scrollTo(0, 0); }, [pathname, navigationType]);
-  return <><RouteMeta pathname={pathname} /><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><MotionConfig reducedMotion="user"><AppShell><motion.div key={pathname} className="page-fade" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.28, ease: "easeOut" }}><Routes key={units}>
+  return <><RouteMeta pathname={pathname} /><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><MotionConfig reducedMotion="user"><AppShell><motion.div key={pathname} className="page-fade" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.28, ease: "easeOut" }}><Suspense fallback={<PageLoading />}><Routes key={units}>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<ExploreRedirect />} /><Route path="/my/trails/:id" element={<PersonalTrailRoute />} /><Route path="/shared/trails/:token" element={<PersonalTrailRoute shared />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<ExploreRedirect />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
     <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<ManualRecordPage />} /><Route path="/record/live" element={<Recorder />} />
     <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/about/data" element={<DataSources />} /><Route path="/activities/:id" element={<ActivityDetail />} />
     <Route path="/api/*" element={<ApiFile />} /><Route path="/parks/:id" element={<BackendPage />} /><Route path="/admin/*" element={<BackendPage />} /><Route path="*" element={<Status title="Page not found"><Link className="btn-ghost" href="/">Return to Hyked</Link></Status>} />
-  </Routes></motion.div></AppShell></MotionConfig></>;
+  </Routes></Suspense></motion.div></AppShell></MotionConfig></>;
 }
 installApiBridge();
 const root = document.getElementById("root");

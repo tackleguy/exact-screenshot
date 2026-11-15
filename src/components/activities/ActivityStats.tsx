@@ -43,11 +43,6 @@ export function ActivityStats({
       <StatBlock label="Elev gain" value={formatElevation(elevationGainFt) ?? "—"} sub={estFt > 0 ? `incl. ${formatElevation(estFt)} estimated` : undefined} />
       <StatBlock label="Avg pace" value={pace} />
       <StatBlock label="Avg speed" value={`${avgMph.toFixed(1)} mph`} />
-      <StatBlock
-        label="Calories"
-        value="—"
-        sub="Not tracked"
-      />
     </div>
   );
 }

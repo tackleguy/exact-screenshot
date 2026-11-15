@@ -35,7 +35,7 @@ const FEATURES = [
   { icon: MapIcon, title: "Every trail, mapped", body: "Search over a million hiking, biking, riding and ski trails worldwide, rated by measured length and climb.", href: "/explore/trails/catalog", cta: "Browse trails" },
   { icon: Crosshair, title: "Precise GPS recording", body: "Filtered, smoothed tracking aims for 5 m, snaps to the trail, and keeps going while you check the map.", href: "/record", cta: "Start recording" },
   { icon: Tent, title: "Backpacking mode", body: "Campsites, water and towns by mile, what's next from where you are, and where to get permits.", href: "/explore/trails/route-jmt", cta: "See an example" },
-  { icon: Mountain, title: "3D terrain", body: "Tilt into the mountains on satellite imagery and fly the whole trail before you go.", href: "/explore/trails?lat=37.745&lng=-119.596&z=12", cta: "Open the map" },
+  { icon: Mountain, title: "3D terrain", body: "Tilt into the mountains on satellite imagery and play a flyover of the whole trail before you go.", href: "/explore/trails?lat=37.745&lng=-119.596&z=12", cta: "Open the map" },
   { icon: RouteIcon, title: "Go anywhere", body: "Plan point to point through up to five stops: on trails, by road, or with flights for the long legs.", href: "/explore/trails", cta: "Build a route" },
   { icon: Compass, title: "Plan & pack", body: "Turn a trail into a trip: days, town stops, water, and a packing list from your own gear.", href: "/plan", cta: "Plan a trip" },
 ];
@@ -130,7 +130,7 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
           <p>{manifest ? `${(headlineCount(manifest) / 1e6).toFixed(1)} million trails` : "Over a million trails"}, precise GPS and trip planning. Free.</p>
           <div className="pitch-hero-actions">
             <Link href="/signup" className="btn-primary">Join Hyked <ArrowUpRight size={18} aria-hidden /></Link>
-            <Link href="/explore/trails" className="pitch-hero-link">Explore the map</Link>
+            <Link href="/explore/trails" className="pitch-hero-link">Explore the map — no account needed</Link>
           </div>
         </div>
       </header>

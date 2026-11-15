@@ -27,7 +27,8 @@ export function applyPageMeta({ title, description, image, jsonLd }: PageMeta) {
   setMeta("name", "description", description ?? null);
   setMeta("property", "og:title", title);
   setMeta("property", "og:description", description ?? null);
-  setMeta("property", "og:image", image ?? null);
+  // Pages without their own picture share the site image, so a pasted link always has a preview.
+  setMeta("property", "og:image", image ?? `${window.location.origin}/og.jpg`);
   let script = document.getElementById("page-jsonld");
   if (!jsonLd) { script?.remove(); return; }
   if (!script) { script = document.createElement("script"); script.id = "page-jsonld"; script.setAttribute("type", "application/ld+json"); document.head.appendChild(script); }
@@ -74,9 +75,9 @@ export function trailPageMeta(t: CatalogTrail): PageMeta {
   };
 }
 
-const DEFAULT_META: PageMeta = { title: "Hyked — Trails, Maps & Adventure", description: "Find real, verified trails across the U.S. and Canada, see water and campsites by mile, build routes and plan your trip." };
+const DEFAULT_META: PageMeta = { title: "Hyked — Trails, Maps & Adventure", description: "Find over a million trails in 230+ countries, see them in 3D, record your hike with precise GPS and plan your trip. Free, no account needed to start." };
 const ROUTE_META: [RegExp, PageMeta][] = [
-  [/^\/(explore\/trails|map)\/?$/, { title: "Trail map | Hyked", description: "Topographic trail map of the U.S. and Canada with water, campsites and a route builder." }],
+  [/^\/(explore\/trails|map)\/?$/, { title: "Trail map | Hyked", description: "Topographic trail map of the world with 3D terrain, water, campsites and a route builder." }],
   [/^\/explore\/trails\/catalog/, { title: "Trail catalog | Hyked", description: "Search verified and mapped trails near you by name, park or region." }],
   [/^\/plan/, { title: "Plan a trip | Hyked", description: "Build a trip around a trail, prepare your gear and get a pack list." }],
   [/^\/gear/, { title: "Your gear | Hyked", description: "Your gear closet and pack weights." }],
