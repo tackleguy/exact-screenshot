@@ -218,6 +218,60 @@ export type Database = {
         }
         Relationships: []
       }
+      personal_trails: {
+        Row: {
+          created_at: string
+          days: Json | null
+          features: Json
+          geometry: Json
+          id: string
+          is_public: boolean
+          name: string
+          notes: string
+          photo_path: string | null
+          share_token: string | null
+          stats: Json
+          trails: Json
+          updated_at: string
+          user_id: string
+          waypoints: Json
+        }
+        Insert: {
+          created_at?: string
+          days?: Json | null
+          features?: Json
+          geometry?: Json
+          id?: string
+          is_public?: boolean
+          name: string
+          notes?: string
+          photo_path?: string | null
+          share_token?: string | null
+          stats?: Json
+          trails?: Json
+          updated_at?: string
+          user_id?: string
+          waypoints?: Json
+        }
+        Update: {
+          created_at?: string
+          days?: Json | null
+          features?: Json
+          geometry?: Json
+          id?: string
+          is_public?: boolean
+          name?: string
+          notes?: string
+          photo_path?: string | null
+          share_token?: string | null
+          stats?: Json
+          trails?: Json
+          updated_at?: string
+          user_id?: string
+          waypoints?: Json
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -240,6 +294,39 @@ export type Database = {
           display_name?: string | null
           id?: string
           tier?: Database["public"]["Enums"]["subscription_tier"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      saved_routes: {
+        Row: {
+          created_at: string
+          geometry: Json
+          id: string
+          meters: number
+          name: string
+          trail_ids: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          geometry?: Json
+          id?: string
+          meters?: number
+          name?: string
+          trail_ids?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          geometry?: Json
+          id?: string
+          meters?: number
+          name?: string
+          trail_ids?: Json
           updated_at?: string
           user_id?: string
         }
@@ -574,7 +661,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_shared_personal_trail: {
+        Args: { token: string }
+        Returns: {
+          created_at: string
+          days: Json
+          features: Json
+          geometry: Json
+          id: string
+          is_public: boolean
+          name: string
+          notes: string
+          photo_path: string
+          share_token: string
+          stats: Json
+          trails: Json
+          updated_at: string
+          waypoints: Json
+        }[]
+      }
     }
     Enums: {
       subscription_tier: "base_camp" | "summit" | "thru_hiker"
