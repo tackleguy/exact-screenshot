@@ -1,5 +1,5 @@
 # Lovable publishing and simpler discovery
-- [ ] Set up Cloud trail storage and verify signed-in add/reload/delete from the Database page.
+- [x] Set up Cloud trail storage and verify signed-in add/reload/delete from the Database page.
 - [x] Make the homepage promotional and refresh shared presentation toward AllTrails-inspired outdoor discovery; search, destination links and phone layout verified.
 - [x] Add explicit Google Maps driving links and mapped point-to-point trail routing using parallel investigations; verified route creation, GPX export and save/reload, plus a real two-trail junction.
 - [x] Restore catalog filtering/pagination, through-hikes and community/GPX entry points, and mobile 3D controls without replacing existing trip tools.
