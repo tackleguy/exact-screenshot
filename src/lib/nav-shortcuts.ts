@@ -11,4 +11,5 @@ export const NAV_SHORTCUTS = [
   { keys: "G then P", label: "Profile", href: "/you", chord: "p" },
   { keys: "G then M", label: "Trail map", href: "/explore/trails", chord: "m" },
   { keys: "G then A", label: "Activity log", href: "/activity", chord: "a" },
+  { keys: "G then S", label: "Settings", href: "/settings", chord: "s" },
 ] as const;

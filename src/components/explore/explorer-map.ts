@@ -2,6 +2,10 @@ import type * as maplibreTypes from "maplibre-gl";
 import * as maplibregl from "@/lib/maplibre";
 import mlcontour from "maplibre-contour";
 import { TRAIL_DETAIL_ZOOM } from "@/lib/trail-catalog/discovery";
+import { AERO_LAYER_IDS, buildAeronauticalStyle, FAA_CHARTS, FAA_CREDIT } from "@/lib/aero-charts";
+import { getUiSettings } from "@/lib/ui-settings";
+
+export { FAA_CHARTS };
 
 /**
  * Basemaps (licences in DECISIONS.md):
@@ -12,20 +16,24 @@ import { TRAIL_DETAIL_ZOOM } from "@/lib/trail-catalog/discovery";
  *   Shaded Relief, National Geographic, World Imagery) with Esri's attribution; terrain, relief and hybrid add
  *   hillshading and contours from the same DEM.
  * - usgs, usgs-imagery: USGS The National Map (U.S. only, public domain).
+ * - vfr, ifr: FAA Aeronautical Information Services VFR Sectional/Terminal and IFR Enroute Low/High raster charts
+ *   draped over 3D AWS Terrain Tiles (reference only, not for operational navigation).
  */
-export type Basemap = "topo" | "outdoors" | "terrain" | "relief" | "natgeo" | "usgs" | "usgs-imagery" | "satellite" | "hybrid" | "standard" | "bright" | "light" | "dark";
+export type Basemap = "topo" | "satellite" | "hybrid" | "vfr" | "ifr" | "outdoors" | "terrain" | "relief" | "natgeo" | "usgs" | "usgs-imagery" | "standard" | "bright" | "light" | "dark";
 
 /** Every basemap with its picker label, hint and swatch (a tile of Yosemite Valley, or a CSS pattern). */
 export const BASEMAPS: readonly { key: Basemap; label: string; hint: string }[] = [
   { key: "topo", label: "Topo", hint: "Contours and terrain shading" },
+  { key: "satellite", label: "Satellite", hint: "Aerial imagery with roads" },
+  { key: "hybrid", label: "Satellite + contours", hint: "Imagery with contour lines" },
+  { key: "vfr", label: "3D VFR Chart", hint: "FAA VFR Sectional & Terminal charts draped on 3D terrain (not for navigation)" },
+  { key: "ifr", label: "3D IFR Chart", hint: "FAA IFR Enroute Low & High airways draped on 3D terrain (not for navigation)" },
   { key: "outdoors", label: "Outdoors", hint: "Topographic map with trails and relief" },
   { key: "terrain", label: "Terrain", hint: "Landforms, shading and contours" },
   { key: "relief", label: "Shaded relief", hint: "Mountains and valleys in relief" },
   { key: "natgeo", label: "National Geographic", hint: "Classic atlas style" },
   { key: "usgs", label: "USGS Topo", hint: "U.S. government topo maps (U.S. only)" },
   { key: "usgs-imagery", label: "USGS Imagery Topo", hint: "Aerial photos with topo lines (U.S. only)" },
-  { key: "satellite", label: "Satellite", hint: "Aerial imagery with roads" },
-  { key: "hybrid", label: "Satellite + contours", hint: "Imagery with contour lines" },
   { key: "standard", label: "Standard", hint: "Streets and places" },
   { key: "bright", label: "Bright", hint: "Colourful streets and parks" },
   { key: "light", label: "Light", hint: "Quiet grey map that lets trails stand out" },
@@ -91,7 +99,7 @@ let dem: InstanceType<typeof mlcontour.DemSource> | null = null;
 /** One shared DEM source; contour tiles are generated in its worker, so panning stays smooth. */
 function contours() {
   if (!dem) {
-    dem = new mlcontour.DemSource({ url: TERRARIUM, encoding: "terrarium", maxzoom: 13, worker: true, cacheSize: 100 });
+    dem = new mlcontour.DemSource({ url: TERRARIUM, encoding: "terrarium", maxzoom: 13, worker: typeof Worker !== "undefined", cacheSize: 100 });
     dem.setupMaplibre(maplibregl as never);
   }
   return dem;
@@ -190,6 +198,22 @@ function rasterStyle(base: { tiles: string; maxzoom: number; attribution: string
   return { version: 8, glyphs: GLYPHS, sources, layers };
 }
 
+/**
+ * 3D Aeronautical chart style (VFR Sectional + Terminal Area, or IFR Enroute High + Low).
+ * Uses a worldwide topographic/terrain fallback base with DEM hillshading underneath so zooms outside FAA chart LODs
+ * (z < 7/8) or outside U.S. airspace stay crisp, and sets maxzoom: 12 on FAA sources so MapLibre overzooms cleanly to z=20.
+ */
+export function aeronauticalStyle(mode: "vfr" | "ifr", opacity = getUiSettings().aeroChartOpacity): maplibreTypes.StyleSpecification {
+  return buildAeronauticalStyle(
+    mode,
+    demSources(),
+    mode === "vfr"
+      ? { hillshade: hillshadeLayer(0.38) }
+      : { hillshade: hillshadeLayer(0.45), contours: contourLayers(false) },
+    opacity,
+  );
+}
+
 function satellite(withContours = false): maplibreTypes.StyleSpecification {
   return {
     version: 8,
@@ -213,6 +237,8 @@ export async function explorerStyle(basemap: Basemap): Promise<maplibreTypes.Sty
   switch (basemap) {
     case "satellite": return satellite();
     case "hybrid": return satellite(true);
+    case "vfr": return aeronauticalStyle("vfr");
+    case "ifr": return aeronauticalStyle("ifr");
     case "outdoors": return rasterStyle({ tiles: esri("World_Topo_Map"), maxzoom: 19, attribution: ESRI_CREDIT });
     case "terrain": return rasterStyle({ tiles: esri("World_Terrain_Base"), maxzoom: 13, attribution: ESRI_CREDIT }, { hillshade: 0.45, contours: true, labels: [esri("Reference/World_Reference_Overlay")] });
     case "relief": return rasterStyle({ tiles: esri("World_Shaded_Relief"), maxzoom: 13, attribution: ESRI_CREDIT }, { hillshade: 0.3, labels: [esri("Reference/World_Boundaries_and_Places")] });
@@ -251,6 +277,17 @@ export interface OverlayData {
 /** Hyked's own sources and layers; re-installed after every basemap switch. */
 export function installOverlay(map: maplibreTypes.Map, data: OverlayData) {
   if (map.getSource("hy-pins")) return;
+
+  // 0. Optional Aeronautical Chart Overlays (VFR Sectional/Terminal & IFR Enroute Low/High) underneath trails
+  const aeroOpacity = getUiSettings().aeroChartOpacity;
+  map.addSource("hy-vfr-sectional", { type: "raster", tiles: [FAA_CHARTS.vfrSectional], tileSize: 256, minzoom: 8, maxzoom: 12, attribution: FAA_CREDIT });
+  map.addSource("hy-vfr-terminal", { type: "raster", tiles: [FAA_CHARTS.vfrTerminal], tileSize: 256, minzoom: 10, maxzoom: 12 });
+  map.addSource("hy-ifr-high", { type: "raster", tiles: [FAA_CHARTS.ifrHigh], tileSize: 256, minzoom: 5, maxzoom: 9, attribution: FAA_CREDIT });
+  map.addSource("hy-ifr-low", { type: "raster", tiles: [FAA_CHARTS.ifrLow], tileSize: 256, minzoom: 7, maxzoom: 12, attribution: FAA_CREDIT });
+  map.addLayer({ id: "hy-vfr-sectional", type: "raster", source: "hy-vfr-sectional", minzoom: 8, layout: { visibility: "none" }, paint: { "raster-opacity": aeroOpacity } });
+  map.addLayer({ id: "hy-vfr-terminal", type: "raster", source: "hy-vfr-terminal", minzoom: 10, layout: { visibility: "none" }, paint: { "raster-opacity": aeroOpacity } });
+  map.addLayer({ id: "hy-ifr-high", type: "raster", source: "hy-ifr-high", minzoom: 5, maxzoom: 8, layout: { visibility: "none" }, paint: { "raster-opacity": aeroOpacity } });
+  map.addLayer({ id: "hy-ifr-low", type: "raster", source: "hy-ifr-low", minzoom: 7, layout: { visibility: "none" }, paint: { "raster-opacity": aeroOpacity } });
 
   // 1. Long-Distance Through-Hike Corridors Layer
   map.addSource("hy-thru-hikes", { type: "geojson", data: data.thruHikes ?? EMPTY });
@@ -407,7 +444,7 @@ export function setFeatureLabelGroups(map: maplibreTypes.Map, groups: string[]) 
 /** Toggles visibility for specific layer categories */
 export function setLayerGroupVisibility(
   map: maplibreTypes.Map,
-  group: "thru-hikes" | "day-trails" | "ski" | "water" | "camping" | "other" | "my-trails",
+  group: "thru-hikes" | "day-trails" | "ski" | "water" | "camping" | "other" | "my-trails" | "vfr-chart" | "ifr-chart",
   visible: boolean,
 ) {
   const layerMap: Record<string, string[]> = {
@@ -418,6 +455,8 @@ export function setLayerGroupVisibility(
     camping: ["hy-feat-camping"],
     other: ["hy-feat-other"],
     "my-trails": ["hy-mytrails-casing", "hy-mytrails"],
+    "vfr-chart": ["hy-vfr-sectional", "hy-vfr-terminal"],
+    "ifr-chart": ["hy-ifr-high", "hy-ifr-low"],
   };
 
   const layers = layerMap[group] ?? [];
@@ -425,6 +464,16 @@ export function setLayerGroupVisibility(
   for (const layerId of layers) {
     if (map.getLayer(layerId)) {
       map.setLayoutProperty(layerId, "visibility", val);
+    }
+  }
+}
+
+/** Updates opacity across both basemap and overlay VFR/IFR chart raster layers. */
+export function setAeroChartOpacity(map: maplibreTypes.Map, opacity: number) {
+  const clamped = Math.min(1, Math.max(0.35, opacity));
+  for (const id of AERO_LAYER_IDS) {
+    if (map.getLayer(id)) {
+      map.setPaintProperty(id, "raster-opacity", clamped);
     }
   }
 }

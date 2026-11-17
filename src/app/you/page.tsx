@@ -72,6 +72,12 @@ export default async function YouPage() {
             >
               Pack Trails
             </Link>
+            <Link
+              href="/settings"
+              className="rounded-lg border border-[var(--border-strong)] bg-surface px-5 py-2.5 text-sm font-semibold text-cream transition hover:border-accent/40"
+            >
+              Settings
+            </Link>
           </div>
         </div>
       </section>

@@ -17,6 +17,7 @@ const navLinks = [
   { href: "/explore/trails", label: "Map", icon: "map" as const, hint: "G then M" },
   { href: "/plan", label: "My trips", icon: "trips" as const, hint: "G then T" },
   { href: "/gear", label: "Gear", icon: "gear" as const, hint: "G then G" },
+  { href: "/settings", label: "Settings", icon: "settings" as const, hint: "G then S" },
 ];
 
 /** The map is /explore/trails exactly; every other /explore page (list, trail pages, ski) is Explore. */
@@ -45,7 +46,9 @@ const footerLinks = [
 
 const tools = [
   { href: "/explore/trails/catalog", label: "All trails & filters" },
+  { href: "/explore/trails", label: "3D trail & VFR/IFR map", hint: "G then M" },
   { href: "/explore/trails/catalog?kind=route", label: "Through-hikes" },
+  { href: "/settings", label: "Settings & appearance", hint: "G then S" },
   { href: "/you", label: "Profile" },
   { href: "/record", label: "Record activity", hint: "G then R" },
   { href: "/activity", label: "Activity log", hint: "G then A" },

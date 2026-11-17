@@ -89,6 +89,7 @@ const ROUTE_META: [RegExp, PageMeta][] = [
   [/^\/explore\/ski/, { title: "Nordic ski trails | Hyked" }],
   [/^\/trails\/?$/, { title: "Explore trails | Hyked" }],
   [/^\/my\/trails/, { title: "My trail | Hyked" }],
+  [/^\/settings/, { title: "Settings & appearance | Hyked", description: "Customize theme, accent colors, typography, units and 3D VFR/IFR aeronautical map defaults." }],
   [/^\/about\/data/, { title: "Data sources & licences | Hyked", description: "Where Hyked's trails, features, maps, photos and forecasts come from, and their licences." }],
 ];
 

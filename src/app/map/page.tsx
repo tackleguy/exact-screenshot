@@ -4,10 +4,11 @@ import { getAuthUser } from "@/lib/supabase/server";
 import { CATALOG_ACTIVITIES, TRAIL_SECTIONS, parseTrailSection, type CatalogActivity } from "@/lib/trail-catalog/activity";
 import { SECTION_COOKIE } from "@/lib/preferred-section";
 import { TrailExplorer } from "@/components/explore/TrailExplorer";
+import { BASEMAPS, type Basemap } from "@/components/explore/explorer-map";
 
 export const metadata: Metadata = {
   title: "Trail map — Hyked",
-  description: "Explore hiking, biking, horse and snow trails across the United States and Canada on a topo, satellite or 3D terrain map.",
+  description: "Explore hiking, biking, horse and snow trails across the United States and Canada on a topo, satellite, 3D terrain, or 3D VFR/IFR aeronautical map.",
 };
 
 type Search = Record<string, string | string[] | undefined>;
@@ -31,9 +32,12 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
   }
   const lat = num(params.lat, -85, 85), lng = num(params.lng, -180, 180);
   const trail = one(params.trail)?.slice(0, 200) ?? null;
+  const basemapParam = one(params.basemap) ?? one(params.aero);
+  const basemap: Basemap | null =
+    basemapParam && BASEMAPS.some((b) => b.key === basemapParam) ? (basemapParam as Basemap) : null;
   return (
     <TrailExplorer
-      start={{ activity, trail, center: lat !== null && lng !== null ? [lng, lat] : null, zoom: num(params.z, 1, 20) }}
+      start={{ activity, trail, center: lat !== null && lng !== null ? [lng, lat] : null, zoom: num(params.z, 1, 20), basemap }}
     />
   );
 }

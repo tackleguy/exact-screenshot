@@ -10,6 +10,7 @@ const paths = {
   record: "M12 3a9 9 0 100 18 9 9 0 000-18Zm0 5a4 4 0 100 8 4 4 0 000-8Z",
   chevron: "m9 5 7 7-7 7",
   filters: "M3 7h4m4 0h10M3 17h10m4 0h4M7 4v6m10 4v6",
+  settings: "M4 6h10m4 0h2M14 4v4M4 12h4m4 0h8M8 10v4M4 18h12m4 0h0M16 16v4",
   more: "M12 6.5a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5Zm0 7a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5Zm0 7a1.25 1.25 0 110-2.5 1.25 1.25 0 010 2.5Z",
 } as const;
 export function NavIcon({ name, style }: { name: keyof typeof paths; style?: CSSProperties }) {

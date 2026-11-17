@@ -27,6 +27,8 @@ import {
   EMPTY,
   explorerStyle,
   installOverlay,
+  MY_TRAIL_COLOR,
+  setAeroChartOpacity,
   setFeatureLabelGroups,
   setLayerGroupVisibility,
   type Basemap,
@@ -49,6 +51,8 @@ import { cameraUpTrail, PITCH_3D, setThreeD, trailLine3d } from "./three-d";
 import { createClient } from "@/lib/supabase/client";
 import { installExtras, applySectionFilter } from "./map-extras";
 import { useOpenSkiFeature } from "@/components/ski/SkiAreaMap";
+import { getUiSettings, updateUiSettings } from "@/lib/ui-settings";
+import { useUiSettings } from "@/lib/use-ui-settings";
 
 
 type Bounds = [number, number, number, number];
@@ -110,6 +114,8 @@ export interface ExplorerStart {
   trail: string | null;
   center: [number, number] | null;
   zoom: number | null;
+  /** Optional basemap requested via URL (?basemap=vfr or ?aero=ifr). */
+  basemap?: Basemap | null;
   /** Opens the route builder with this start (the trail page's "Build a route from here"). */
   routeFrom?: { point: [number, number]; name: string } | null;
 }
@@ -138,16 +144,27 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   });
   const fetchAbort = useRef<AbortController | null>(null);
   const hovered = useRef<number | string | null>(null);
+  const uiSettings = useUiSettings();
 
   const [filters, setFilters] = useState<Filters>({ activity: initial.activity, difficulty: [], length: "", routeType: "", verified: false, dogs: false });
   const filtersRef = useRef(filters);
-  // The chosen map style is remembered on this device.
+  // The chosen map style is remembered on this device, falling back to the default configured in Settings.
   const [basemap, setBasemapState] = useState<Basemap>(() => {
-    try { const saved = localStorage.getItem("hyked:basemap"); return BASEMAPS.some((b) => b.key === saved) ? (saved as Basemap) : "topo"; } catch { return "topo"; }
+    if (initial.basemap && BASEMAPS.some((b) => b.key === initial.basemap)) return initial.basemap;
+    try {
+      const saved = localStorage.getItem("hyked:basemap");
+      if (BASEMAPS.some((b) => b.key === saved)) return saved as Basemap;
+    } catch { /* storage unavailable */ }
+    const def = getUiSettings().defaultBasemap;
+    return BASEMAPS.some((b) => b.key === def) ? (def as Basemap) : "topo";
   });
   const basemapRef = useRef(basemap);
-  const setBasemap = (next: Basemap) => { setBasemapState(next); try { localStorage.setItem("hyked:basemap", next); } catch { /* storage unavailable */ } };
-  const [layers, setLayers] = useState({
+  const setBasemap = (next: Basemap) => {
+    basemapRef.current = next;
+    setBasemapState(next);
+    try { localStorage.setItem("hyked:basemap", next); } catch { /* storage unavailable */ }
+  };
+  const [layers, setLayers] = useState<LayerToggles>({
     thruHikes: true,
     dayTrails: true,
     ski: initial.activity === "ski",
@@ -155,6 +172,8 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     camping: true,
     other: false,
     myTrails: true,
+    vfrChart: false,
+    ifrChart: false,
   });
   const [routeOpen, setRouteOpen] = useState(Boolean(initial.routeFrom));
   // The map instance as state, so the route builder renders once the map exists.
@@ -165,7 +184,8 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const onPickingChange = useCallback((picking: boolean) => { pickingRef.current = picking; }, []);
   const layersRef = useRef(layers);
   const { trails: myTrails } = usePersonalTrails();
-  const [is3d, setIs3d] = useState(false);
+  const [is3d, setIs3d] = useState(() => basemap === "vfr" || basemap === "ifr" || getUiSettings().default3d);
+  const is3dRef = useRef(is3d);
   const [bearing, setBearing] = useState(0);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState<null | "section" | "difficulty" | "length" | "route" | "layers">(null);
@@ -214,7 +234,7 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   const sectionKey = section.key as TrailSectionKey;
   const sectionRef = useRef(sectionKey);
   // Map event handlers read the latest values through refs, updated after each render.
-  useEffect(() => { routerRef.current = router; openSkiRef.current = openSki; sectionRef.current = sectionKey; });
+  useEffect(() => { routerRef.current = router; openSkiRef.current = openSki; sectionRef.current = sectionKey; is3dRef.current = is3d; });
 
   const refreshSki = useCallback(async () => {
     const map = mapRef.current; const client = createClient();
@@ -394,6 +414,11 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
         installExtras(map, extrasRef.current);
         applySectionFilter(map, sectionRef.current);
         applyLayers(map, layersRef.current);
+        if (is3dRef.current) {
+          setThreeD(map, true);
+          trailLine3d(map, true);
+          if (map.getPitch() < 10) map.jumpTo({ pitch: PITCH_3D, zoom: Math.max(map.getZoom(), basemapRef.current === "vfr" ? 8.8 : basemapRef.current === "ifr" ? 8 : map.getZoom()) });
+        }
         if (!mapMarkedReady) {
           clearTimeout(styleReadyTimer);
           styleReadyTimer = setTimeout(markReady, 1200);
@@ -555,12 +580,19 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     if (map && ready) applySectionFilter(map, sectionKey);
   }, [sectionKey, ready]);
 
-  const is3dRef = useRef(is3d);
   const selectedIdRef = useRef(selectedId);
   const syncSelectedPin = useCallback(() => {
     const map = mapRef.current;
     if (map?.getLayer("hy-pin-selected")) map.setFilter("hy-pin-selected", ["==", ["get", "id"], selectedIdRef.current ?? ""]);
   }, []);
+
+  // Sync aeronautical chart opacity and 3D terrain exaggeration whenever UI settings change.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    setAeroChartOpacity(map, uiSettings.aeroChartOpacity);
+    if (is3dRef.current) setThreeD(map, true);
+  }, [uiSettings.aeroChartOpacity, uiSettings.terrainExaggeration, ready]);
 
   // Basemap switch keeps the camera and re-installs Hyked layers on the new style.
   const firstBasemap = useRef(true);
@@ -580,11 +612,10 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     return () => { live = false; };
   }, [basemap, syncSelectedPin]);
 
-  // 3D: satellite imagery by default (the map style comes back when 3D is turned off), terrain, sky, no label
-  // clutter, a thicker trail line, and a camera looking up the selected trail with all of it in view.
+  // 3D: satellite imagery by default unless already viewing an imagery or 3D aeronautical chart style;
+  // terrain, sky, decluttered labels, thicker trail line, and camera looking up the selected trail.
   const basemapBefore3d = useRef<Basemap | null>(null);
   useEffect(() => {
-    is3dRef.current = is3d;
     const map = mapRef.current;
     if (!map || !ready) return;
     setThreeD(map, is3d);
@@ -592,16 +623,50 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
     if (is3d) {
       const lines = detailRef.current?.lines;
       const profile = elevationRef.current && elevationRef.current !== "none" ? elevationRef.current.profile : null;
+      const min3dZoom = basemapRef.current === "vfr" || layersRef.current.vfrChart ? 8.8 : basemapRef.current === "ifr" || layersRef.current.ifrChart ? 8 : 11.5;
       if (lines?.length) cameraUpTrail(map, lines as [number, number][][], profile);
-      else map.easeTo({ pitch: PITCH_3D, zoom: Math.max(map.getZoom(), 11.5), duration: 900 });
+      else map.easeTo({ pitch: PITCH_3D, zoom: Math.max(map.getZoom(), min3dZoom), duration: 900 });
     }
   }, [is3d, ready]);
 
-  /** 3D on switches to satellite imagery; off brings the chosen style back. */
+  /** 3D on switches to satellite imagery unless already on an imagery or 3D VFR/IFR aeronautical style; off restores the previous style. */
   const toggle3d = () => {
-    if (!is3d && basemap !== "satellite" && basemap !== "hybrid") { basemapBefore3d.current = basemap; setBasemap("satellite"); }
+    const keepCurrent = basemap === "satellite" || basemap === "hybrid" || basemap === "vfr" || basemap === "ifr" || basemap === "usgs-imagery" || layers.vfrChart || layers.ifrChart;
+    if (!is3d && !keepCurrent) { basemapBefore3d.current = basemap; setBasemap("satellite"); }
     if (is3d && basemapBefore3d.current) { setBasemap(basemapBefore3d.current); basemapBefore3d.current = null; }
     setIs3d(!is3d);
+  };
+
+  /** Selecting 3D VFR or 3D IFR automatically engages 3D terrain & pitch and zooms into chart coverage if needed. */
+  const pickBasemap = (next: Basemap) => {
+    basemapBefore3d.current = null;
+    setBasemap(next);
+    if (next === "vfr" || next === "ifr") {
+      setLayers((l) => (l.vfrChart || l.ifrChart ? { ...l, vfrChart: false, ifrChart: false } : l));
+      if (!is3d) setIs3d(true);
+      const map = mapRef.current;
+      const minZoom = next === "vfr" ? 8.8 : 8;
+      if (map && map.getZoom() < minZoom) {
+        map.easeTo({ zoom: minZoom, pitch: PITCH_3D, duration: 900 });
+      }
+    }
+  };
+
+  /** Toggles the VFR or IFR chart overlay on top of the current basemap and activates 3D terrain. */
+  const toggleAeroOverlay = (kind: "vfrChart" | "ifrChart", checked: boolean) => {
+    setLayers((l) => ({
+      ...l,
+      vfrChart: kind === "vfrChart" ? checked : checked ? false : l.vfrChart,
+      ifrChart: kind === "ifrChart" ? checked : checked ? false : l.ifrChart,
+    }));
+    if (checked) {
+      if (!is3d) setIs3d(true);
+      const map = mapRef.current;
+      const minZoom = kind === "vfrChart" ? 8.8 : 8;
+      if (map && map.getZoom() < minZoom) {
+        map.easeTo({ zoom: minZoom, pitch: PITCH_3D, duration: 900 });
+      }
+    }
   };
 
   // A trail picked while in 3D: look up it, with all of it in view.
@@ -815,28 +880,63 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="6" cy="19" r="2.2" /><circle cx="18" cy="5" r="2.2" /><path d="M8 18.5h7.5a3.5 3.5 0 0 0 0-7h-7a3.5 3.5 0 0 1 0-7H16" /></svg>
         </button>
         <div className="hx-pop-anchor">
-          <button type="button" className="hx-ctl hx-ctl--text" aria-expanded={open === "layers"} onClick={() => setOpen(open === "layers" ? null : "layers")}>Maps</button>
+          <button id="hx-maps-trigger" type="button" className="hx-ctl hx-ctl--text" aria-expanded={open === "layers"} onClick={() => setOpen(open === "layers" ? null : "layers")}>Maps</button>
           {open === "layers" && (
             <div className="hx-pop hx-pop--right hx-layers">
               <div className="hx-layer-grid" role="group" aria-label="Map style">
                 {BASEMAPS.map(({ key, label, hint }) => (
-                  <button key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} title={hint} onClick={() => setBasemap(key)}>
+                  <button id={`hx-basemap-${key}`} key={key} type="button" className={`hx-layer hx-layer--${key}`} aria-pressed={basemap === key} title={hint} onClick={() => pickBasemap(key)}>
                     <span className="hx-layer-swatch" aria-hidden="true" />
                     <span className="hx-layer-name">{label}</span>
                   </button>
                 ))}
               </div>
               <p className="hx-pop-note">{BASEMAPS.find((b) => b.key === basemap)?.hint}</p>
-              <div className="hx-layer-toggles">
+              <div className="hx-layer-toggles" role="group" aria-label="3D Aeronautical chart overlays">
+                <span className="hx-layer-group-title">3D Aeronautical layers</span>
+                <label className="hx-check" htmlFor="hx-layer-vfr-chart">
+                  <input id="hx-layer-vfr-chart" type="checkbox" checked={layers.vfrChart || basemap === "vfr"} disabled={basemap === "vfr"} onChange={(e) => toggleAeroOverlay("vfrChart", e.target.checked)} />
+                  <span className="hx-dot" style={{ background: "#38bdf8" }} />
+                  3D VFR Sectional &amp; Terminal
+                </label>
+                <label className="hx-check" htmlFor="hx-layer-ifr-chart">
+                  <input id="hx-layer-ifr-chart" type="checkbox" checked={layers.ifrChart || basemap === "ifr"} disabled={basemap === "ifr"} onChange={(e) => toggleAeroOverlay("ifrChart", e.target.checked)} />
+                  <span className="hx-dot" style={{ background: "#f59e0b" }} />
+                  3D IFR Enroute Low &amp; High
+                </label>
+                {(basemap === "vfr" || basemap === "ifr" || layers.vfrChart || layers.ifrChart) && (
+                  <div className="hx-aero-opacity">
+                    <div className="hx-aero-opacity-head">
+                      <label htmlFor="hx-aero-opacity-slider">Chart opacity</label>
+                      <span>{Math.round(uiSettings.aeroChartOpacity * 100)}%</span>
+                    </div>
+                    <input
+                      id="hx-aero-opacity-slider"
+                      type="range"
+                      min="35"
+                      max="100"
+                      step="5"
+                      value={Math.round(uiSettings.aeroChartOpacity * 100)}
+                      onChange={(e) => updateUiSettings({ aeroChartOpacity: Number(e.target.value) / 100 })}
+                    />
+                    <p className="hx-pop-note">FAA charts shown over 3D terrain for airspace context only — not for operational navigation.</p>
+                  </div>
+                )}
+              </div>
+              <div className="hx-layer-toggles" role="group" aria-label="Trail and feature layers">
+                <span className="hx-layer-group-title">Trail &amp; outdoor layers</span>
                 <label className="hx-check"><input type="checkbox" checked={layers.thruHikes} onChange={(e) => setLayers((l) => ({ ...l, thruHikes: e.target.checked }))} /> Long-distance trails</label>
                 <label className="hx-check"><input type="checkbox" checked={layers.dayTrails} onChange={(e) => setLayers((l) => ({ ...l, dayTrails: e.target.checked }))} /> Day trails</label>
                 <label className="hx-check"><input type="checkbox" checked={layers.ski} onChange={(e) => setLayers((l) => ({ ...l, ski: e.target.checked }))} /> Ski runs and lifts</label>
                 <label className="hx-check"><input type="checkbox" checked={layers.water} onChange={(e) => setLayers((l) => ({ ...l, water: e.target.checked }))} /><span className="hx-dot" style={{ background: "#0284c7" }} /> Water</label>
                 <label className="hx-check"><input type="checkbox" checked={layers.camping} onChange={(e) => setLayers((l) => ({ ...l, camping: e.target.checked }))} /><span className="hx-dot" style={{ background: "#d97706" }} /> Campsites and shelters</label>
                 <label className="hx-check"><input type="checkbox" checked={layers.other} onChange={(e) => setLayers((l) => ({ ...l, other: e.target.checked }))} /><span className="hx-dot" style={{ background: "#475569" }} /> Trailheads, viewpoints, peaks, toilets</label>
-                <label className="hx-check"><input type="checkbox" checked={layers.myTrails} onChange={(e) => setLayers((l) => ({ ...l, myTrails: e.target.checked }))} /><span className="hx-dot" style={{ background: "#8b5cf6" }} /> My trails</label>
+                <label className="hx-check"><input type="checkbox" checked={layers.myTrails} onChange={(e) => setLayers((l) => ({ ...l, myTrails: e.target.checked }))} /><span className="hx-dot" style={{ background: MY_TRAIL_COLOR }} /> My trails</label>
               </div>
               {zoomedOut && (layers.water || layers.camping || layers.other) && <p className="hx-pop-note">Zoom in to see water and campsites.</p>}
+              <div className="hx-layer-footer">
+                <Link href="/settings" className="hx-settings-link">UI &amp; 3D map settings →</Link>
+              </div>
             </div>
           )}
         </div>
@@ -1066,7 +1166,17 @@ export function TrailExplorer({ start: initial, workspace = false }: { start: Ex
   );
 }
 
-type LayerToggles = { thruHikes: boolean; dayTrails: boolean; ski: boolean; water: boolean; camping: boolean; other: boolean; myTrails: boolean };
+type LayerToggles = {
+  thruHikes: boolean;
+  dayTrails: boolean;
+  ski: boolean;
+  water: boolean;
+  camping: boolean;
+  other: boolean;
+  myTrails: boolean;
+  vfrChart: boolean;
+  ifrChart: boolean;
+};
 
 /** Applies the layer toggles to the map (again after every basemap switch, which re-creates Hyked's layers). */
 function applyLayers(map: maplibregl.Map, layers: LayerToggles) {
@@ -1077,6 +1187,8 @@ function applyLayers(map: maplibregl.Map, layers: LayerToggles) {
   setLayerGroupVisibility(map, "camping", layers.camping);
   setLayerGroupVisibility(map, "other", layers.other);
   setLayerGroupVisibility(map, "my-trails", layers.myTrails);
+  setLayerGroupVisibility(map, "vfr-chart", layers.vfrChart);
+  setLayerGroupVisibility(map, "ifr-chart", layers.ifrChart);
   setFeatureLabelGroups(map, (["water", "camping", "other"] as const).filter((g) => layers[g]));
 }
 

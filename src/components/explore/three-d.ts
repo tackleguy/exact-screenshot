@@ -5,6 +5,7 @@
  */
 import type * as maplibreTypes from "maplibre-gl";
 import { chainLines, Route } from "@/lib/geo/line";
+import { getUiSettings } from "@/lib/ui-settings";
 import { setSky } from "./explorer-map";
 
 type LngLat = [number, number];
@@ -13,8 +14,9 @@ export const HILLSHADE_DEM = "hillshade-dem";
 export const PITCH_3D = 60;
 const MAX_3D_ZOOM = 13;
 
-/** Terrain exaggeration: 1.5, easing to 1.3 above zoom 13 where the relief is already large on screen. */
-export const terrainExaggeration = (zoom: number) => (zoom > 13 ? 1.3 : 1.5);
+/** Terrain exaggeration from UI settings (default 1.5), easing ~13% above zoom 13 where relief is already large on screen. */
+export const terrainExaggeration = (zoom: number, base = getUiSettings().terrainExaggeration) =>
+  zoom > 13 ? Math.max(1, Math.round(base * 0.87 * 100) / 100) : base;
 
 /** Labels hidden in 3D (and contour labels below zoom 12): contour labels and minor-road names and shields. */
 const CLUTTER = /^(contour-labels|highway-name-path|highway-name-minor|highway-shield.*|road_shield_us|road_one_way_arrow.*)$/;

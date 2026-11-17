@@ -255,6 +255,88 @@
 .hx-layer--bright .hx-layer-swatch { background-color: #f8f4ec; background-image: linear-gradient(115deg, transparent 40%, #9fd38c 40% 58%, transparent 58%), linear-gradient(20deg, transparent 60%, #f3b35b 60% 66%, transparent 66%); }
 .hx-layer--light .hx-layer-swatch { background-color: #f4f4f2; background-image: linear-gradient(115deg, transparent 44%, #ffffff 44% 52%, transparent 52%), linear-gradient(20deg, transparent 60%, #dcdcd8 60% 64%, transparent 64%); }
 .hx-layer--dark .hx-layer-swatch { background-color: #22262b; background-image: linear-gradient(115deg, transparent 44%, #3b4148 44% 52%, transparent 52%), linear-gradient(20deg, transparent 60%, #4a5058 60% 64%, transparent 64%); }
+.hx-layer--vfr .hx-layer-swatch {
+  position: relative;
+  background-color: #e9e4c9;
+  background-image:
+    url("https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/VFR_Sectional/MapServer/tile/9/197/85"),
+    radial-gradient(circle at 48% 52%, transparent 0 12px, rgb(28 96 164 / 0.55) 12px 14px, transparent 14px),
+    linear-gradient(135deg, #dfd6b2 0%, #c8dcb8 55%, #e8dec0 100%);
+}
+.hx-layer--ifr .hx-layer-swatch {
+  position: relative;
+  background-color: #eef4f7;
+  background-image:
+    url("https://tiles.arcgis.com/tiles/ssFJjBXIUyZDrSYZ/arcgis/rest/services/IFR_AreaLow/MapServer/tile/9/197/85"),
+    linear-gradient(32deg, transparent 46%, rgb(15 104 169 / 0.65) 46% 49%, transparent 49%),
+    linear-gradient(122deg, transparent 52%, rgb(38 122 92 / 0.55) 52% 55%, transparent 55%),
+    linear-gradient(180deg, #f4f7f9 0%, #dce7ee 100%);
+}
+.hx-layer--vfr .hx-layer-swatch::after,
+.hx-layer--ifr .hx-layer-swatch::after {
+  content: "3D";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(10 20 36 / 0.85);
+  color: #f4f2ec;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+}
+.hx-layer-group-title {
+  display: block;
+  padding: 4px 10px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--hx-muted);
+}
+.hx-aero-opacity {
+  display: grid;
+  gap: 5px;
+  padding: 6px 10px 4px;
+}
+.hx-aero-opacity-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+  color: var(--hx-text);
+}
+.hx-aero-opacity-head span {
+  font-variant-numeric: tabular-nums;
+  color: var(--hx-muted);
+  font-weight: 600;
+}
+.hx-aero-opacity input[type="range"] {
+  width: 100%;
+  accent-color: var(--hx-hi);
+  cursor: pointer;
+}
+.hx-layer-footer {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hx-line);
+  display: flex;
+  justify-content: flex-end;
+}
+.hx-settings-link {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--hx-hi);
+  text-decoration: none;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.hx-settings-link:hover {
+  background: var(--hx-ink-2);
+  text-decoration: underline;
+}
 .hx-sub--all { width: 100%; justify-content: center; font-weight: 600; }
 /* A pressed toolbar button (3D, Maps open) is highlighted so its state is visible on the dark toolbar. */
 .hx-stack .hx-ctl[aria-pressed="true"], .hx-stack .hx-ctl[aria-expanded="true"] { background: var(--hx-hi); color: var(--hx-ink); }

@@ -44,11 +44,16 @@ import mountainNight from "@/assets/mountain-night.jpg";
 import { apiOrigin, installApiBridge } from "./api";
 import { RouteMeta, trailPageMeta, usePageMeta } from "./seo";
 import { DataSources } from "@/components/about/DataSources";
+import { SettingsView } from "@/components/settings/SettingsView";
+import { BASEMAPS, type Basemap } from "@/components/explore/explorer-map";
+import { applyUiSettingsToDocument } from "@/lib/ui-settings";
+import { useUiSettings } from "@/lib/use-ui-settings";
 import { useAccount } from "./session";
 import { MotionConfig, motion } from "framer-motion";
 import "@/app/globals.css";
 import "./web.css";
 const mountainUrl = typeof mountainNight === "string" ? mountainNight : mountainNight.src;
+applyUiSettingsToDocument();
 
 function Status({ title, children }: { title: string; children?: ReactNode }) { return <section className="fieldbook-page"><h1>{title}</h1><div role="status" className="fieldbook-status">{children}</div></section>; }
 function RequireAccount({ children }: { children: ReactNode }) {
@@ -166,7 +171,9 @@ function MapPage({ workspace = false }: { workspace?: boolean }) {
   const [fromLat, fromLng] = (params.get("routeFrom") ?? "").split(",").map(Number);
   const routeFrom = Number.isFinite(fromLat) && Number.isFinite(fromLng) && Math.abs(fromLat) <= 85 && Math.abs(fromLng) <= 180 && params.get("routeFrom") ? { point: [fromLng, fromLat] as [number, number], name: (params.get("routeFromName") ?? "").slice(0, 120) || "Trail start" } : null;
   const center: [number, number] | null = Number.isFinite(lat) && lat >= -85 && lat <= 85 && Number.isFinite(lng) && lng >= -180 && lng <= 180 ? [lng, lat] : routeFrom?.point ?? null;
-  return <TrailExplorer workspace={workspace} start={{ activity, trail: params.get("trail"), center, zoom: Number.isFinite(zoom) && zoom >= 1 && zoom <= 20 ? zoom : routeFrom ? 13 : null, routeFrom }} />;
+  const basemapParam = params.get("basemap") ?? params.get("aero");
+  const basemap: Basemap | null = basemapParam && BASEMAPS.some((b) => b.key === basemapParam) ? (basemapParam as Basemap) : null;
+  return <TrailExplorer key={basemap ?? "map"} workspace={workspace} start={{ activity, trail: params.get("trail"), center, zoom: Number.isFinite(zoom) && zoom >= 1 && zoom <= 20 ? zoom : routeFrom ? 13 : null, basemap, routeFrom }} />;
 }
 function PersonalTrailRoute({ shared = false }: { shared?: boolean }) {
   const { id, token } = useParams();
@@ -198,7 +205,7 @@ function Recorder() { const { search } = useLocation(); const params = new URLSe
 function ActivityFeed({ profile = false }: { profile?: boolean }) {
   const { user } = useAccount(); const [activities, setActivities] = useState<Activity[]>([]); const [error, setError] = useState("");
   useEffect(() => { const client = createClient(); if (!user || !client) return; let active = true; client.from("activities").select("*, trail:trails(*, park:parks(*))").eq("user_id", user.id).eq("status", "completed").order("started_at", { ascending: false }).limit(50).then(({ data, error }) => { if (active) { setActivities((data ?? []) as Activity[]); setError(error && !isMissingTable(error) ? friendlyError(error, "Your activities couldn’t load right now.") : ""); } }); return () => { active = false; }; }, [user?.id]);
-  return <section className="fieldbook-page"><h1>{profile ? user?.user_metadata?.first_name || "Your profile" : "Your outings"}</h1>{profile && <p>{user?.email}</p>}<Link className="btn-ghost" href="/record">Record an activity</Link>{error && <p className="catalog-muted" role="status">{error}</p>}<div className="mt-6">{activities.map(activity => <ActivityListRow key={activity.id} activity={activity} />)}{activities.length === 0 && !error && <p>No activities yet.</p>}</div></section>;
+  return <section className="fieldbook-page"><h1>{profile ? user?.user_metadata?.first_name || "Your profile" : "Your outings"}</h1>{profile && <p>{user?.email}</p>}<div className="flex flex-wrap gap-2"><Link className="btn-ghost" href="/record">Record an activity</Link>{profile && <Link className="btn-ghost" href="/settings">Settings &amp; appearance</Link>}</div>{error && <p className="catalog-muted" role="status">{error}</p>}<div className="mt-6">{activities.map(activity => <ActivityListRow key={activity.id} activity={activity} />)}{activities.length === 0 && !error && <p>No activities yet.</p>}</div></section>;
 }
 function ActivityDetail() {
   const { id } = useParams(); const [activity, setActivity] = useState<Activity | null>(null); const [error, setError] = useState("");
@@ -256,14 +263,15 @@ function App() {
   const { pathname } = useLocation();
   // Pages redraw when the units setting changes (every formatter reads it).
   const units = useUnits();
+  const uiSettings = useUiSettings();
   // A new page opens at the top (pages now draw at once, so they would keep the last page's scroll position);
   // back and forward keep the position the browser restores.
   const navigationType = useNavigationType();
   useLayoutEffect(() => { if (navigationType !== "POP") window.scrollTo(0, 0); }, [pathname, navigationType]);
-  return <><RouteMeta pathname={pathname} /><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><MotionConfig reducedMotion="user"><AppShell><motion.div key={pathname} className="page-fade" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.28, ease: "easeOut" }}><Routes key={units}>
+  return <><RouteMeta pathname={pathname} /><img src={mountainUrl} alt="" aria-hidden className="mountain-backdrop" /><GuestSaveBanner signedIn={Boolean(user)} /><MotionConfig reducedMotion={uiSettings.reducedMotion ? "always" : "user"}><AppShell><motion.div key={pathname} className="page-fade" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.28, ease: "easeOut" }}><Routes key={units}>
     <Route path="/" element={<Home />} /><Route path="/explore" element={<ExploreRedirect />} /><Route path="/my/trails/:id" element={<PersonalTrailRoute />} /><Route path="/shared/trails/:token" element={<PersonalTrailRoute shared />} /><Route path="/trails" element={<Navigate to="/explore/trails" replace />} />
     <Route path="/explore/trails" element={<MapPage workspace />} /><Route path="/explore/trails/catalog" element={<TrailCatalogPage />} /><Route path="/explore/trails/:id" element={<TrailDetail />} /><Route path="/trails/:id" element={<TrailDetail />} /><Route path="/trail/osm/:id" element={<OsmTrailRoute />} /><Route path="/trail/:id" element={<TrailDetail />} /><Route path="/map" element={<ExploreRedirect />} /><Route path="/explore/ski" element={<SkiMapClient />} /><Route path="/ski-areas" element={<SkiAreasPage />} /><Route path="/ski-areas/:slug" element={<SkiAreaDetail />} />
-    <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />
+    <Route path="/gear" element={<Gear />} /><Route path="/plan" element={<Planner />} /><Route path="/settings" element={<SettingsView />} /><Route path="/login" element={<LoginPage />} /><Route path="/signup" element={<SignupPage />} /><Route path="/auth/callback" element={<AuthCallback />} />
     <Route path="/record" element={<RecordPage />} /><Route path="/record/manual" element={<RequireAccount><ManualRecordPage /></RequireAccount>} /><Route path="/record/live" element={<RequireAccount><Recorder /></RequireAccount>} />
     <Route path="/pack-trails" element={<RequireAccount><SavedTrails /></RequireAccount>} /><Route path="/you" element={<RequireAccount><ActivityFeed profile /></RequireAccount>} /><Route path="/activity" element={<ActivityLog />} /><Route path="/about/data" element={<DataSources />} /><Route path="/activities/:id" element={<RequireAccount><ActivityDetail /></RequireAccount>} />
     <Route path="/api/*" element={<ApiFile />} /><Route path="/parks/:id" element={<BackendPage />} /><Route path="/admin/*" element={<BackendPage />} /><Route path="*" element={<Status title="Page not found"><Link className="btn-ghost" href="/">Return to Hyked</Link></Status>} />
