@@ -25,8 +25,6 @@ import { CountUp } from "@/components/ui/count-up";
 import { motion } from "framer-motion";
 import { pickNearbyTrails, type NearbyPick } from "@/lib/trail-catalog/nearby-picks";
 import { loadTrailDetail, rememberTrails } from "@/lib/trail-catalog/client-cache";
-import { TrailSearchForm } from "./TrailSearchForm";
-import { NotablePeaks } from "./NotablePeaks";
 import { shortTrailName } from "@/lib/trail-catalog/naming";
 
 const photo = typeof discovery === "string" ? discovery : discovery.src;
@@ -114,7 +112,7 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
         <h1 className="sr-only">Hyked</h1>
         <p className="discovery-kicker">Welcome back</p>
         <p className="discovery-headline">Where to next?</p>
-        <TrailSearchForm />
+        <form action="/explore/trails/catalog" className="discovery-search" role="search"><Search size={20} aria-hidden /><label htmlFor="discovery-query" className="sr-only">Search trails</label><input id="discovery-query" name="q" type="search" placeholder="Search by city, park or trail name" /><button type="submit" className="btn-primary" aria-label="Search trails"><ArrowUpRight size={22} aria-hidden /></button></form>
         <nav className="discovery-chips" aria-label="Quick filters">
           <Link href="/explore/trails" className="discovery-chip discovery-chip--solid">Near me</Link>
           {TRAIL_SECTIONS.slice(0, 4).map((s) => <Link key={s.key} href={`/explore/trails?activity=${s.activity}`} className="discovery-chip">{s.label}</Link>)}
@@ -233,7 +231,6 @@ export function HomePromotion({ signedIn = false }: { signedIn?: boolean }) {
         <Link href="/explore/ski" className="home-activity"><SectionIcon section="snow" size={26} /><span><strong>Ski areas</strong><small>Every ski area worldwide, with runs and lifts</small></span></Link>
       </Reveal>
     </section>
-    <NotablePeaks />
     <section className="home-long-trails" aria-label="Famous long-distance trails">
       <div className="home-section-heading"><div><p className="section-label">THE BIG ONES</p><h2>Legendary long trails.</h2></div><Link href="/explore/trails/catalog?collection=thru-hikes" className="fieldbook-text-link">All through-hikes <ArrowUpRight size={16} aria-hidden /></Link></div>
       <Reveal className="home-long-grid">
